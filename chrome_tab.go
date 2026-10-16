@@ -67,6 +67,25 @@ func (a *App) tabItem(c *ui.Context, i int) {
 	if tab.Clicked() {
 		a.switchTo(i)
 	}
+	// Dropping files on a tab moves them into that tab's folder, as
+	// Explorer's tabs take drops.
+	a.bindDropFolder(c, tab, a.tabs[i].path)
+	// The tab's own menu, as Explorer's tab context menu.
+	tab.ContextMenu(func(m *ui.Menu) {
+		if m.Item("复制标签页").Chosen() {
+			a.openTab(a.tabs[i].path)
+		}
+		m.Separator()
+		if m.Item("关闭标签页").Disabled(len(a.tabs) <= 1).Chosen() {
+			a.closeTab(i)
+		}
+		if m.Item("关闭其他标签页").Disabled(len(a.tabs) <= 1).Chosen() {
+			a.closeOthers(i)
+		}
+		if m.Item("关闭右侧标签页").Disabled(i >= len(a.tabs)-1).Chosen() {
+			a.closeRight(i)
+		}
+	})
 }
 
 // windowControls ends the title bar: the empty strip that drags, then the

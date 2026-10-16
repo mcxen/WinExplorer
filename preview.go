@@ -121,7 +121,12 @@ func (a *App) swapPreview(st *previewState, gen uint64) {
 }
 
 // repaint asks the window to redraw so the pane shows the new state.
+// Before the app is ready (headless tests included) there is nothing to
+// repaint.
 func repaint() {
+	if !mygo.App.IsReady() {
+		return
+	}
 	mygo.RunOnMain(func() {
 		if win := mygo.Windows(); len(win) > 0 {
 			win[0].Invalidate()

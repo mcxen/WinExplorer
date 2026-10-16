@@ -84,6 +84,8 @@ func (a *App) breadcrumbBar(c *ui.Context) {
 				if b.Clicked() {
 					a.navigate(path)
 				}
+				// Dropping files on a crumb moves them to that level.
+				a.bindDropFolder(c, b, path)
 			}
 		})
 		edit := ui.ButtonBase(c).Size(22, 22).Radius(4).Shrink(0).

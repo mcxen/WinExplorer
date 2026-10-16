@@ -35,7 +35,7 @@ func (a *App) sidebar(c *ui.Context) {
 // navHome is 主文件夹, the pane's first row. It navigates to the user's
 // home directory and is selected when that is the current location.
 func (a *App) navHome(c *ui.Context) {
-	a.navItem(c, "nav-home", "主文件夹", "home", a.cur().path == a.homePath, func() {
+	a.navItem(c, "nav-home", "主文件夹", "home", a.homePath, a.cur().path == a.homePath, func() {
 		a.navigate(a.homePath)
 	}, 0)
 }
@@ -86,15 +86,16 @@ func (a *App) navThisPC(c *ui.Context) {
 
 func (a *App) navPlace(c *ui.Context, p Place, indent float32) {
 	place := p
-	a.navItem(c, "nav-"+place.Path, place.Name, place.Kind, a.cur().path == place.Path, func() {
+	a.navItem(c, "nav-"+place.Path, place.Name, place.Kind, place.Path, a.cur().path == place.Path, func() {
 		a.navigate(place.Path)
 	}, indent)
 }
 
 // navItem is one navigation row: a 16px place icon, a 12px label, height
 // 32, with a rounded selection or hover. pad indents the row's left edge
-// for the volumes under 此电脑.
-func (a *App) navItem(c *ui.Context, key, label, kind string, selected bool, act func(), pad float32) {
+// for the volumes under 此电脑. Folder rows also accept file drops,
+// moving the dragged items into them.
+func (a *App) navItem(c *ui.Context, key, label, kind, path string, selected bool, act func(), pad float32) {
 	row := ui.ButtonBase(c.Key(key)).FillWidth().Height(navRowH).
 		Radius(4).Padding(0, 8, 0, 8+pad).Gap(8).AlignItems(ui.Center).
 		Label(label).Selected(selected)
@@ -115,6 +116,7 @@ func (a *App) navItem(c *ui.Context, key, label, kind string, selected bool, act
 	if row.Clicked() {
 		act()
 	}
+	a.bindDropFolder(c, row, path)
 }
 
 // navResizeHandle is the wider grip over the pane's right edge. Dragging

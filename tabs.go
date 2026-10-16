@@ -163,10 +163,36 @@ func (a *App) closeTab(i int) {
 	} else if a.activeTab > i {
 		a.activeTab--
 	}
+	a.requestPreview()
 }
 
 func (a *App) switchTo(i int) {
-	if i >= 0 && i < len(a.tabs) {
+	if i >= 0 && i < len(a.tabs) && i != a.activeTab {
 		a.activeTab = i
+		a.requestPreview()
+	}
+}
+
+// closeOthers keeps only the tab at i and makes it active, as Explorer's
+// tab menu's 关闭其他标签页.
+func (a *App) closeOthers(keep int) {
+	if keep < 0 || keep >= len(a.tabs) || len(a.tabs) <= 1 {
+		return
+	}
+	a.tabs = []*tabState{a.tabs[keep]}
+	a.activeTab = 0
+	a.requestPreview()
+}
+
+// closeRight removes every tab after i, clamping the active index, as
+// Explorer's tab menu's 关闭右侧标签页.
+func (a *App) closeRight(from int) {
+	if from < 0 || from >= len(a.tabs)-1 {
+		return
+	}
+	a.tabs = a.tabs[:from+1]
+	if a.activeTab > from {
+		a.activeTab = from
+		a.requestPreview()
 	}
 }

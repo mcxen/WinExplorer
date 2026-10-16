@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/egoist/mygo"
 )
 
 func (a *App) doOpen() {
@@ -447,4 +449,64 @@ func uniqueNewFolderName(dir string) (string, error) {
 
 func (a *App) doRefresh() {
 	a.reload()
+}
+
+// doCopyAsPath 把选中项目的绝对路径写入系统剪贴板，多选每行一个，
+// 与资源管理器的“复制为路径”（Ctrl+Shift+C）一致。
+func (a *App) doCopyAsPath() {
+	sel := a.selectedEntries()
+	if len(sel) == 0 {
+		return
+	}
+	paths := make([]string, 0, len(sel))
+	for _, e := range sel {
+		if e.Path == "" || e.Path == pathThisPC {
+			continue
+		}
+		paths = append(paths, e.Path)
+	}
+	if len(paths) == 0 {
+		return
+	}
+	mygo.Clipboard.WriteText(strings.Join(paths, "\n"))
+	a.statusMsg = "已复制路径"
+}
+
+// doNewTextFile 新建一个空的文本文档，选中并进入内联重命名，对应
+// 资源管理器“新建 > 文本文档”。
+func (a *App) doNewTextFile() {
+	if a.cur().path == pathThisPC {
+		a.statusMsg = "无法在此电脑中新建文件"
+		return
+	}
+	name, err := uniqueFreeName(a.cur().path, "新建文本文档.txt", false)
+	if err != nil {
+		a.statusMsg = "新建文件失败：" + err.Error()
+		return
+	}
+	path := filepath.Join(a.cur().path, name)
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		a.statusMsg = "新建文件失败：" + err.Error()
+		return
+	}
+	a.reload()
+	a.selectOnly(path)
+	a.cur().renaming = name
+	a.cur().renameBuf = name
+}
+
+// openInTerminal 在系统终端中打开目录（macOS 为 Terminal.app）。
+func (a *App) openInTerminal(dir string) {
+	if dir == "" || dir == pathThisPC {
+		return
+	}
+	if err := exec.Command("open", "-a", "Terminal", dir).Run(); err != nil {
+		a.statusMsg = "无法打开终端：" + err.Error()
+	}
+}
+
+// showProperties 确保预览窗格打开并显示当前选择的属性。
+func (a *App) showProperties() {
+	a.previewOpen = true
+	a.requestPreview()
 }

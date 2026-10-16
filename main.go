@@ -118,6 +118,8 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.doRefresh()
 	case c.Shortcut(ui.Cmd, ui.KeyC), c.Shortcut(ui.Ctrl, ui.KeyC):
 		a.doCopy()
+	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyC), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyC):
+		a.doCopyAsPath()
 	case c.Shortcut(ui.Cmd, ui.KeyX), c.Shortcut(ui.Ctrl, ui.KeyX):
 		a.doCut()
 	case c.Shortcut(ui.Cmd, ui.KeyV), c.Shortcut(ui.Ctrl, ui.KeyV):
@@ -136,6 +138,22 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.switchTo((a.activeTab + 1) % len(a.tabs))
 	case c.Shortcut(ui.Cmd, ui.KeyBracketLeft), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyTab):
 		a.switchTo((a.activeTab + len(a.tabs) - 1) % len(a.tabs))
+	}
+	// Ctrl/Cmd+1..8 goes to that tab, +9 to the last, as Explorer's tab
+	// shortcuts.
+	digits := []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4,
+		ui.Key5, ui.Key6, ui.Key7, ui.Key8}
+	for i, key := range digits {
+		if i >= len(a.tabs) {
+			break
+		}
+		if c.Shortcut(ui.Ctrl, key) || c.Shortcut(ui.Cmd, key) {
+			a.switchTo(i)
+			return
+		}
+	}
+	if c.Shortcut(ui.Ctrl, ui.Key9) || c.Shortcut(ui.Cmd, ui.Key9) {
+		a.switchTo(len(a.tabs) - 1)
 	}
 }
 

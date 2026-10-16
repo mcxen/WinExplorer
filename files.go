@@ -355,7 +355,7 @@ func (a *App) clickEntry(entries []Entry, i int, mods ui.Modifiers) {
 func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 	if a.cur().path != pathThisPC {
 		if files := el.DroppedFiles(); len(files) > 0 {
-			a.doDropInto(c, a.cur().path, files)
+			a.doDropInto(c.Modifiers(), a.cur().path, files)
 		}
 	}
 	el.ContextMenu(func(m *ui.Menu) {

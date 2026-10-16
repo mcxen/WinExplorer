@@ -73,6 +73,16 @@ const (
 	previewMaxW float32 = 460
 )
 
+// singleSelectedAny is singleSelected counting a folder too, for the
+// 属性 dialog, which Windows shows for both.
+func (a *App) singleSelectedAny() Entry {
+	sel := a.selectedEntries()
+	if len(sel) != 1 {
+		return Entry{}
+	}
+	return sel[0]
+}
+
 // singleSelected returns the single selected file, or "" when zero or many
 // are selected (the preview pane follows Explorer's one-file rule).
 func (a *App) singleSelected() Entry {

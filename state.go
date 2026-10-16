@@ -75,6 +75,8 @@ type App struct {
 	focusSearch bool
 	// quickLook is the 空格 quick preview modal (quicklook.go).
 	quickLook bool
+	// propsOpen is the 属性 dialog modal (propsdialog.go).
+	propsOpen bool
 	// shellExts are the registered context-menu commands (extensions.go).
 	shellExts []shellExt
 	// store is the persisted 快速访问 pins, 最近使用的文件 and 回收站

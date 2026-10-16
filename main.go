@@ -140,6 +140,7 @@ func (a *App) view(c *ui.Context) {
 		a.statusBar(c)
 	})
 	a.quickLookModal(c)
+	a.propertiesModal(c)
 }
 
 // handleKeys maps Explorer shortcuts. A focused text field consumes its

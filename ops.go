@@ -591,9 +591,3 @@ func (a *App) openInTerminal(dir string) {
 		a.statusMsg = "无法打开终端：" + err.Error()
 	}
 }
-
-// showProperties 确保预览窗格打开并显示当前选择的属性。
-func (a *App) showProperties() {
-	a.previewOpen = true
-	a.requestPreview()
-}

@@ -1,6 +1,8 @@
 # Binaries
 sunvale
 sunvale.exe
+winexplorer
+winexplorer.exe
 
 # Test and coverage output
 *.test

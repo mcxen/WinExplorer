@@ -28,7 +28,9 @@ func (a *App) doOpen() {
 		}
 		if err := openWithOS(e.Path); err != nil {
 			failed = append(failed, e.Name)
+			continue
 		}
+		a.recordRecent(e.Path)
 	}
 	if len(failed) > 0 {
 		a.statusMsg = "无法打开：" + strings.Join(failed, "、")
@@ -68,8 +70,8 @@ func (a *App) storeClip(cut bool) {
 }
 
 func (a *App) doPaste() {
-	if a.cur().path == pathThisPC {
-		a.statusMsg = "无法粘贴到此电脑"
+	if specialPath(a.cur().path) {
+		a.statusMsg = "无法粘贴到此页面"
 		return
 	}
 	if len(a.clipPaths) == 0 {
@@ -90,6 +92,8 @@ func (a *App) doPaste() {
 	var failed []string
 	var pasted []string
 	var moved []string
+	var undoCreated []string
+	var undoMoved []undoMove
 	for _, src := range a.clipPaths {
 		if src == "" || src == pathThisPC {
 			continue
@@ -105,9 +109,13 @@ func (a *App) doPaste() {
 			failed = append(failed, filepath.Base(src))
 			continue
 		}
-		pasted = append(pasted, filepath.Join(dstDir, name))
+		dst := filepath.Join(dstDir, name)
+		pasted = append(pasted, dst)
 		if a.clipCut {
 			moved = append(moved, src)
+			undoMoved = append(undoMoved, undoMove{From: src, To: dst})
+		} else {
+			undoCreated = append(undoCreated, dst)
 		}
 	}
 	if a.clipCut && len(failed) == 0 && len(moved) > 0 {
@@ -123,6 +131,16 @@ func (a *App) doPaste() {
 		} else {
 			failed = append(failed, removeFailed...)
 		}
+	}
+	if n := len(undoMoved) + len(undoCreated); n > 0 {
+		desc := "复制"
+		if a.clipCut {
+			desc = "移动"
+		}
+		if n > 1 {
+			desc = fmt.Sprintf("%s %d 个项目", desc, n)
+		}
+		a.pushUndo(undoOp{desc: desc, created: undoCreated, moved: undoMoved})
 	}
 	a.reload()
 	if len(pasted) > 0 {
@@ -300,14 +318,27 @@ func (a *App) doDelete() {
 		return
 	}
 	var failed []string
+	var moved []undoMove
+	var desc string
 	for _, e := range sel {
 		if e.Path == "" || e.Path == pathThisPC || e.Path == "/" {
 			failed = append(failed, e.Name)
 			continue
 		}
-		if err := moveToTrash(e.Path, trash); err != nil {
+		dst, err := moveToTrash(e.Path, trash)
+		if err != nil {
 			failed = append(failed, e.Name)
+			continue
 		}
+		a.store.logTrash(e.Path, filepath.Base(dst))
+		moved = append(moved, undoMove{From: e.Path, To: dst})
+	}
+	if n := len(moved); n > 0 {
+		desc = "删除"
+		if n > 1 {
+			desc = fmt.Sprintf("删除 %d 个项目", n)
+		}
+		a.pushUndo(undoOp{desc: desc, moved: moved})
 	}
 	a.reload()
 	a.clearSelection()
@@ -331,18 +362,23 @@ func trashDir() (string, error) {
 	return dir, nil
 }
 
-// moveToTrash relocates path into ~/.Trash, uniquifying the name if needed.
-// It never deletes the original in place.
-func moveToTrash(path, trash string) error {
+// moveToTrash relocates path into ~/.Trash, uniquifying the name if
+// needed, and returns the trash path it landed at. It never deletes the
+// original in place.
+func moveToTrash(path, trash string) (string, error) {
 	base := filepath.Base(path)
 	if base == "" || base == "." || base == string(filepath.Separator) {
-		return fmt.Errorf("无效的路径")
+		return "", fmt.Errorf("无效的路径")
 	}
 	name, err := uniqueTrashName(trash, base)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return os.Rename(path, filepath.Join(trash, name))
+	dst := filepath.Join(trash, name)
+	if err := os.Rename(path, dst); err != nil {
+		return "", err
+	}
+	return dst, nil
 }
 
 func uniqueTrashName(dir, name string) (string, error) {
@@ -391,8 +427,8 @@ func (a *App) commitRename() {
 		a.statusMsg = "名称无效"
 		return
 	}
-	if a.cur().path == pathThisPC {
-		a.statusMsg = "无法重命名此电脑中的项目"
+	if specialPath(a.cur().path) {
+		a.statusMsg = "无法重命名此页面中的项目"
 		return
 	}
 	oldPath := filepath.Join(a.cur().path, oldName)
@@ -402,6 +438,7 @@ func (a *App) commitRename() {
 		a.reload()
 		return
 	}
+	a.pushUndo(undoOp{desc: "重命名", moved: []undoMove{{From: oldPath, To: newPath}}})
 	a.reload()
 	a.selectOnly(newPath)
 }
@@ -412,8 +449,8 @@ func (a *App) cancelRename() {
 }
 
 func (a *App) doNewFolder() {
-	if a.cur().path == pathThisPC {
-		a.statusMsg = "无法在此电脑中新建文件夹"
+	if specialPath(a.cur().path) {
+		a.statusMsg = "无法在此页面中新建文件夹"
 		return
 	}
 	name, err := uniqueNewFolderName(a.cur().path)
@@ -426,6 +463,7 @@ func (a *App) doNewFolder() {
 		a.statusMsg = "新建文件夹失败：" + err.Error()
 		return
 	}
+	a.pushUndo(undoOp{desc: "新建文件夹", created: []string{dir}})
 	a.reload()
 	a.selectOnly(dir)
 	a.cur().renaming = name
@@ -475,8 +513,8 @@ func (a *App) doCopyAsPath() {
 // doNewTextFile 新建一个空的文本文档，选中并进入内联重命名，对应
 // 资源管理器“新建 > 文本文档”。
 func (a *App) doNewTextFile() {
-	if a.cur().path == pathThisPC {
-		a.statusMsg = "无法在此电脑中新建文件"
+	if specialPath(a.cur().path) {
+		a.statusMsg = "无法在此页面中新建文件"
 		return
 	}
 	name, err := uniqueFreeName(a.cur().path, "新建文本文档.txt", false)
@@ -489,6 +527,7 @@ func (a *App) doNewTextFile() {
 		a.statusMsg = "新建文件失败：" + err.Error()
 		return
 	}
+	a.pushUndo(undoOp{desc: "新建文本文档", created: []string{path}})
 	a.reload()
 	a.selectOnly(path)
 	a.cur().renaming = name

@@ -51,7 +51,7 @@ func isArchive(name string) bool { return archiveKind(name) != "" }
 // 命名，多个项目以“压缩文件”命名，重名时按 Windows 风格加“ - 副本”。
 func (a *App) doCompress() {
 	sel := a.selectedEntries()
-	if len(sel) == 0 || a.cur().path == pathThisPC {
+	if len(sel) == 0 || specialPath(a.cur().path) {
 		return
 	}
 	stem := "压缩文件"
@@ -77,7 +77,7 @@ func (a *App) doCompress() {
 // doExtract 解压选中的每个归档到以其基础名命名的子文件夹。
 func (a *App) doExtract() {
 	sel := a.selectedEntries()
-	if len(sel) == 0 || a.cur().path == pathThisPC {
+	if len(sel) == 0 || specialPath(a.cur().path) {
 		return
 	}
 	var failed []string

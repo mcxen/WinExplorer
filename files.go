@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
 )
 
 const (
@@ -13,6 +16,7 @@ const (
 	colDateW    float32 = 168
 	colTypeW    float32 = 120
 	colSizeW    float32 = 96
+	colLocW     float32 = 200
 	rowInset    float32 = 4
 )
 
@@ -28,6 +32,10 @@ func (a *App) filePane(c *ui.Context) {
 			a.paneMessage(c, a.cur().loadErr)
 			return
 		}
+		if a.cur().path == pathHome {
+			a.homeView(c)
+			return
+		}
 		entries := a.visibleEntries()
 		switch a.mode {
 		case ViewList:
@@ -41,6 +49,113 @@ func (a *App) filePane(c *ui.Context) {
 	a.bindPaneMenu(c, pane)
 }
 
+// groupRow is one render row: either a group header band, or an entry.
+type groupRow struct {
+	header string
+	count  int
+	e      Entry
+}
+
+// groupedRows interleaves group header rows with the entries, when
+// 分组依据 is on; otherwise it is the entries as they are. Groups follow
+// the current sort within them, like Explorer's.
+func (a *App) groupedRows(entries []Entry) []groupRow {
+	if a.grouping == groupNone || specialPath(a.cur().path) {
+		rows := make([]groupRow, len(entries))
+		for i, e := range entries {
+			rows[i] = groupRow{e: e}
+		}
+		return rows
+	}
+	now := time.Now()
+	label := func(e Entry) (string, int) {
+		switch a.grouping {
+		case SortName:
+			r := []rune(strings.ToUpper(e.Name))
+			if len(r) == 0 {
+				return "#", 0
+			}
+			if r[0] < 'A' || r[0] > 'Z' {
+				return "#", 0
+			}
+			return string(r[0]), int(r[0])
+		case SortDate:
+			d := now.Sub(e.ModTime)
+			switch {
+			case sameDay(now, e.ModTime):
+				return "今天", 0
+			case sameDay(now.AddDate(0, 0, -1), e.ModTime):
+				return "昨天", 1
+			case d < 7*24*time.Hour:
+				return "本周", 2
+			case d < 14*24*time.Hour:
+				return "上周", 3
+			default:
+				return "更早", 4
+			}
+		case SortType:
+			return typeLabel(e), 0
+		case SortSize:
+			switch {
+			case e.IsDir:
+				return "文件夹", 0
+			case e.Size == 0:
+				return "空", 1
+			case e.Size < 100*1024:
+				return "小于 100 KB", 2
+			case e.Size < 1024*1024:
+				return "小于 1 MB", 3
+			case e.Size < 128*1024*1024:
+				return "中", 4
+			case e.Size < 1024*1024*1024:
+				return "大", 5
+			default:
+				return "巨大", 6
+			}
+		}
+		return "", 0
+	}
+	// interleave: a header, then the run of entries sharing its label.
+	// The entries are already sorted, so first-seen label order is the
+	// group order — natural for dates and sizes, alphabetical for names
+	// and types.
+	out := make([]groupRow, 0, len(entries)+8)
+	idx := 0
+	for idx < len(entries) {
+		l, _ := label(entries[idx])
+		end := idx
+		for end < len(entries) {
+			le, _ := label(entries[end])
+			if le != l {
+				break
+			}
+			end++
+		}
+		out = append(out, groupRow{header: l, count: end - idx})
+		for _, e := range entries[idx:end] {
+			out = append(out, groupRow{e: e})
+		}
+		idx = end
+	}
+	return out
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
+// groupHeaderRow is a 分组 band: the label and its item count.
+func (a *App) groupHeaderRow(c *ui.Context, label string, count int) {
+	row := ui.Row(c).FillWidth().Height(30).Shrink(0).Padding(0, 12, 0, 12).
+		AlignItems(ui.Center).Gap(6)
+	row.Children(func() {
+		ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(colorText()).SingleLine()
+		ui.Text(c, fmt.Sprintf("(%d)", count)).FontSize(12).TextColor(colorMuted()).SingleLine()
+	})
+}
+
 // detailsView is 详细信息: a sticky header and a virtualized list of 30px
 // rows, each inset 4px with a rounded selection, as Explorer's are. ui.Table
 // sorts through its own ListState and keeps the choice in a Selection, which
@@ -52,18 +167,28 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 	head := ui.Row(c).Height(detailsRowH).FillWidth().Shrink(0).Clip().
 		AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(colorDivider())
+	searching := strings.TrimSpace(a.cur().query) != ""
 	head.Children(func() {
 		a.headerCell(c, "名称", SortName, 0, true)
 		a.headerCell(c, "修改日期", SortDate, colDateW, false)
-		a.headerCell(c, "类型", SortType, colTypeW, false)
+		if searching {
+			a.headerCell(c, "位置", SortType, colLocW, false)
+		} else {
+			a.headerCell(c, "类型", SortType, colTypeW, false)
+		}
 		a.headerCell(c, "大小", SortSize, colSizeW, false)
 	})
 
-	list := ui.List(c, nil, len(entries), func(i int) {
-		if i < 0 || i >= len(entries) {
+	rows := a.groupedRows(entries)
+	list := ui.List(c, nil, len(rows), func(i int) {
+		if i < 0 || i >= len(rows) {
 			return
 		}
-		a.detailsRow(c, entries, i)
+		if rows[i].header != "" {
+			a.groupHeaderRow(c, rows[i].header, rows[i].count)
+			return
+		}
+		a.detailsRow(c, rows[i].e, searching)
 	}).Grow(1).FillWidth().MinHeight(0).RowWidth(width)
 	// List ends its build as it returns, so an empty message has to be one of
 	// its own children: a later sibling is parented to the pane instead, and
@@ -78,7 +203,11 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 }
 
 func (a *App) detailsWidth() float32 {
-	return 220 + colDateW + colTypeW + colSizeW + rowInset*2
+	extra := colTypeW
+	if strings.TrimSpace(a.cur().query) != "" {
+		extra = colLocW
+	}
+	return 220 + colDateW + extra + colSizeW + rowInset*2
 }
 
 func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool) {
@@ -102,10 +231,7 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 			label.TextAlign(ui.End)
 		}
 		if a.sortKey == key {
-			mark := ui.Box(c).Size(10, 10).Shrink(0)
-			mark.Draw(func(p *ui.Painter, r ui.Rect) {
-				drawSortArrow(p, r, !a.sortAsc)
-			})
+			components.Icon(c, chevronUpDown(a.sortAsc)).Size(12, 12).TextColor(colorMuted())
 		}
 	})
 	if cell.Clicked() {
@@ -113,8 +239,7 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 	}
 }
 
-func (a *App) detailsRow(c *ui.Context, entries []Entry, i int) {
-	e := entries[i]
+func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(detailsRowH).
 		AlignItems(ui.Center).Margin(0, rowInset).MinWidth(a.detailsWidth()).
 		Radius(4).Label(e.Name)
@@ -126,17 +251,40 @@ func (a *App) detailsRow(c *ui.Context, entries []Entry, i int) {
 			a.nameCell(c, e, 16, 12)
 		})
 		a.detailText(c, formatModTime(e.ModTime), colDateW, false)
-		a.detailText(c, typeLabel(e), colTypeW, false)
-		size := ""
-		if !e.IsDir {
-			size = formatBytes(e.Size)
+		if searching {
+			a.detailText(c, searchLocation(e), colLocW, false)
+		} else {
+			a.detailText(c, typeLabel(e), colTypeW, false)
 		}
-		a.detailText(c, size, colSizeW, true)
+		if e.VolTotal > 0 {
+			a.detailText(c, driveCapacity(e), colSizeW, false)
+		} else {
+			size := ""
+			if !e.IsDir {
+				size = formatBytes(e.Size)
+			}
+			a.detailText(c, size, colSizeW, true)
+		}
 	})
-	a.bindItemInput(c, row, entries, i)
-	row.ContextMenu(func(m *ui.Menu) {
-		a.itemMenu(m, entries, i)
-	})
+	a.bindItemInput(c, row, e)
+	a.attachRowMenu(row, e)
+}
+
+// searchLocation is the 位置 column: the folder the hit was found in,
+// relative to the search root when it is under it.
+func searchLocation(e Entry) string {
+	if e.Dir == "" {
+		return ""
+	}
+	return filepath.Base(e.Dir)
+}
+
+// driveCapacity is the 此电脑 page's drive text: free of total.
+func driveCapacity(e Entry) string {
+	if e.VolTotal <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("可用 %s / 共 %s", formatBytes(e.VolFree), formatBytes(e.VolTotal))
 }
 
 func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
@@ -155,11 +303,16 @@ func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
 
 // listView is one column of compact icon-and-name rows, 28px each.
 func (a *App) listView(c *ui.Context, entries []Entry) {
-	list := ui.List(c, nil, len(entries), func(i int) {
-		if i < 0 || i >= len(entries) {
+	rows := a.groupedRows(entries)
+	list := ui.List(c, nil, len(rows), func(i int) {
+		if i < 0 || i >= len(rows) {
 			return
 		}
-		a.listRow(c, entries, i)
+		if rows[i].header != "" {
+			a.groupHeaderRow(c, rows[i].header, rows[i].count)
+			return
+		}
+		a.listRow(c, rows[i].e)
 	}).Grow(1).FillWidth().MinHeight(0)
 	list.Children(func() {
 		if len(entries) == 0 {
@@ -169,8 +322,7 @@ func (a *App) listView(c *ui.Context, entries []Entry) {
 	a.bindPaneMenu(c, list)
 }
 
-func (a *App) listRow(c *ui.Context, entries []Entry, i int) {
-	e := entries[i]
+func (a *App) listRow(c *ui.Context, e Entry) {
 	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(listRowH).
 		Padding(0, 8).Gap(8).AlignItems(ui.Center).Margin(0, rowInset).
 		Radius(4).Label(e.Name)
@@ -178,10 +330,8 @@ func (a *App) listRow(c *ui.Context, entries []Entry, i int) {
 	row.Children(func() {
 		a.nameCell(c, e, 16, 12)
 	})
-	a.bindItemInput(c, row, entries, i)
-	row.ContextMenu(func(m *ui.Menu) {
-		a.itemMenu(m, entries, i)
-	})
+	a.bindItemInput(c, row, e)
+	a.attachRowMenu(row, e)
 }
 
 // iconView lays tiles in a grid. Extra large, large and medium put the
@@ -189,11 +339,44 @@ func (a *App) listRow(c *ui.Context, entries []Entry, i int) {
 func (a *App) iconView(c *ui.Context, entries []Entry) {
 	box := iconBoxSize(a.mode)
 	minW, height := iconTileSize(a.mode, box)
+	if a.grouping != groupNone && !specialPath(a.cur().path) {
+		scroll := ui.Scroll(c).Grow(1).FillWidth().Padding(8)
+		scroll.Children(func() {
+			rows := a.groupedRows(entries)
+			var group []Entry
+			emit := func() {
+				if len(group) == 0 {
+					return
+				}
+				grid := ui.GridView(c, nil, len(group), minW, height, func(i int) {
+					if i >= 0 && i < len(group) {
+						a.iconTile(c, group[i], box)
+					}
+				}).FillWidth().Shrink(0)
+				grid.Children(func() {})
+				group = group[:0]
+			}
+			for _, r := range rows {
+				if r.header != "" {
+					emit()
+					a.groupHeaderRow(c, r.header, r.count)
+					continue
+				}
+				group = append(group, r.e)
+			}
+			emit()
+			if len(rows) == 0 {
+				a.paneMessage(c, "此文件夹为空")
+			}
+		})
+		a.bindPaneMenu(c, scroll)
+		return
+	}
 	grid := ui.GridView(c, nil, len(entries), minW, height, func(i int) {
 		if i < 0 || i >= len(entries) {
 			return
 		}
-		a.iconTile(c, entries, i, box)
+		a.iconTile(c, entries[i], box)
 	}).Grow(1).FillWidth().MinHeight(0).Padding(8)
 	grid.Children(func() {
 		if len(entries) == 0 {
@@ -226,8 +409,7 @@ func iconTileSize(mode ViewMode, box float32) (minW, height float32) {
 // iconTile is one grid cell. ButtonBase is a row, so a small icon sits
 // beside its name. Larger sizes put a column in the button: the icon, then
 // the name under it.
-func (a *App) iconTile(c *ui.Context, entries []Entry, i int, box float32) {
-	e := entries[i]
+func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 	tile := ui.ButtonBase(c.Key(e.Path)).Fill().Radius(4).Label(e.Name)
 	if a.mode == ViewSmallIcons {
 		tile.Padding(4, 6).Gap(8).AlignItems(ui.Center).Justify(ui.Start)
@@ -248,14 +430,12 @@ func (a *App) iconTile(c *ui.Context, entries []Entry, i int, box float32) {
 				a.renameField(c, 12)
 				return
 			}
-			ui.Text(c, e.Name).FontSize(12).TextColor(colorText()).
+			ui.Text(c, a.displayName(e)).FontSize(12).TextColor(colorText()).
 				TextAlign(ui.Center).MaxLines(2).FillWidth()
 		})
 	})
-	a.bindItemInput(c, tile, entries, i)
-	tile.ContextMenu(func(m *ui.Menu) {
-		a.itemMenu(m, entries, i)
-	})
+	a.bindItemInput(c, tile, e)
+	a.attachRowMenu(tile, e)
 }
 
 // nameCell is the icon plus the name, or the rename field when this entry
@@ -269,7 +449,7 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 		a.renameField(c, font)
 		return
 	}
-	ui.Text(c, e.Name).FontSize(font).TextColor(colorText()).
+	ui.Text(c, a.displayName(e)).FontSize(font).TextColor(colorText()).
 		SingleLine().Grow(1).MinWidth(0)
 }
 
@@ -312,13 +492,9 @@ func (a *App) paintSelect(el ui.Element, path string) {
 // Every row is also a drag source (the selection when the row is in it,
 // else the row alone), and folder rows accept drops that move files into
 // them.
-func (a *App) bindItemInput(c *ui.Context, el ui.Element, entries []Entry, i int) {
-	if i < 0 || i >= len(entries) {
-		return
-	}
-	e := entries[i]
+func (a *App) bindItemInput(c *ui.Context, el ui.Element, e Entry) {
 	if el.Clicked() {
-		a.clickEntry(entries, i, el.ClickModifiers())
+		a.clickEntry(e.Path, el.ClickModifiers())
 	}
 	if el.DoubleClicked() {
 		a.selectOnly(e.Path)
@@ -332,11 +508,10 @@ func (a *App) bindItemInput(c *ui.Context, el ui.Element, entries []Entry, i int
 	}
 }
 
-func (a *App) clickEntry(entries []Entry, i int, mods ui.Modifiers) {
-	if i < 0 || i >= len(entries) {
+func (a *App) clickEntry(path string, mods ui.Modifiers) {
+	if path == "" {
 		return
 	}
-	path := entries[i].Path
 	switch {
 	case mods&ui.Shift != 0:
 		a.selectRange(path)
@@ -359,19 +534,24 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 		}
 	}
 	el.ContextMenu(func(m *ui.Menu) {
+		if a.cur().path == pathTrash {
+			a.trashPaneMenu(m)
+			return
+		}
+		special := specialPath(a.cur().path)
 		m.Submenu("新建", func(n *ui.Menu) {
-			if n.Item("文件夹").Disabled(a.cur().path == pathThisPC).Chosen() {
+			if n.Item("文件夹").Disabled(special).Chosen() {
 				a.doNewFolder()
 			}
-			if n.Item("文本文档").Disabled(a.cur().path == pathThisPC).Chosen() {
+			if n.Item("文本文档").Disabled(special).Chosen() {
 				a.doNewTextFile()
 			}
 		})
-		if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || a.cur().path == pathThisPC).Chosen() {
+		if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || special).Chosen() {
 			a.doPaste()
 		}
 		m.Separator()
-		if m.Item("在终端中打开").Disabled(a.cur().path == pathThisPC).Chosen() {
+		if m.Item("在终端中打开").Disabled(special).Chosen() {
 			a.openInTerminal(a.cur().path)
 		}
 		m.Separator()
@@ -393,9 +573,9 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 // The items follow Windows 11's: Open, Cut/Copy/Paste, Copy as path,
 // Rename, Compress to ZIP, Extract all, Open in Terminal (folders),
 // Delete, Properties.
-func (a *App) itemMenu(m *ui.Menu, entries []Entry, i int) {
-	if i >= 0 && i < len(entries) && !a.isSelected(entries[i].Path) {
-		a.selectOnly(entries[i].Path)
+func (a *App) itemMenu(m *ui.Menu, e Entry) {
+	if e.Path != "" && !a.isSelected(e.Path) {
+		a.selectOnly(e.Path)
 	}
 	sel := a.selectedEntries()
 	one := len(sel) == 1
@@ -408,10 +588,23 @@ func (a *App) itemMenu(m *ui.Menu, entries []Entry, i int) {
 		}
 	}
 	oneDir := one && sel[0].IsDir
-	inThisPC := a.cur().path == pathThisPC
+	onSpecial := specialPath(a.cur().path)
 
 	if m.Item("打开").Disabled(!anySel).Chosen() {
 		a.doOpen()
+	}
+	if oneDir && !onSpecial {
+		if a.store.isPinned(sel[0].Path) {
+			if m.Item("从快速访问取消固定").Chosen() {
+				if a.store.unpin(sel[0].Path) {
+					a.reload()
+				}
+			}
+		} else if m.Item("固定到快速访问").Chosen() {
+			if a.store.pin(sel[0].Path) {
+				a.reload()
+			}
+		}
 	}
 	m.Separator()
 	if m.Item("剪切").Disabled(!anySel).Chosen() {
@@ -420,20 +613,20 @@ func (a *App) itemMenu(m *ui.Menu, entries []Entry, i int) {
 	if m.Item("复制").Disabled(!anySel).Chosen() {
 		a.doCopy()
 	}
-	if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || inThisPC).Chosen() {
+	if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || onSpecial).Chosen() {
 		a.doPaste()
 	}
-	if m.Item("复制为路径").Disabled(!anySel || inThisPC).Chosen() {
+	if m.Item("复制为路径").Disabled(!anySel || onSpecial).Chosen() {
 		a.doCopyAsPath()
 	}
-	if m.Item("重命名").Disabled(!one || inThisPC).Chosen() {
+	if m.Item("重命名").Disabled(!one || onSpecial).Chosen() {
 		a.doRenameStart()
 	}
 	m.Separator()
-	if m.Item("压缩为 ZIP 文件").Disabled(!anySel || inThisPC).Chosen() {
+	if m.Item("压缩为 ZIP 文件").Disabled(!anySel || onSpecial).Chosen() {
 		a.doCompress()
 	}
-	if m.Item("全部解压").Disabled(!allArchives || inThisPC).Chosen() {
+	if m.Item("全部解压").Disabled(!allArchives || onSpecial).Chosen() {
 		a.doExtract()
 	}
 	m.Separator()
@@ -447,6 +640,18 @@ func (a *App) itemMenu(m *ui.Menu, entries []Entry, i int) {
 	if m.Item("属性").Disabled(!one).Chosen() {
 		a.showProperties()
 	}
+}
+
+// attachRowMenu gives a row the menu its page wants: the trash page's
+// 还原/永久删除, every other page's item menu.
+func (a *App) attachRowMenu(el ui.Element, e Entry) {
+	el.ContextMenu(func(m *ui.Menu) {
+		if a.cur().path == pathTrash {
+			a.trashMenu(m, e)
+			return
+		}
+		a.itemMenu(m, e)
+	})
 }
 
 func (a *App) paneMessage(c *ui.Context, text string) {
@@ -474,21 +679,4 @@ func typeLabel(e Entry) string {
 	default:
 		return strings.ToUpper(e.Ext) + " 文件"
 	}
-}
-
-// drawSortArrow is a small chevron. descending points down (递减).
-func drawSortArrow(p *ui.Painter, r ui.Rect, descending bool) {
-	s := r.W
-	if r.H < s {
-		s = r.H
-	}
-	x := r.X + (r.W-s)/2
-	y := r.Y + (r.H-s)/2
-	var path ui.Path
-	if descending {
-		path.MoveTo(x+s*0.1, y+s*0.3).LineTo(x+s*0.5, y+s*0.7).LineTo(x+s*0.9, y+s*0.3)
-	} else {
-		path.MoveTo(x+s*0.1, y+s*0.7).LineTo(x+s*0.5, y+s*0.3).LineTo(x+s*0.9, y+s*0.7)
-	}
-	p.StrokePath(&path, 1.4, colorMuted())
 }

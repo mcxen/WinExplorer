@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -26,6 +27,11 @@ func (a *App) statusLeft() string {
 	visible := a.visibleEntries()
 	selected := a.selectedEntries()
 	text := fmt.Sprintf("%d 个项目", len(visible))
+	if a.cur().search.busy {
+		text = "正在搜索…  " + text
+	} else if strings.TrimSpace(a.cur().query) != "" && !specialPath(a.cur().path) {
+		text = "搜索结果  " + text
+	}
 	if n := len(selected); n > 0 {
 		text += fmt.Sprintf("，%d 个项目被选中", n)
 		if bytes := selectedFileBytes(selected); bytes > 0 {

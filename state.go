@@ -26,6 +26,9 @@ type tabState struct {
 	renameBuf   string
 	editingPath bool
 	pathDraft   string
+
+	// search is this tab's query walk state (search.go).
+	search searchState
 }
 
 // App holds the window chrome state and the tab collection. The active tab's
@@ -39,6 +42,8 @@ type App struct {
 	sortAsc    bool
 	mode       ViewMode
 	showHidden bool
+	showExt    bool    // 查看>显示>文件扩展名 off hides known extensions
+	grouping   SortKey // 分组依据; groupNone when off
 
 	clipPaths []string
 	clipCut   bool
@@ -56,6 +61,15 @@ type App struct {
 	homePath string
 	// navPCExpanded is the 此电脑 tree node's expanded state.
 	navPCExpanded bool
+
+	// focusSearch is set by Ctrl+E/Ctrl+F and consumed by the search
+	// field, which takes the focus on the next frame.
+	focusSearch bool
+	// store is the persisted 快速访问 pins, 最近使用的文件 and 回收站
+	// restore log (statestore.go).
+	store *persistedState
+	// undo is the Ctrl+Z stack of file operations (undo.go).
+	undo []undoOp
 
 	// preview holds the loaded preview for the selected file; replaced
 	// atomically once a background load finishes (see preview.go).
@@ -85,6 +99,9 @@ const (
 	SortSize
 )
 
+// groupNone turns 分组依据 off.
+const groupNone SortKey = -1
+
 type Entry struct {
 	Name    string
 	Path    string
@@ -92,12 +109,23 @@ type Entry struct {
 	Size    int64
 	ModTime time.Time
 	Ext     string // lower, no dot; empty for dirs
+
+	// Dir is the parent folder's path, shown in the search result's 位置
+	// column; empty for regular listings.
+	Dir string
+	// VolFree/VolTotal carry a drive's capacity for the 此电脑 page's
+	// usage bars; zero otherwise.
+	VolFree, VolTotal int64
 }
 
 type Crumb struct{ Name, Path string }
 type Place struct{ Name, Path, Kind string }
 
-const pathThisPC = "::{this-pc}"
+const (
+	pathThisPC = "::{this-pc}"
+	pathHome   = "::{home}"
+	pathTrash  = "::{trash}"
+)
 
 func newTab(path string) *tabState {
 	return &tabState{

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
 // previewPane is the Windows 11 preview pane on the right: a header with
@@ -34,22 +36,7 @@ func (a *App) previewPane(c *ui.Context) {
 func (a *App) previewEmpty(c *ui.Context) {
 	col := ui.Column(c).FillWidth().Gap(8).AlignItems(ui.Center).Padding(40, 0, 0, 0)
 	col.Children(func() {
-		glyph := ui.Box(c).Size(48, 48).Shrink(0)
-		glyph.Children(func() {
-			ui.Box(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) {
-				var path ui.Path
-				path.MoveTo(r.X+r.W*0.2, r.Y+r.H*0.3)
-				path.LineTo(r.X+r.W*0.8, r.Y+r.H*0.3)
-				path.LineTo(r.X+r.W*0.8, r.Y+r.H*0.7)
-				path.LineTo(r.X+r.W*0.2, r.Y+r.H*0.7)
-				path.Close()
-				p.StrokePath(&path, 2, colorMuted().Alpha(0.6))
-				var eye ui.Path
-				eye.MoveTo(r.X+r.W*0.4, r.Y+r.H*0.5)
-				eye.LineTo(r.X+r.W*0.6, r.Y+r.H*0.5)
-				p.StrokePath(&eye, 2, colorMuted().Alpha(0.6))
-			})
-		})
+		components.Icon(c, lucide.FileSearch).Size(44, 44).TextColor(colorMuted().Alpha(0.6))
 		ui.Text(c, "选择一个项目以查看其预览").FontSize(13).TextColor(colorMuted()).TextAlign(ui.Center)
 	})
 }
@@ -110,12 +97,8 @@ func (a *App) previewNote(c *ui.Context, msg string) {
 // but not play inline (video, PDF, unsupported audio), matching Explorer's
 // preview-pane open button.
 func (a *App) previewOpenButton(c *ui.Context, st *previewState) {
-	btn := ui.ButtonBase(c).Height(30).FillWidth().Radius(4).
-		Background(colorAddress()).Border(1, ui.Hex("#D6D6D6")).
-		Label("打开").Tooltip("用系统应用打开")
-	btn.Children(func() {
-		ui.Text(c, "打开").FontSize(12).TextColor(colorText())
-	})
+	btn := components.Button(c, "打开", components.ButtonSecondary).
+		FillWidth().Tooltip("用系统应用打开")
 	if btn.Clicked() {
 		if err := openWithOS(st.path); err != nil {
 			a.statusMsg = "无法打开：" + err.Error()
@@ -155,9 +138,11 @@ func (a *App) previewAudio(c *ui.Context, st *previewState) {
 			play.Background(colorHover())
 		}
 		play.Children(func() {
-			ui.Box(c).Size(16, 16).Shrink(0).Draw(func(pa *ui.Painter, r ui.Rect) {
-				a.drawPlayPause(pa, r, pl.Playing())
-			})
+			icon := lucide.Play
+			if pl.Playing() {
+				icon = lucide.Pause
+			}
+			components.Icon(c, icon).Size(14, 14).TextColor(colorAccent())
 		})
 		if play.Clicked() {
 			if pl.Playing() {
@@ -266,22 +251,4 @@ func baseName(path string) string {
 		return ""
 	}
 	return filepath.Base(path)
-}
-
-func (a *App) drawPlayPause(p *ui.Painter, r ui.Rect, playing bool) {
-	s := r.W
-	x, y := r.X, r.Y
-	ink := colorAccent()
-	if playing {
-		bw := s * 0.12
-		p.Fill(ui.Rect{X: x + s*0.28, Y: y + s*0.22, W: bw, H: s * 0.56}, ink, 0)
-		p.Fill(ui.Rect{X: x + s*0.60, Y: y + s*0.22, W: bw, H: s * 0.56}, ink, 0)
-		return
-	}
-	var tri ui.Path
-	tri.MoveTo(x+s*0.32, y+s*0.2)
-	tri.LineTo(x+s*0.32, y+s*0.8)
-	tri.LineTo(x+s*0.78, y+s*0.5)
-	tri.Close()
-	p.FillPath(&tri, ink)
 }

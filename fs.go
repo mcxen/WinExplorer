@@ -11,9 +11,18 @@ import (
 // visibleEntries filters hidden names and the search query, then lists
 // directories before files, each group ordered by the current sort.
 func (a *App) visibleEntries() []Entry {
-	q := strings.ToLower(strings.TrimSpace(a.cur().query))
-	out := make([]Entry, 0, len(a.cur().entries))
-	for _, e := range a.cur().entries {
+	t := a.cur()
+	q := strings.ToLower(strings.TrimSpace(t.query))
+	// A query on a real folder shows the recursive search results, once
+	// the walk for it has landed; until then the pane keeps the plain
+	// listing so it never goes blank mid-typing.
+	if q != "" && !specialPath(t.path) && t.search.results != nil {
+		out := append([]Entry(nil), t.search.results...)
+		a.sortEntries(out)
+		return out
+	}
+	out := make([]Entry, 0, len(t.entries))
+	for _, e := range t.entries {
 		if !a.showHidden && strings.HasPrefix(e.Name, ".") {
 			continue
 		}
@@ -22,6 +31,13 @@ func (a *App) visibleEntries() []Entry {
 		}
 		out = append(out, e)
 	}
+	a.sortEntries(out)
+	return out
+}
+
+// sortEntries orders in place: directories first, then by the current
+// sort, ascending or descending.
+func (a *App) sortEntries(out []Entry) {
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].IsDir != out[j].IsDir {
 			return out[i].IsDir
@@ -32,7 +48,6 @@ func (a *App) visibleEntries() []Entry {
 		}
 		return less
 	})
-	return out
 }
 
 func entryLess(x, y Entry, key SortKey) bool {
@@ -54,8 +69,13 @@ func entryLess(x, y Entry, key SortKey) bool {
 }
 
 func (a *App) breadcrumbs() []Crumb {
-	if a.cur().path == pathThisPC {
+	switch a.cur().path {
+	case pathThisPC:
 		return []Crumb{{Name: "此电脑", Path: pathThisPC}}
+	case pathHome:
+		return []Crumb{{Name: "主文件夹", Path: pathHome}}
+	case pathTrash:
+		return []Crumb{{Name: "回收站", Path: pathTrash}}
 	}
 	known := knownFolderNames()
 	crumbs := []Crumb{{Name: "此电脑", Path: pathThisPC}}
@@ -206,12 +226,27 @@ func statDevice(path string) (uint64, bool) {
 	return uint64(st.Dev), true
 }
 
+// specialPath reports whether the path is a page, not a real folder that
+// files can be created, pasted or moved into.
+func specialPath(path string) bool {
+	switch path {
+	case pathThisPC, pathHome, pathTrash:
+		return true
+	}
+	return false
+}
+
 func cleanNav(path string) string {
-	if path == pathThisPC || path == "此电脑" {
+	switch path {
+	case pathThisPC, "此电脑":
 		return pathThisPC
+	case pathHome, "主文件夹":
+		return pathHome
+	case pathTrash, "回收站":
+		return pathTrash
 	}
 	if path == "" {
-		return pathThisPC
+		return pathHome
 	}
 	return filepath.Clean(path)
 }

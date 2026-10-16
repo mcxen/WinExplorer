@@ -34,16 +34,20 @@ func newApp() *App {
 		home = "/"
 	}
 	a := &App{
-		tabs:        []*tabState{newTab(home)},
+		// Explorer opens on the 主文件夹 (Home) page.
+		tabs:        []*tabState{newTab(pathHome)},
 		activeTab:   0,
 		sortKey:     SortName,
 		sortAsc:     true,
 		mode:        ViewDetails,
 		showHidden:  false,
+		showExt:     true,
+		grouping:    groupNone,
 		navWidth:    248,
 		homePath:    home,
 		previewOpen: false,
 		previewW:    320,
+		store:       loadState(),
 	}
 	a.reload()
 	return a
@@ -54,6 +58,7 @@ func newApp() *App {
 // the remaining height.
 func (a *App) view(c *ui.Context) {
 	a.handleKeys(c)
+	a.updateSearch()
 	ui.Column(c).Fill().Background(colorWindow()).Children(func() {
 		a.tabStrip(c)
 		a.commandBar(c)
@@ -118,6 +123,16 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.doRefresh()
 	case c.Shortcut(ui.Cmd, ui.KeyC), c.Shortcut(ui.Ctrl, ui.KeyC):
 		a.doCopy()
+	case c.Shortcut(ui.Cmd, ui.KeyZ), c.Shortcut(ui.Ctrl, ui.KeyZ):
+		a.doUndo()
+	case c.Shortcut(ui.Shift, ui.KeyDelete):
+		a.doPermanentDelete()
+	case c.Shortcut(ui.Alt, ui.KeyEnter):
+		if sel := a.selectedEntries(); len(sel) == 1 {
+			a.showProperties()
+		}
+	case c.Shortcut(ui.Cmd, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyF), c.Shortcut(ui.Cmd, ui.KeyF):
+		a.focusSearch = true
 	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyC), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyC):
 		a.doCopyAsPath()
 	case c.Shortcut(ui.Cmd, ui.KeyX), c.Shortcut(ui.Ctrl, ui.KeyX):

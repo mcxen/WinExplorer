@@ -18,7 +18,7 @@ func (a *App) sidebar(c *ui.Context) {
 	pane.Children(func() {
 		ui.Scroll(c).Grow(1).FillWidth().Padding(8, 8, 12, 8).Gap(2).Children(func() {
 			a.navHome(c)
-			for _, p := range a.quickPlaces() {
+			for _, p := range a.pinnedPlaces() {
 				a.navPlace(c, p, 0)
 			}
 			a.navThisPC(c)
@@ -26,6 +26,7 @@ func (a *App) sidebar(c *ui.Context) {
 				for _, p := range a.thisPCPlaces() {
 					a.navPlace(c, p, 24)
 				}
+				a.navTrash(c)
 			}
 		})
 		a.navResizeHandle(c)
@@ -35,8 +36,8 @@ func (a *App) sidebar(c *ui.Context) {
 // navHome is 主文件夹, the pane's first row. It navigates to the user's
 // home directory and is selected when that is the current location.
 func (a *App) navHome(c *ui.Context) {
-	a.navItem(c, "nav-home", "主文件夹", "home", a.homePath, a.cur().path == a.homePath, func() {
-		a.navigate(a.homePath)
+	a.navItem(c, "nav-home", "主文件夹", "home", pathHome, a.cur().path == pathHome, func() {
+		a.navigate(pathHome)
 	}, 0)
 }
 
@@ -59,14 +60,7 @@ func (a *App) navThisPC(c *ui.Context) {
 			chev.Background(colorHover())
 		}
 		chev.Children(func() {
-			box := ui.Box(c).Size(12, 12).Shrink(0)
-			box.Draw(func(p *ui.Painter, r ui.Rect) {
-				if a.navPCExpanded {
-					drawChevronDown(p, r, colorMuted())
-					return
-				}
-				drawChevron(p, r, colorMuted())
-			})
+			chevronIcon(c, a.navPCExpanded, 12)
 		})
 		if chev.Clicked() {
 			a.navPCExpanded = !a.navPCExpanded
@@ -84,18 +78,42 @@ func (a *App) navThisPC(c *ui.Context) {
 	}
 }
 
+// navTrash is the 回收站 row under the expanded 此电脑.
+func (a *App) navTrash(c *ui.Context) {
+	a.navItem(c, "nav-trash", "回收站", "trash", pathTrash, a.cur().path == pathTrash, func() {
+		a.navigate(pathTrash)
+	}, 24)
+}
+
 func (a *App) navPlace(c *ui.Context, p Place, indent float32) {
 	place := p
-	a.navItem(c, "nav-"+place.Path, place.Name, place.Kind, place.Path, a.cur().path == place.Path, func() {
+	row := a.navItem(c, "nav-"+place.Path, place.Name, place.Kind, place.Path, a.cur().path == place.Path, func() {
 		a.navigate(place.Path)
 	}, indent)
+	row.ContextMenu(func(m *ui.Menu) {
+		if m.Item("打开").Chosen() {
+			a.navigate(place.Path)
+		}
+		if a.store.isPinned(place.Path) {
+			if m.Item("从快速访问取消固定").Chosen() {
+				if a.store.unpin(place.Path) {
+					a.reload()
+				}
+			}
+		}
+		m.Separator()
+		if m.Item("属性").Chosen() {
+			a.selectOnly(place.Path)
+			a.showProperties()
+		}
+	})
 }
 
 // navItem is one navigation row: a 16px place icon, a 12px label, height
 // 32, with a rounded selection or hover. pad indents the row's left edge
 // for the volumes under 此电脑. Folder rows also accept file drops,
 // moving the dragged items into them.
-func (a *App) navItem(c *ui.Context, key, label, kind, path string, selected bool, act func(), pad float32) {
+func (a *App) navItem(c *ui.Context, key, label, kind, path string, selected bool, act func(), pad float32) ui.Element {
 	row := ui.ButtonBase(c.Key(key)).FillWidth().Height(navRowH).
 		Radius(4).Padding(0, 8, 0, 8+pad).Gap(8).AlignItems(ui.Center).
 		Label(label).Selected(selected)
@@ -117,6 +135,7 @@ func (a *App) navItem(c *ui.Context, key, label, kind, path string, selected boo
 		act()
 	}
 	a.bindDropFolder(c, row, path)
+	return row
 }
 
 // navResizeHandle is the wider grip over the pane's right edge. Dragging

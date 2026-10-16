@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
 // tabStrip is the Windows 11 title bar: the tab strip and the caption
@@ -25,7 +27,7 @@ func (a *App) tabStrip(c *ui.Context) {
 			plus.Background(colorHover())
 		}
 		plus.Children(func() {
-			ui.Text(c, "+").FontSize(16).TextColor(colorText())
+			components.Icon(c, lucide.Plus).Size(14, 14).TextColor(colorText())
 		})
 		if plus.Clicked() {
 			a.openTab(a.cur().path)
@@ -57,7 +59,7 @@ func (a *App) tabItem(c *ui.Context, i int) {
 			close.Background(colorHover())
 		}
 		close.Children(func() {
-			ui.Text(c, "×").FontSize(13).TextColor(colorMuted()).SingleLine()
+			components.Icon(c, lucide.X).Size(12, 12).TextColor(colorMuted())
 		})
 		if close.Clicked() {
 			a.closeTab(i)
@@ -179,7 +181,7 @@ func (a *App) commandBar(c *ui.Context) {
 	ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
 		Padding(0, 6).Gap(2).Background(colorChrome()).
 		FocusGroup(ui.Horizontal).Children(func() {
-		a.commandMenu(c, "newfolder", "新建", "新建", func(m *ui.Menu) {
+		a.commandMenu(c, lucide.FolderPlus, "新建", "新建", func(m *ui.Menu) {
 			if m.Item("文件夹").Chosen() {
 				a.doNewFolder()
 			}
@@ -187,19 +189,19 @@ func (a *App) commandBar(c *ui.Context) {
 
 		a.commandSep(c)
 
-		a.commandIconButton(c, "cut", "剪切", hasSel, a.doCut)
-		a.commandIconButton(c, "copy", "复制", hasSel, a.doCopy)
-		a.commandIconButton(c, "paste", "粘贴", canPaste, a.doPaste)
-		a.commandIconButton(c, "rename", "重命名", hasSel, a.doRenameStart)
-		a.commandIconButton(c, "share", "分享", true, func() {
+		a.commandIconButton(c, lucide.Scissors, "剪切", hasSel, a.doCut)
+		a.commandIconButton(c, lucide.Copy, "复制", hasSel, a.doCopy)
+		a.commandIconButton(c, lucide.ClipboardPaste, "粘贴", canPaste, a.doPaste)
+		a.commandIconButton(c, lucide.Pencil, "重命名", hasSel, a.doRenameStart)
+		a.commandIconButton(c, lucide.Share2, "分享", true, func() {
 			a.statusMsg = "分享在此版本中不可用"
 		})
-		a.commandIconButton(c, "delete", "删除", hasSel, a.doDelete)
+		a.commandIconButton(c, lucide.Trash, "删除", hasSel, a.doDelete)
 
 		a.commandSep(c)
 
-		a.commandMenu(c, "sort", "排序", "排序", a.sortMenu)
-		a.commandMenu(c, "view", "查看", "查看", a.viewMenu)
+		a.commandMenu(c, lucide.ArrowDownWideNarrow, "排序", "排序", a.sortMenu)
+		a.commandMenu(c, lucide.LayoutGrid, "查看", "查看", a.viewMenu)
 
 		a.moreButton(c)
 	})
@@ -211,57 +213,36 @@ func (a *App) commandSep(c *ui.Context) {
 		Background(colorDivider())
 }
 
-// commandIconButton is a 32×32 icon-only command, as Explorer's cut, copy,
-// paste, rename, share and delete. Disabled actions are muted and do not
-// call act; MyGo also drops clicks and paints a disabled element at half
-// opacity.
-func (a *App) commandIconButton(c *ui.Context, icon, tip string, enabled bool, act func()) {
-	btn := ui.ButtonBase(c).Size(32, 32).Radius(4).Shrink(0).
-		Label(tip).Tooltip(tip).Disabled(!enabled)
-	if enabled && (btn.Hovered() || btn.Pressed()) {
-		btn.Background(colorHover())
-	}
-	if !enabled {
-		btn.Opacity(0.45)
-	}
-	btn.TextColor(colorText()).Children(func() {
-		a.uiIcon(c, icon, 16)
-	})
-	if enabled && btn.Clicked() {
+// commandIconButton is a 32×32 icon-only command built on Onevra's
+// IconButton: the Lucide glyph, its tooltip and focus handling come from the
+// component, and MyGo grays out and drops input on the disabled face.
+func (a *App) commandIconButton(c *ui.Context, icon func() *ui.SVG, tip string, enabled bool, act func()) {
+	btn := components.IconButton(c, icon(), tip, components.IconButtonPlain).Disabled(!enabled)
+	if btn.Clicked() {
 		act()
 	}
 }
 
-// commandMenu is a command button that opens a system menu: an icon, a
-// label and a chevron. The menu is attached with Element.Menu so the button
+// commandMenu is a command button that opens a system menu: a Lucide icon,
+// a label and a chevron. The menu is attached with Element.Menu so the button
 // keeps the command-bar look instead of MenuButton's themed face.
-func (a *App) commandMenu(c *ui.Context, icon, label, tip string, build func(m *ui.Menu)) {
+func (a *App) commandMenu(c *ui.Context, icon func() *ui.SVG, label, tip string, build func(m *ui.Menu)) {
 	btn := ui.ButtonBase(c).Height(32).Padding(4, 8).Gap(4).Radius(4).
 		Shrink(0).Label(label).Tooltip(tip)
 	if btn.Hovered() || btn.Pressed() {
 		btn.Background(colorHover())
 	}
 	btn.TextColor(colorText()).Children(func() {
-		a.uiIcon(c, icon, 16)
+		components.Icon(c, icon).Size(16, 16)
 		ui.Text(c, label).FontSize(12).SingleLine()
-		chev := ui.Box(c).Size(8, 8).Shrink(0)
-		chev.Children(func() {
-			a.uiIcon(c, "chevron", 8)
-		})
+		chevronIcon(c, true, 10)
 	})
 	btn.Menu(build)
 }
 
 // moreButton is the 查看更多 overflow at the command bar's right end.
 func (a *App) moreButton(c *ui.Context) {
-	btn := ui.ButtonBase(c).Size(32, 32).Radius(4).Shrink(0).
-		Label("查看更多").Tooltip("查看更多")
-	if btn.Hovered() || btn.Pressed() {
-		btn.Background(colorHover())
-	}
-	btn.TextColor(colorText()).Children(func() {
-		a.uiIcon(c, "more", 16)
-	})
+	btn := components.IconButton(c, lucide.Ellipsis(), "查看更多", components.IconButtonPlain)
 	btn.Menu(func(m *ui.Menu) {
 		if m.Item("预览窗格").Checked(a.previewOpen).Chosen() {
 			a.togglePreview()
@@ -314,8 +295,29 @@ func (a *App) viewMenu(m *ui.Menu) {
 			a.setMode(mode.mode)
 		}
 	}
-	m.Separator()
-	if m.Item("显示隐藏的项目").Checked(a.showHidden).Chosen() {
-		a.toggleHidden()
-	}
+	m.Submenu("显示", func(n *ui.Menu) {
+		if n.Item("文件扩展名").Checked(a.showExt).Chosen() {
+			a.showExt = !a.showExt
+		}
+		if n.Item("隐藏的项目").Checked(a.showHidden).Chosen() {
+			a.toggleHidden()
+		}
+	})
+	m.Submenu("分组依据", func(n *ui.Menu) {
+		groups := []struct {
+			label string
+			key   SortKey
+		}{
+			{"无", groupNone},
+			{"名称", SortName},
+			{"修改日期", SortDate},
+			{"类型", SortType},
+			{"大小", SortSize},
+		}
+		for _, g := range groups {
+			if n.Item(g.label).Checked(a.grouping == g.key).Chosen() {
+				a.grouping = g.key
+			}
+		}
+	})
 }

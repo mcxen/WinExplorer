@@ -1,9 +1,16 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/icons/lucide"
+)
 
-// Icons are drawn with Painter paths inside a square box of side px.
-// Callers (chrome, sidebar, file pane) pass a *ui.Context; the contract's
+// Monochrome command icons come from Onevra's Lucide set and render through
+// components.Icon, inheriting the text color of their container. The colorful
+// Windows 11 file, folder and place glyphs below stay hand-drawn with Painter
+// paths inside a square box of side px: they carry the Explorer identity that
+// a monochrome icon set cannot. Callers pass a *ui.Context; the contract's
 // *ui.Context parameter is the element context, not a painter.
 
 func (a *App) fileIcon(c *ui.Context, e Entry, px float32) {
@@ -35,6 +42,8 @@ func (a *App) placeIcon(c *ui.Context, kind string, px float32) {
 			drawVideos(p, r)
 		case "drive":
 			drawDrive(p, r)
+		case "trash":
+			drawTrash(p, r)
 		case "thispc":
 			drawThisPC(p, r)
 		default:
@@ -43,46 +52,22 @@ func (a *App) placeIcon(c *ui.Context, kind string, px float32) {
 	})
 }
 
-func (a *App) uiIcon(c *ui.Context, name string, px float32) {
-	ui.Box(c).Size(px, px).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-		ink := colorText()
-		switch name {
-		case "back":
-			drawArrow(p, r, ink, true)
-		case "forward":
-			drawArrow(p, r, ink, false)
-		case "up":
-			drawUp(p, r, ink)
-		case "refresh":
-			drawRefresh(p, r, ink)
-		case "chevron":
-			drawChevron(p, r, colorMuted())
-		case "cut":
-			drawCut(p, r, ink)
-		case "copy":
-			drawCopy(p, r, ink)
-		case "paste":
-			drawPaste(p, r, ink)
-		case "rename":
-			drawRename(p, r, ink)
-		case "share":
-			drawShare(p, r, ink)
-		case "delete":
-			drawDelete(p, r, ink)
-		case "newfolder":
-			drawFolder(p, r, colorFolder())
-		case "sort":
-			drawSort(p, r, ink)
-		case "view":
-			drawView(p, r, ink)
-		case "preview":
-			drawPreview(p, r, ink)
-		case "more":
-			drawMore(p, r, ink)
-		default:
-			drawFileSheet(p, r, colorMuted(), ink)
-		}
-	})
+// chevronIcon is a small Lucide disclosure chevron: right when collapsed,
+// down when open, in the muted color the tree node arrows use.
+func chevronIcon(c *ui.Context, open bool, px float32) ui.Element {
+	icon := lucide.ChevronRight
+	if open {
+		icon = lucide.ChevronDown
+	}
+	return components.Icon(c, icon).Size(px, px).TextColor(colorMuted())
+}
+
+// chevronUpDown names the details header's sort direction: up when ascending.
+func chevronUpDown(ascending bool) func() *ui.SVG {
+	if ascending {
+		return lucide.ChevronUp
+	}
+	return lucide.ChevronDown
 }
 
 func fileTint(ext string) ui.Color {
@@ -152,6 +137,21 @@ func drawDrive(p *ui.Painter, r ui.Rect) {
 	p.Fill(body, ui.Hex("#4B5563"), s*0.1)
 	p.Fill(ui.Rect{X: x + s*0.18, Y: y + s*0.34, W: s * 0.28, H: s * 0.12}, ui.Hex("#D1D5DB"), s*0.04)
 	p.Fill(ui.Rect{X: x + s*0.62, Y: y + s*0.56, W: s * 0.16, H: s * 0.10}, ui.Hex("#60A5FA"), s*0.04)
+}
+
+// drawTrash is the 回收站 bin: the Win11 recycle bin's translucent slate
+// can, with a lid, a handle and lighter ribs down its body.
+func drawTrash(p *ui.Painter, r ui.Rect) {
+	x, y, s := r.X, r.Y, r.W
+	ink := ui.Hex("#64748B")
+	p.Fill(ui.Rect{X: x + s*0.38, Y: y + s*0.08, W: s * 0.24, H: s * 0.08}, ink, s*0.02)
+	p.Fill(ui.Rect{X: x + s*0.10, Y: y + s*0.17, W: s * 0.80, H: s * 0.10}, ink, s*0.03)
+	body := ui.Rect{X: x + s*0.17, Y: y + s*0.30, W: s * 0.66, H: s * 0.58}
+	p.Fill(body, ink.Alpha(0.55), s*0.05)
+	p.Stroke(body, ink, 1, s*0.05)
+	for _, f := range []float32{0.34, 0.5, 0.66} {
+		p.Line(x+s*f, y+s*0.38, x+s*f, y+s*0.80, s*0.055, ui.RGBA(255, 255, 255, 0.4))
+	}
 }
 
 func drawDesktop(p *ui.Painter, r ui.Rect) {
@@ -232,52 +232,6 @@ func drawThisPC(p *ui.Painter, r ui.Rect) {
 	p.Fill(ui.Rect{X: x + s*0.30, Y: y + s*0.62, W: s * 0.40, H: s * 0.22}, ui.Hex("#64748B"), s*0.08)
 }
 
-func drawArrow(p *ui.Painter, r ui.Rect, ink ui.Color, left bool) {
-	x, y, s := r.X, r.Y, r.W
-	cx, cy := x+s*0.50, y+s*0.50
-	var head ui.Path
-	if left {
-		head.MoveTo(cx+s*0.06, cy-s*0.24)
-		head.LineTo(cx-s*0.20, cy)
-		head.LineTo(cx+s*0.06, cy+s*0.24)
-	} else {
-		head.MoveTo(cx-s*0.06, cy-s*0.24)
-		head.LineTo(cx+s*0.20, cy)
-		head.LineTo(cx-s*0.06, cy+s*0.24)
-	}
-	p.StrokePath(&head, s*0.13, ink)
-}
-
-func drawUp(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	cx := x + s*0.5
-	var head ui.Path
-	head.MoveTo(cx-s*0.24, y+s*0.48)
-	head.LineTo(cx, y+s*0.22)
-	head.LineTo(cx+s*0.24, y+s*0.48)
-	p.StrokePath(&head, s*0.13, ink)
-	p.Line(cx, y+s*0.36, cx, y+s*0.80, s*0.13, ink)
-}
-
-func drawChevron(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	var v ui.Path
-	v.MoveTo(x+s*0.32, y+s*0.22)
-	v.LineTo(x+s*0.64, y+s*0.50)
-	v.LineTo(x+s*0.32, y+s*0.78)
-	p.StrokePath(&v, s*0.14, ink)
-}
-
-// drawChevronDown is the expanded tree node's chevron, pointing down.
-func drawChevronDown(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	var v ui.Path
-	v.MoveTo(x+s*0.22, y+s*0.32)
-	v.LineTo(x+s*0.50, y+s*0.64)
-	v.LineTo(x+s*0.78, y+s*0.32)
-	p.StrokePath(&v, s*0.14, ink)
-}
-
 // drawHome is the 主文件夹 house glyph.
 func drawHome(p *ui.Painter, r ui.Rect) {
 	x, y, s := r.X, r.Y, r.W
@@ -291,149 +245,4 @@ func drawHome(p *ui.Painter, r ui.Rect) {
 	p.Stroke(body, ink, s*0.04, s*0.10)
 	door := ui.Rect{X: x + s*0.44, Y: y + s*0.64, W: s * 0.12, H: s * 0.22}
 	p.Fill(door, ink, s*0.02)
-}
-
-// drawMore is the command bar's 查看更多: three dots in a row.
-func drawMore(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	for _, f := range []float32{0.22, 0.50, 0.78} {
-		var dot ui.Path
-		dot.Circle(x+s*f, y+s*0.5, s*0.09)
-		p.FillPath(&dot, ink)
-	}
-}
-
-func drawRefresh(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	cx, cy := x+s*0.5, y+s*0.52
-	rad := s * 0.28
-	var arc ui.Path
-	arc.MoveTo(cx+rad*0.2, cy-rad)
-	arc.CubeTo(cx+rad, cy-rad, cx+rad, cy+rad*0.2, cx+rad*0.85, cy+rad*0.55)
-	arc.CubeTo(cx+rad*0.55, cy+rad, cx-rad*0.2, cy+rad, cx-rad*0.7, cy+rad*0.55)
-	arc.CubeTo(cx-rad, cy+rad*0.15, cx-rad, cy-rad*0.55, cx-rad*0.35, cy-rad*0.9)
-	p.StrokePath(&arc, s*0.11, ink)
-	var tip ui.Path
-	tip.MoveTo(cx-s*0.02, y+s*0.08)
-	tip.LineTo(cx+s*0.22, y+s*0.16)
-	tip.LineTo(cx+s*0.06, y+s*0.34)
-	tip.Close()
-	p.FillPath(&tip, ink)
-}
-
-func drawCut(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	var a, b ui.Path
-	a.Circle(x+s*0.32, y+s*0.70, s*0.13)
-	b.Circle(x+s*0.62, y+s*0.70, s*0.13)
-	p.StrokePath(&a, s*0.08, ink)
-	p.StrokePath(&b, s*0.08, ink)
-	var blades ui.Path
-	blades.MoveTo(x+s*0.40, y+s*0.60)
-	blades.LineTo(x+s*0.78, y+s*0.16)
-	blades.MoveTo(x+s*0.54, y+s*0.60)
-	blades.LineTo(x+s*0.18, y+s*0.16)
-	p.StrokePath(&blades, s*0.08, ink)
-}
-
-func drawCopy(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	back := ui.Rect{X: x + s*0.28, Y: y + s*0.12, W: s * 0.50, H: s * 0.58}
-	front := ui.Rect{X: x + s*0.14, Y: y + s*0.28, W: s * 0.50, H: s * 0.58}
-	p.Stroke(back, ink, s*0.06, s*0.075)
-	p.Fill(front, colorContent(), s*0.06)
-	p.Stroke(front, ink, s*0.06, s*0.075)
-}
-
-func drawPaste(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	board := ui.Rect{X: x + s*0.18, Y: y + s*0.22, W: s * 0.64, H: s * 0.66}
-	p.Fill(board, colorContent(), s*0.06)
-	p.Stroke(board, ink, s*0.06, s*0.075)
-	clip := ui.Rect{X: x + s*0.34, Y: y + s*0.12, W: s * 0.32, H: s * 0.18}
-	p.Fill(clip, ink, s*0.04)
-}
-
-func drawRename(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	var pencil ui.Path
-	pencil.MoveTo(x+s*0.62, y+s*0.12)
-	pencil.LineTo(x+s*0.86, y+s*0.36)
-	pencil.LineTo(x+s*0.40, y+s*0.82)
-	pencil.LineTo(x+s*0.16, y+s*0.86)
-	pencil.LineTo(x+s*0.20, y+s*0.62)
-	pencil.Close()
-	p.FillPath(&pencil, ink)
-	p.Fill(ui.Rect{X: x + s*0.18, Y: y + s*0.86, W: s * 0.28, H: s * 0.07}, colorAccent(), s*0.02)
-}
-
-func drawShare(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	var a, b, c ui.Path
-	a.Circle(x+s*0.24, y+s*0.50, s*0.10)
-	b.Circle(x+s*0.72, y+s*0.26, s*0.10)
-	c.Circle(x+s*0.72, y+s*0.74, s*0.10)
-	p.FillPath(&a, ink)
-	p.FillPath(&b, ink)
-	p.FillPath(&c, ink)
-	p.Line(x+s*0.32, y+s*0.46, x+s*0.64, y+s*0.30, s*0.07, ink)
-	p.Line(x+s*0.32, y+s*0.54, x+s*0.64, y+s*0.70, s*0.07, ink)
-}
-
-func drawDelete(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	p.Line(x+s*0.22, y+s*0.24, x+s*0.78, y+s*0.24, s*0.08, ink)
-	p.Fill(ui.Rect{X: x + s*0.40, Y: y + s*0.12, W: s * 0.20, H: s * 0.08}, ink, s*0.02)
-	can := ui.Rect{X: x + s*0.26, Y: y + s*0.30, W: s * 0.48, H: s * 0.54}
-	p.Stroke(can, ink, s*0.04, s*0.075)
-	p.Line(x+s*0.40, y+s*0.40, x+s*0.40, y+s*0.72, s*0.06, ink)
-	p.Line(x+s*0.60, y+s*0.40, x+s*0.60, y+s*0.72, s*0.06, ink)
-}
-
-func drawSort(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	w := s * 0.09
-	p.Line(x+s*0.18, y+s*0.28, x+s*0.62, y+s*0.28, w, ink)
-	p.Line(x+s*0.18, y+s*0.50, x+s*0.50, y+s*0.50, w, ink)
-	p.Line(x+s*0.18, y+s*0.72, x+s*0.40, y+s*0.72, w, ink)
-	p.Line(x+s*0.74, y+s*0.30, x+s*0.74, y+s*0.70, w, ink)
-	var head ui.Path
-	head.MoveTo(x+s*0.62, y+s*0.60)
-	head.LineTo(x+s*0.74, y+s*0.78)
-	head.LineTo(x+s*0.86, y+s*0.60)
-	p.StrokePath(&head, w, ink)
-}
-
-func drawView(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	g := s * 0.06
-	cell := (s*0.76 - g) / 2
-	ox, oy := x+s*0.12, y+s*0.12
-	for row := range 2 {
-		for col := range 2 {
-			p.Stroke(ui.Rect{
-				X: ox + float32(col)*(cell+g),
-				Y: oy + float32(row)*(cell+g),
-				W: cell, H: cell,
-			}, ink, s*0.08, s*0.08)
-		}
-	}
-}
-
-// drawPreview is a document with an eye — the Windows 11 preview-pane
-// toggle glyph, drawn in the command bar.
-func drawPreview(p *ui.Painter, r ui.Rect, ink ui.Color) {
-	x, y, s := r.X, r.Y, r.W
-	sheet := ui.Rect{X: x + s*0.18, Y: y + s*0.16, W: s * 0.56, H: s * 0.68}
-	p.Fill(sheet, ui.RGB(255, 255, 255), s*0.06)
-	p.Stroke(sheet, ink, s*0.06, s*0.04)
-	cx, cy, rad := x+s*0.62, y+s*0.5, s*0.18
-	var eye ui.Path
-	eye.MoveTo(cx-rad, cy)
-	eye.QuadTo(cx, cy-rad*0.8, cx+rad, cy)
-	eye.QuadTo(cx, cy+rad*0.8, cx-rad, cy)
-	p.StrokePath(&eye, s*0.05, ink)
-	var pupil ui.Path
-	pupil.Circle(cx, cy, rad*0.42)
-	p.FillPath(&pupil, ink)
 }

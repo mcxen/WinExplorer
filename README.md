@@ -1,6 +1,6 @@
 # WinExplorer
 
-一个用 [MyGo](https://github.com/egoist/mygo) 纯原生 UI 实现的文件管理器，完全参考 Windows 11 文件资源管理器的布局与排版。界面用 Go 绘制，没有 HTML、没有 WebView、没有 cgo。
+一个用 [MyGo](https://github.com/egoist/mygo) 纯原生 UI 实现的文件管理器，完全参考 Windows 11 文件资源管理器的布局与排版。界面组件与图标基于 [Onevra](https://github.com/oneo-me/onevra) 组件库（内嵌 Lucide 图标），用 Go 绘制，没有 HTML、没有 WebView、没有 cgo。
 
 ## 运行
 
@@ -65,7 +65,7 @@ go build -o winexplorer .
 | `tabs.go` | 导航、历史、排序/视图切换、标签增删与切换 |
 | `fs.go` | 目录读取、过滤/排序、面包屑、快速访问与磁盘列表 |
 | `theme.go` | Windows 11 亮/暗配色 |
-| `icons.go` | 用 Painter 路径绘制的文件夹、文件、盘符与命令图标 |
+| `icons.go` | 彩色文件夹、文件、盘符与位置图标（Painter 自绘）；命令与导航单色图标来自 Onevra 的 Lucide 图标集（`components.Icon`） |
 | `chrome_tab.go` | 标签条与命令栏 |
 | `chrome_nav.go` | 导航行：后退/前进/向上、地址栏、搜索框 |
 | `sidebar.go` | 左侧导航窗格与宽度拖拽手柄 |
@@ -82,7 +82,9 @@ go build -o winexplorer .
 
 ## 实现说明
 
-- 所有图标与控件均由 MyGo 的 `ui` 包在 GPU 上自绘，未引入任何第三方图标资源。
+- 单色命令/导航图标（后退、前进、向上、刷新、剪切、复制、粘贴、重命名、分享、删除、新建、排序、查看、更多、搜索、播放/暂停等）统一换用 Onevra 内置的 Lucide SVG 图标，经 `components.Icon` 渲染，继承文本颜色、悬停自动着色；命令栏与导航行的图标按钮改用 `components.IconButton`，悬停/按压/禁用/焦点与提示由组件统一处理。
+- 彩色文件、文件夹、盘符与位置图标仍由 MyGo 的 `ui` 包在 GPU 上自绘（Painter 路径），保持 Windows 11 资源管理器的彩色图标观感。
+- `go.mod` 以 `replace` 指向本地最新克隆的 Onevra（`/Users/mcx/onevra`，含未发布提交）；下一个 Onevra 版本发布后可移除该行改用正式版本。
 - 删除采用“移动到 `~/.Trash`”而非 `os.RemoveAll`，更接近桌面系统的回收站语义，且不会因误操作直接丢失文件。
 - 剪贴板是应用内实现（`clipPaths` / `clipCut`），不污染系统剪贴板；跨标签复制/粘贴同样可用。
 - macOS 上打开文件调用系统 `open` 命令。

@@ -13,6 +13,7 @@ func (a *App) navigate(path string) {
 	t := a.cur()
 	t.path = cleanNav(path)
 	t.query = ""
+	t.search = searchState{}
 	t.selected = map[string]bool{}
 	t.anchor = ""
 	t.renaming = ""
@@ -59,6 +60,7 @@ func (a *App) restoreHistory() {
 	t := a.cur()
 	t.path = t.history[t.histIdx]
 	t.query = ""
+	t.search = searchState{}
 	t.selected = map[string]bool{}
 	t.anchor = ""
 	t.renaming = ""
@@ -72,13 +74,20 @@ func (a *App) restoreHistory() {
 // up opens the parent of the active tab's folder. A volume root or "/" goes to
 // This PC; This PC itself has no parent.
 func (a *App) up() {
-	if a.cur().path == pathThisPC {
+	switch a.cur().path {
+	case pathThisPC, pathHome, pathTrash:
 		return
 	}
 	a.navigate(parentPath(a.cur().path))
 }
 
-func (a *App) canUp() bool { return a.cur().path != pathThisPC }
+func (a *App) canUp() bool {
+	switch a.cur().path {
+	case pathThisPC, pathHome, pathTrash:
+		return false
+	}
+	return true
+}
 
 // reload lists the active tab's directory or This PC places, and clears the
 // transient status message on success.
@@ -86,13 +95,27 @@ func (a *App) reload() {
 	t := a.cur()
 	a.statusMsg = ""
 	t.loadErr = ""
-	if t.path == pathThisPC {
+	switch t.path {
+	case pathThisPC:
 		places := a.thisPCPlaces()
 		entries := make([]Entry, len(places))
 		for i, p := range places {
-			entries[i] = Entry{Name: p.Name, Path: p.Path, IsDir: true}
+			e := Entry{Name: p.Name, Path: p.Path, IsDir: true}
+			if p.Kind == "drive" {
+				if free, total, ok := volumeCap(p.Path); ok {
+					e.VolFree, e.VolTotal = free, total
+				}
+			}
+			entries[i] = e
 		}
 		t.entries = entries
+		return
+	case pathHome:
+		pins, recents := a.homeEntries()
+		t.entries = append(pins, recents...)
+		return
+	case pathTrash:
+		t.entries = trashEntries()
 		return
 	}
 	dir, err := os.ReadDir(t.path)

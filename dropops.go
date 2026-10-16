@@ -75,6 +75,8 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 	copyMode := mods&(ui.Cmd|ui.Ctrl) != 0
 	var failed, skipped []string
 	moved := 0
+	var undoCreated []string
+	var undoMoved []undoMove
 	for _, src := range paths {
 		if src == "" || src == pathThisPC {
 			continue
@@ -101,6 +103,7 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 			continue
 		}
 		dst := filepath.Join(dstDir, name)
+		placed := false
 		if copyMode {
 			if info.IsDir() {
 				if err := copyDir(srcClean, dst); err != nil {
@@ -111,6 +114,8 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 				failed = append(failed, filepath.Base(src))
 				continue
 			}
+			undoCreated = append(undoCreated, dst)
+			placed = true
 		} else if err := os.Rename(srcClean, dst); err != nil {
 			// 跨设备（EXDEV）回退为复制后删除。
 			if info.IsDir() {
@@ -129,8 +134,25 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 				failed = append(failed, filepath.Base(src))
 				continue
 			}
+			undoMoved = append(undoMoved, undoMove{From: srcClean, To: dst})
+			placed = true
+		} else {
+			undoMoved = append(undoMoved, undoMove{From: srcClean, To: dst})
+			placed = true
 		}
-		moved++
+		if placed {
+			moved++
+		}
+	}
+	if n := len(undoCreated) + len(undoMoved); n > 0 {
+		desc := "移动"
+		if copyMode {
+			desc = "复制"
+		}
+		if n > 1 {
+			desc = fmt.Sprintf("%s %d 个项目", desc, n)
+		}
+		a.pushUndo(undoOp{desc: desc, created: undoCreated, moved: undoMoved})
 	}
 	a.reload()
 	if moved > 0 {

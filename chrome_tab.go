@@ -6,53 +6,55 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// tabStrip is the Windows 11 Explorer tab strip: one tab per open tab, the
-// active one lit and the rest quiet, each with a close button, then a "+" that
-// opens a new tab on the current location. Height is 36; a 1px rule below it
-// separates the strip from the command bar, as in Explorer.
+// tabStrip is the Windows 11 title bar: the tab strip and the caption
+// buttons share one row, and the window is frameless, so this bar is the
+// topmost chrome. The row drags the window; a double click on it maximizes.
+// There is no rule under it — the command bar sits on the same mica, as in
+// Explorer.
 func (a *App) tabStrip(c *ui.Context) {
-	ui.Column(c).FillWidth().Shrink(0).Background(colorWindow()).Children(func() {
-		ui.Row(c).Height(36).FillWidth().AlignItems(ui.End).
-			Padding(4, 8, 0, 8).Gap(2).Children(func() {
-			for i := range a.tabs {
-				a.tabItem(c, i)
-			}
-			plus := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).
-				Label("新建标签页").Tooltip("新建标签页 (Ctrl+T)")
-			if plus.Hovered() || plus.Pressed() {
-				plus.Background(colorHover())
-			}
-			plus.Children(func() {
-				ui.Text(c, "+").FontSize(16).TextColor(colorText())
-			})
-			if plus.Clicked() {
-				a.openTab(a.cur().path)
-			}
+	bar := ui.Row(c).Height(40).FillWidth().Shrink(0).
+		AlignItems(ui.Center).Padding(0, 0, 0, 8).Gap(2).
+		Background(colorWindow()).DragWindow()
+	bar.Children(func() {
+		for i := range a.tabs {
+			a.tabItem(c, i)
+		}
+		plus := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).
+			Label("新建标签页").Tooltip("新建标签页 (Ctrl+T)")
+		if plus.Hovered() || plus.Pressed() {
+			plus.Background(colorHover())
+		}
+		plus.Children(func() {
+			ui.Text(c, "+").FontSize(16).TextColor(colorText())
 		})
-		ui.Box(c).Height(1).FillWidth().Background(colorDivider())
+		if plus.Clicked() {
+			a.openTab(a.cur().path)
+		}
+		a.windowControls(c)
 	})
 }
 
-// tabItem draws the tab at index i: its title and a close button. The active
-// tab is brighter and rounded on top, like Windows 11 Explorer.
+// tabItem draws the tab at index i: its title and a close button. The
+// active tab takes the content surface and rounds its top corners, as the
+// Windows 11 active tab does.
 func (a *App) tabItem(c *ui.Context, i int) {
 	active := i == a.activeTab
 	title := tabTitle(a.tabs[i].path)
 	tab := ui.Row(c).Key("tab-"+string(rune(i))).Height(32).MaxWidth(220).MinWidth(72).
-		Padding(0, 8, 0, 8).Gap(6).Radius(6, 6, 0, 0).Shrink(0).
+		Padding(0, 8, 0, 8).Gap(6).Radius(4, 4, 0, 0).Shrink(0).
 		AlignItems(ui.Center).Role(ui.RoleTab).Label(title)
 	if active {
-		tab.Background(colorChrome())
+		tab.Background(colorContent())
 	} else if tab.Hovered() {
 		tab.Background(colorHover())
 	}
 	tab.Children(func() {
 		ui.Text(c, title).FontSize(12).SingleLine().Grow(1).MinWidth(0).
 			TextColor(colorText()).MaxLines(1)
-		close := ui.ButtonBase(c).Size(18, 18).Radius(9).Shrink(0).
+		close := ui.ButtonBase(c).Size(20, 20).Radius(4).Shrink(0).
 			Label("关闭标签").Tooltip("关闭标签")
 		if close.Hovered() || close.Pressed() {
-			close.Background(colorMuted().Alpha(0.25))
+			close.Background(colorHover())
 		}
 		close.Children(func() {
 			ui.Text(c, "×").FontSize(13).TextColor(colorMuted()).SingleLine()
@@ -65,6 +67,72 @@ func (a *App) tabItem(c *ui.Context, i int) {
 	if tab.Clicked() {
 		a.switchTo(i)
 	}
+}
+
+// windowControls ends the title bar: the empty strip that drags, then the
+// three caption buttons Windows 11 puts at the right end — minimize,
+// maximize, close — each a 46×40 flat target. Close hovers red.
+func (a *App) windowControls(c *ui.Context) {
+	ui.Box(c).Grow(1).Height(1).DragWindow()
+	a.winControl(c, "最小化", drawWinMin, false, func() {
+		if a.win != nil {
+			a.win.Minimize()
+		}
+	})
+	a.winControl(c, "最大化", drawWinMax, false, func() {
+		if a.win != nil {
+			a.win.ToggleMaximize()
+		}
+	})
+	a.winControl(c, "关闭", drawWinClose, true, func() {
+		if a.win != nil {
+			a.win.Close()
+		}
+	})
+}
+
+func (a *App) winControl(c *ui.Context, label string, glyph func(*ui.Painter, ui.Rect, ui.Color), danger bool, act func()) {
+	btn := ui.ButtonBase(c).Width(46).Height(40).Radius(0).Shrink(0).
+		Label(label).Tooltip(label)
+	red := danger && (btn.Hovered() || btn.Pressed())
+	switch {
+	case red:
+		btn.Background(colorCloseHover())
+	case btn.Hovered() || btn.Pressed():
+		btn.Background(colorHover())
+	}
+	btn.Children(func() {
+		box := ui.Box(c).Size(12, 12).Shrink(0)
+		box.Draw(func(p *ui.Painter, r ui.Rect) {
+			ink := colorText()
+			if red {
+				ink = ui.Hex("#FFFFFF")
+			}
+			glyph(p, r, ink)
+		})
+	})
+	if btn.Clicked() {
+		act()
+	}
+}
+
+func drawWinMin(p *ui.Painter, r ui.Rect, ink ui.Color) {
+	var l ui.Path
+	l.MoveTo(r.X+r.W*0.15, r.Y+r.H*0.5).LineTo(r.X+r.W*0.85, r.Y+r.H*0.5)
+	p.StrokePath(&l, 1, ink)
+}
+
+func drawWinMax(p *ui.Painter, r ui.Rect, ink ui.Color) {
+	sq := ui.Rect{X: r.X + r.W*0.15, Y: r.Y + r.H*0.15, W: r.W * 0.7, H: r.H * 0.7}
+	p.Stroke(sq, ink, 1, 1)
+}
+
+func drawWinClose(p *ui.Painter, r ui.Rect, ink ui.Color) {
+	k := r.W * 0.28
+	var x ui.Path
+	x.MoveTo(r.X+k, r.Y+k).LineTo(r.X+r.W-k, r.Y+r.H-k)
+	x.MoveTo(r.X+r.W-k, r.Y+k).LineTo(r.X+k, r.Y+r.H-k)
+	p.StrokePath(&x, 1, ink)
 }
 
 // tabTitle is a tab's base name, or 此电脑 on This PC.
@@ -80,14 +148,16 @@ func tabTitle(path string) string {
 }
 
 // commandBar is the Windows 11 command bar: 新建 | 剪切 复制 粘贴 重命名
-// 分享 删除 | 排序 查看. Height is 40. Cut, copy, rename and delete stay
-// muted until something is selected; paste stays muted while the clipboard
-// is empty. The bar calls the ops methods; it does not touch the filesystem.
+// 分享 删除 | 排序 查看, then 查看更多 at the right end. The middle group is
+// icons only; 新建, 排序 and 查看 carry labels and chevrons. Cut, copy,
+// rename and delete stay muted until something is selected; paste stays
+// muted while the clipboard is empty. The bar calls the ops methods; it
+// does not touch the filesystem.
 func (a *App) commandBar(c *ui.Context) {
 	hasSel := len(a.cur().selected) > 0
 	canPaste := len(a.clipPaths) > 0
 
-	ui.Row(c).Height(40).FillWidth().AlignItems(ui.Center).
+	ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
 		Padding(0, 6).Gap(2).Background(colorChrome()).
 		FocusGroup(ui.Horizontal).Children(func() {
 		a.commandMenu(c, "newfolder", "新建", "新建", func(m *ui.Menu) {
@@ -98,25 +168,22 @@ func (a *App) commandBar(c *ui.Context) {
 
 		a.commandSep(c)
 
-		a.commandButton(c, "cut", "剪切", "剪切", hasSel, a.doCut)
-		a.commandButton(c, "copy", "复制", "复制", hasSel, a.doCopy)
-		a.commandButton(c, "paste", "粘贴", "粘贴", canPaste, a.doPaste)
-		a.commandButton(c, "rename", "重命名", "重命名", hasSel, a.doRenameStart)
-		a.commandButton(c, "share", "分享", "分享", true, func() {
+		a.commandIconButton(c, "cut", "剪切", hasSel, a.doCut)
+		a.commandIconButton(c, "copy", "复制", hasSel, a.doCopy)
+		a.commandIconButton(c, "paste", "粘贴", canPaste, a.doPaste)
+		a.commandIconButton(c, "rename", "重命名", hasSel, a.doRenameStart)
+		a.commandIconButton(c, "share", "分享", true, func() {
 			a.statusMsg = "分享在此版本中不可用"
 		})
-		a.commandButton(c, "delete", "删除", "删除", hasSel, a.doDelete)
+		a.commandIconButton(c, "delete", "删除", hasSel, a.doDelete)
 
 		a.commandSep(c)
 
 		a.commandMenu(c, "sort", "排序", "排序", a.sortMenu)
 		a.commandMenu(c, "view", "查看", "查看", a.viewMenu)
 
-		a.commandSep(c)
-
-		a.commandButton(c, "preview", "预览窗格", "预览窗格 (Alt+P)", true, a.togglePreview)
+		a.moreButton(c)
 	})
-	ui.Box(c).Height(1).FillWidth().Background(colorDivider())
 }
 
 // commandSep is the 1px hairline between command groups, about 16 tall.
@@ -125,34 +192,32 @@ func (a *App) commandSep(c *ui.Context) {
 		Background(colorDivider())
 }
 
-// commandButton is an icon plus a 12px label. Disabled actions are muted
-// and do not call act. MyGo also drops clicks and paints a disabled element
-// at half opacity.
-func (a *App) commandButton(c *ui.Context, icon, label, tip string, enabled bool, act func()) {
-	btn := ui.ButtonBase(c).Height(32).Padding(4, 8).Gap(6).Radius(4).
-		Shrink(0).Label(label).Tooltip(tip).Disabled(!enabled)
+// commandIconButton is a 32×32 icon-only command, as Explorer's cut, copy,
+// paste, rename, share and delete. Disabled actions are muted and do not
+// call act; MyGo also drops clicks and paints a disabled element at half
+// opacity.
+func (a *App) commandIconButton(c *ui.Context, icon, tip string, enabled bool, act func()) {
+	btn := ui.ButtonBase(c).Size(32, 32).Radius(4).Shrink(0).
+		Label(tip).Tooltip(tip).Disabled(!enabled)
 	if enabled && (btn.Hovered() || btn.Pressed()) {
 		btn.Background(colorHover())
 	}
-	fg := colorText()
 	if !enabled {
-		fg = colorMuted()
 		btn.Opacity(0.45)
 	}
-	btn.TextColor(fg).Children(func() {
+	btn.TextColor(colorText()).Children(func() {
 		a.uiIcon(c, icon, 16)
-		ui.Text(c, label).FontSize(12).SingleLine()
 	})
 	if enabled && btn.Clicked() {
 		act()
 	}
 }
 
-// commandMenu is a command button that opens a system menu. The menu is
-// attached with Element.Menu so the button keeps the command-bar look
-// instead of MenuButton's themed face and extra chevron.
+// commandMenu is a command button that opens a system menu: an icon, a
+// label and a chevron. The menu is attached with Element.Menu so the button
+// keeps the command-bar look instead of MenuButton's themed face.
 func (a *App) commandMenu(c *ui.Context, icon, label, tip string, build func(m *ui.Menu)) {
-	btn := ui.ButtonBase(c).Height(32).Padding(4, 8).Gap(6).Radius(4).
+	btn := ui.ButtonBase(c).Height(32).Padding(4, 8).Gap(4).Radius(4).
 		Shrink(0).Label(label).Tooltip(tip)
 	if btn.Hovered() || btn.Pressed() {
 		btn.Background(colorHover())
@@ -160,8 +225,29 @@ func (a *App) commandMenu(c *ui.Context, icon, label, tip string, build func(m *
 	btn.TextColor(colorText()).Children(func() {
 		a.uiIcon(c, icon, 16)
 		ui.Text(c, label).FontSize(12).SingleLine()
+		chev := ui.Box(c).Size(8, 8).Shrink(0)
+		chev.Children(func() {
+			a.uiIcon(c, "chevron", 8)
+		})
 	})
 	btn.Menu(build)
+}
+
+// moreButton is the 查看更多 overflow at the command bar's right end.
+func (a *App) moreButton(c *ui.Context) {
+	btn := ui.ButtonBase(c).Size(32, 32).Radius(4).Shrink(0).
+		Label("查看更多").Tooltip("查看更多")
+	if btn.Hovered() || btn.Pressed() {
+		btn.Background(colorHover())
+	}
+	btn.TextColor(colorText()).Children(func() {
+		a.uiIcon(c, "more", 16)
+	})
+	btn.Menu(func(m *ui.Menu) {
+		if m.Item("预览窗格").Checked(a.previewOpen).Chosen() {
+			a.togglePreview()
+		}
+	})
 }
 
 func (a *App) sortMenu(m *ui.Menu) {

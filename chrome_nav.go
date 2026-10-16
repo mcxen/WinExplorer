@@ -4,15 +4,19 @@ import "github.com/egoist/mygo/ui"
 
 // navRow is the Windows 11 address row: back, forward, up, a rounded
 // address field (breadcrumbs or a path editor, plus refresh), and a search
-// field for the current folder. Height is 44.
+// field. Height is 44, and a 1px rule under the row separates the chrome
+// from the content, as in Explorer.
 func (a *App) navRow(c *ui.Context) {
-	ui.Row(c).Height(44).FillWidth().Padding(6, 10).Gap(6).
-		AlignItems(ui.Center).Background(colorChrome()).Children(func() {
-		a.navIconButton(c, "back", "后退", a.canBack(), a.back)
-		a.navIconButton(c, "forward", "前进", a.canForward(), a.forward)
-		a.navIconButton(c, "up", "向上", a.canUp(), a.up)
-		a.addressField(c)
-		a.searchField(c)
+	ui.Column(c).FillWidth().Shrink(0).Background(colorChrome()).Children(func() {
+		ui.Row(c).Height(44).FillWidth().Padding(6, 10).Gap(6).
+			AlignItems(ui.Center).Children(func() {
+			a.navIconButton(c, "back", "后退", a.canBack(), a.back)
+			a.navIconButton(c, "forward", "前进", a.canForward(), a.forward)
+			a.navIconButton(c, "up", "向上", a.canUp(), a.up)
+			a.addressField(c)
+			a.searchField(c)
+		})
+		ui.Box(c).Height(1).FillWidth().Background(colorDivider())
 	})
 }
 
@@ -38,7 +42,7 @@ func (a *App) navIconButton(c *ui.Context, icon, label string, enabled bool, act
 func (a *App) addressField(c *ui.Context) {
 	field := ui.Row(c).Grow(1).Height(32).MinWidth(0).Radius(4).
 		AlignItems(ui.Center).Background(colorAddress()).
-		Border(1, ui.Hex("#D6D6D6")).Clip()
+		Border(1, colorDivider()).Clip()
 	field.Children(func() {
 		if a.cur().editingPath {
 			a.pathEditor(c)
@@ -163,15 +167,15 @@ func (a *App) refreshButton(c *ui.Context) {
 func (a *App) searchField(c *ui.Context) {
 	field := ui.Row(c.Key("folder-search")).Width(220).Height(32).Shrink(0).
 		Padding(0, 8).Gap(6).Radius(4).AlignItems(ui.Center).
-		Background(colorAddress()).Border(1, ui.Hex("#D6D6D6")).
-		Label("搜索当前文件夹")
+		Background(colorAddress()).Border(1, colorDivider()).
+		Label("搜索")
 	field.Children(func() {
 		glass := ui.Box(c).Size(14, 14).Shrink(0)
 		glass.Draw(func(p *ui.Painter, r ui.Rect) {
 			a.magnifier(p, r)
 		})
 		in := ui.TextInputBase(c, &a.cur().query).Grow(1).MinWidth(0).Height(24).
-			FontSize(12).Placeholder("搜索当前文件夹")
+			FontSize(12).Placeholder("搜索")
 		if a.cur().query != "" {
 			// Escape clears, as SearchField does, and is consumed so the
 			// window's key handler does not also see it.

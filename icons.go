@@ -19,6 +19,8 @@ func (a *App) fileIcon(c *ui.Context, e Entry, px float32) {
 func (a *App) placeIcon(c *ui.Context, kind string, px float32) {
 	ui.Box(c).Size(px, px).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
 		switch kind {
+		case "home":
+			drawHome(p, r)
 		case "desktop":
 			drawDesktop(p, r)
 		case "downloads":
@@ -75,6 +77,8 @@ func (a *App) uiIcon(c *ui.Context, name string, px float32) {
 			drawView(p, r, ink)
 		case "preview":
 			drawPreview(p, r, ink)
+		case "more":
+			drawMore(p, r, ink)
 		default:
 			drawFileSheet(p, r, colorMuted(), ink)
 		}
@@ -262,6 +266,41 @@ func drawChevron(p *ui.Painter, r ui.Rect, ink ui.Color) {
 	v.LineTo(x+s*0.64, y+s*0.50)
 	v.LineTo(x+s*0.32, y+s*0.78)
 	p.StrokePath(&v, s*0.14, ink)
+}
+
+// drawChevronDown is the expanded tree node's chevron, pointing down.
+func drawChevronDown(p *ui.Painter, r ui.Rect, ink ui.Color) {
+	x, y, s := r.X, r.Y, r.W
+	var v ui.Path
+	v.MoveTo(x+s*0.22, y+s*0.32)
+	v.LineTo(x+s*0.50, y+s*0.64)
+	v.LineTo(x+s*0.78, y+s*0.32)
+	p.StrokePath(&v, s*0.14, ink)
+}
+
+// drawHome is the 主文件夹 house glyph.
+func drawHome(p *ui.Painter, r ui.Rect) {
+	x, y, s := r.X, r.Y, r.W
+	ink := ui.Hex("#0EA5E9")
+	var roof ui.Path
+	roof.MoveTo(x+s*0.10, y+s*0.52)
+	roof.LineTo(x+s*0.50, y+s*0.14)
+	roof.LineTo(x+s*0.90, y+s*0.52)
+	p.StrokePath(&roof, s*0.10, ink)
+	body := ui.Rect{X: x + s*0.22, Y: y + s*0.50, W: s * 0.56, H: s * 0.36}
+	p.Stroke(body, ink, s*0.04, s*0.10)
+	door := ui.Rect{X: x + s*0.44, Y: y + s*0.64, W: s * 0.12, H: s * 0.22}
+	p.Fill(door, ink, s*0.02)
+}
+
+// drawMore is the command bar's 查看更多: three dots in a row.
+func drawMore(p *ui.Painter, r ui.Rect, ink ui.Color) {
+	x, y, s := r.X, r.Y, r.W
+	for _, f := range []float32{0.22, 0.50, 0.78} {
+		var dot ui.Path
+		dot.Circle(x+s*f, y+s*0.5, s*0.09)
+		p.FillPath(&dot, ink)
+	}
 }
 
 func drawRefresh(p *ui.Painter, r ui.Rect, ink ui.Color) {

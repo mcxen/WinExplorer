@@ -16,6 +16,8 @@ func newTestApp(t *testing.T, dir string) *App {
 	a := &App{
 		tabs:        []*tabState{newTab(dir)},
 		activeTab:   0,
+		sortKey:     SortName,
+		sortAsc:     true,
 		homePath:    dir,
 		previewOpen: false,
 	}

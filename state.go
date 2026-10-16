@@ -102,6 +102,8 @@ type App struct {
 	quickLook bool
 	// propsOpen is the 属性 dialog modal (propsdialog.go).
 	propsOpen bool
+	// bootLogged reports the first-frame timing log has fired.
+	bootLogged bool
 	// shellExts are the registered context-menu commands (extensions.go).
 	shellExts []shellExt
 	// store is the persisted 快速访问 pins, 最近使用的文件 and 回收站

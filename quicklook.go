@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -26,16 +27,84 @@ func (a *App) openQuickLook() {
 }
 
 // quickLookModal shows the overlay while it is open. Called from view.
+// When it closes — Space, Escape, a click outside — the gif animations
+// it was playing stop.
 func (a *App) quickLookModal(c *ui.Context) {
 	if !a.quickLook {
+		if quickLookWasOpen {
+			stopGifPlay()
+			quickLookWasOpen = false
+		}
 		return
 	}
+	quickLookWasOpen = true
 	ui.Modal(c, &a.quickLook, func() {
 		a.quickLookBody(c)
 	})
 }
 
+var quickLookWasOpen bool
+
+// isGifPath reports whether the file is an animated-capable GIF.
+func isGifPath(path string) bool {
+	return strings.EqualFold(strings.TrimPrefix(filepath.Ext(path), "."), "gif")
+}
+
+// quickLookKeys handles the keys inside the open modal. Context.Shortcut
+// is inert behind a dialog, so these bindings must live within it, not
+// in the window's handleKeys: Space closes; ←/→ seek a playing audio
+// preview, Finder's Quick Look behavior, and otherwise step the
+// selection to the neighbouring file, whose preview loads in place.
+func (a *App) quickLookKeys(c *ui.Context) {
+	if c.Shortcut(0, ui.KeySpace) {
+		a.quickLook = false
+		return
+	}
+	left, right := c.Shortcut(0, ui.KeyLeft), c.Shortcut(0, ui.KeyRight)
+	if !left && !right {
+		return
+	}
+	if st := a.preview.Load(); st != nil && st.kind == previewAudio && st.media.player != nil {
+		pl := st.media.player
+		delta := -5 * time.Second
+		if right {
+			delta = 5 * time.Second
+		}
+		if pl.player != nil {
+			pl.player.Seek(pl.player.Position() + delta)
+			repaint()
+		}
+		return
+	}
+	if left {
+		a.quickLookStep(-1)
+	} else {
+		a.quickLookStep(1)
+	}
+}
+
+// quickLookStep moves the selection to the neighbouring item of the view
+// in the cursor's order — the shared keyboard cursor keynav keeps — and
+// the preview follows, as Finder's Quick Look steps through files.
+func (a *App) quickLookStep(dir int) {
+	vis := a.visibleEntries()
+	if len(vis) == 0 {
+		return
+	}
+	i := a.navCursor(vis)
+	if i < 0 {
+		i = 0
+	} else {
+		i += dir
+	}
+	if i < 0 || i >= len(vis) {
+		return // the ends hold; a move never wraps
+	}
+	a.selectOnly(vis[i].Path)
+}
+
 func (a *App) quickLookBody(c *ui.Context) {
+	a.quickLookKeys(c)
 	st := a.preview.Load()
 	e := a.singleSelected()
 	loading := st == nil || st.path != e.Path || st.kind == previewNone
@@ -59,6 +128,17 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 	maxH := max(h-200, 200)
 	switch st.kind {
 	case previewImage:
+		if isGifPath(st.path) {
+			if bm := gifFor(st.path); bm != nil {
+				// Animated: the gif player keeps one bitmap it uploads
+				// frame by frame; stills fall through to the decode.
+				box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0)
+				box.Children(func() {
+					ui.Image(c, bm).Fit(ui.Contain)
+				})
+				return
+			}
+		}
 		if st.bitmap != nil {
 			box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0)
 			box.Children(func() {

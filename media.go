@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +25,18 @@ type audioPlayer struct {
 	f      *os.File
 	dur    time.Duration
 	ticker chan struct{}
-	mu     sync.Mutex
+	// afplay mode covers the formats MyGo's decoders do not (m4a, aiff,
+	// flac…): the file plays through macOS's own afplay, with afinfo's
+	// duration for the clock. Seek is not available in that mode.
+	afplayPath string
+	afCmd      *exec.Cmd
+	afStarted  time.Time
+	mu         sync.Mutex
 }
 
-// stop halts playback, ends the repaint ticker and closes the underlying
-// file, which OpenStream still reads from while it plays.
+// stop halts playback, ends the repaint ticker, stops an afplay run and
+// closes the underlying file, which OpenStream still reads from while it
+// plays.
 func (p *audioPlayer) stop() {
 	if p == nil {
 		return
@@ -38,6 +46,7 @@ func (p *audioPlayer) stop() {
 	if p.player != nil {
 		p.player.Stop()
 	}
+	p.stopAfplayLocked()
 	if p.ticker != nil {
 		close(p.ticker)
 		p.ticker = nil
@@ -48,17 +57,98 @@ func (p *audioPlayer) stop() {
 	}
 }
 
+func (p *audioPlayer) stopAfplayLocked() {
+	if p.afCmd != nil && p.afCmd.Process != nil {
+		_ = p.afCmd.Process.Kill()
+		_ = p.afCmd.Wait()
+	}
+	p.afCmd = nil
+}
+
+// playing reports whether sound is coming out, either through MyGo's
+// player or an afplay run.
+func (p *audioPlayer) playing() bool {
+	if p == nil {
+		return false
+	}
+	if p.player != nil {
+		return p.player.Playing()
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.playingLocked()
+}
+
+// playingLocked is playing's afplay check, with the mutex held.
+func (p *audioPlayer) playingLocked() bool {
+	return p.afCmd != nil && p.afCmd.Process != nil && p.afCmd.ProcessState == nil
+}
+
+// toggle starts or stops the sound, whichever way it is played. It never
+// locks twice: startTicker takes the mutex itself.
+func (p *audioPlayer) toggle() {
+	if p == nil {
+		return
+	}
+	if p.player != nil {
+		if p.player.Playing() {
+			p.player.Pause()
+		} else {
+			p.player.Play()
+		}
+		p.startTicker()
+		return
+	}
+	p.mu.Lock()
+	if p.afCmd != nil {
+		p.stopAfplayLocked()
+		p.mu.Unlock()
+		return
+	}
+	if p.afplayPath == "" {
+		p.mu.Unlock()
+		return
+	}
+	cmd := exec.Command("afplay", p.afplayPath)
+	if err := cmd.Start(); err != nil {
+		p.mu.Unlock()
+		return
+	}
+	p.afCmd = cmd
+	p.afStarted = time.Now()
+	p.mu.Unlock()
+	p.startTicker()
+}
+
+// position is how far into the sound we are, afplay's being the elapsed
+// wall time capped at the duration.
+func (p *audioPlayer) position() time.Duration {
+	if p == nil {
+		return 0
+	}
+	if p.player != nil {
+		return p.player.Position()
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pos := time.Since(p.afStarted)
+	if p.afCmd == nil || pos > p.dur {
+		return p.dur
+	}
+	return pos
+}
+
 // startTicker repaints the window ~4×/s while the sound plays, so the
 // position text and the seek bar advance. One ticker per player.
 func (p *audioPlayer) startTicker() {
 	p.mu.Lock()
-	if p.player == nil || p.ticker != nil || !p.player.Playing() {
+	if p.ticker != nil || (p.player != nil && !p.player.Playing()) || (p.player == nil && !p.playingLocked()) {
 		p.mu.Unlock()
 		return
 	}
 	stop := make(chan struct{})
 	p.ticker = stop
-	pl := p.player
+	self := p
 	p.mu.Unlock()
 	go func() {
 		t := time.NewTicker(250 * time.Millisecond)
@@ -68,7 +158,7 @@ func (p *audioPlayer) startTicker() {
 			case <-stop:
 				return
 			case <-t.C:
-				if !pl.Playing() {
+				if !self.playing() {
 					return
 				}
 				repaint()
@@ -87,9 +177,44 @@ func loadAudio(path string) mediaInfo {
 	player, err := audio.OpenStream(f)
 	if err != nil {
 		f.Close()
+		// Formats MyGo's decoders do not cover (m4a, aiff, flac…) still
+		// preview and play through macOS's own afplay.
+		if dur, ok := afplayDuration(path); ok {
+			return mediaInfo{player: &audioPlayer{afplayPath: path, dur: dur}}
+		}
 		return mediaInfo{}
 	}
 	return mediaInfo{player: &audioPlayer{player: player, f: f, dur: player.Duration()}}
+}
+
+// afplayDuration reports whether afplay can take the file, and how long
+// afinfo says it runs.
+func afplayDuration(path string) (time.Duration, bool) {
+	if _, err := exec.LookPath("afplay"); err != nil {
+		return 0, false
+	}
+	out, err := exec.Command("afinfo", path).Output()
+	if err != nil {
+		return 0, false
+	}
+	return parseAfinfoDuration(string(out))
+}
+
+// parseAfinfoDuration reads the "estimated duration: 123.456 sec" line.
+func parseAfinfoDuration(out string) (time.Duration, bool) {
+	const key = "estimated duration:"
+	for _, line := range strings.Split(out, "\n") {
+		i := strings.Index(line, key)
+		if i < 0 {
+			continue
+		}
+		v := strings.TrimSpace(line[i+len(key):])
+		v = strings.TrimSuffix(strings.TrimSpace(v), "sec")
+		if d, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && d > 0 {
+			return time.Duration(d * float64(time.Second)), true
+		}
+	}
+	return 0, false
 }
 
 // isAudioDecodable reports whether MyGo's audio package can play ext.

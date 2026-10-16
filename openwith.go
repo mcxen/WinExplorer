@@ -24,6 +24,16 @@ type openWithRegistry struct {
 
 var openWith atomic.Pointer[openWithRegistry]
 
+// ensureOpenWithScan runs the registry scan once, when the first 打开方式
+// menu needs it — launching costs none of the plutil calls.
+var ensureOpenWithScanOnce atomic.Bool
+
+func ensureOpenWithScan() {
+	if ensureOpenWithScanOnce.CompareAndSwap(false, true) {
+		go scanOpenWithApps()
+	}
+}
+
 func openWithApps(ext string) []string {
 	if r := openWith.Load(); r != nil {
 		return r.byExt[strings.ToLower(ext)]
@@ -214,6 +224,7 @@ func openWithApp(app, path string) error {
 // openWithMenu builds the 打开方式 submenu for the selected file: the
 // declaring applications, then a way to browse for more.
 func (a *App) openWithMenu(m *ui.Menu, e Entry) {
+	ensureOpenWithScan()
 	shown := 0
 	for _, app := range openWithApps(e.Ext) {
 		if shown >= 8 {

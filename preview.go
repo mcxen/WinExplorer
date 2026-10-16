@@ -193,6 +193,10 @@ func (a *App) buildPreview(path string) *previewState {
 		st.kind = previewDoc // render as a poster with a play affordance
 		if st.media.poster != nil {
 			st.bitmap = st.media.poster
+		} else if b, e := quickLookThumb(path, 1024); e == nil {
+			// No ffmpeg on this machine: Quick Look renders a movie frame
+			// by itself, so the pane keeps its poster.
+			st.bitmap = b
 		}
 	case previewDoc:
 		if b, e := pdfPoster(path); e == nil {

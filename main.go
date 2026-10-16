@@ -10,6 +10,9 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// bootStart is when the process started, for WINEXPLORER_TIMING=1.
+var bootStart = time.Now()
+
 // apps is every open window's App, so closing a window can stop its
 // preview's audio and drop its state.
 var (
@@ -117,12 +120,9 @@ func newAppWithStore(store *persistedState) *App {
 	} else {
 		a.shellExts = exts
 	}
-	// The app and open-with registries are process-wide; scan once no
-	// matter how many windows open.
-	if openWith.Load() == nil {
-		go scanOpenWithApps()
-	}
-	startGalleryScan()
+	// The open-with and gallery registries are process-wide, and both scan
+	// lazily: the registry starts with the first 打开方式 menu, the
+	// gallery with the first visit of its page, so launching costs neither.
 	a.reload()
 	return a
 }
@@ -131,6 +131,12 @@ func newAppWithStore(store *persistedState) *App {
 // the window. Each band fills the width; the body and the file pane take
 // the remaining height.
 func (a *App) view(c *ui.Context) {
+	if !a.bootLogged {
+		a.bootLogged = true
+		if os.Getenv("WINEXPLORER_TIMING") != "" {
+			log.Printf("启动：%v 后第一帧", time.Since(bootStart))
+		}
+	}
 	a.handleKeys(c)
 	a.updateSearch()
 	ui.Column(c).Fill().Background(colorWindow()).Children(func() {
@@ -161,25 +167,10 @@ func (a *App) handleKeys(c *ui.Context) {
 	if a.cur().renaming != "" || a.cur().editingPath {
 		return
 	}
-	// 空格 is the quick preview (Finder's Quick Look); ←/→ still seek a
-	// loaded audio preview.
-	if a.quickLook {
-		if c.Shortcut(0, ui.KeySpace) || c.Shortcut(0, ui.KeyEscape) {
-			a.quickLook = false
-			return
-		}
-	}
-	if st := a.preview.Load(); st != nil && st.kind == previewAudio && st.media.player != nil {
-		pl := st.media.player
-		switch {
-		case c.Shortcut(0, ui.KeyLeft):
-			pl.player.Seek(pl.player.Position() - 5*time.Second)
-			return
-		case c.Shortcut(0, ui.KeyRight):
-			pl.player.Seek(pl.player.Position() + 5*time.Second)
-			return
-		}
-	}
+	// The quick preview's Space-close and ←/→ keys live inside the modal
+	// (quicklook.go): Context.Shortcut is inert behind a dialog, so
+	// bindings here never fire while it is open. Outside it ←/→ belong to
+	// the pane's keyboard navigation.
 	switch {
 	case c.Shortcut(0, ui.KeyBackspace):
 		a.up()

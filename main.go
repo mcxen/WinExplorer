@@ -49,6 +49,12 @@ func newApp() *App {
 		previewW:    320,
 		store:       loadState(),
 	}
+	if exts, err := loadShellExtensions(); err != nil {
+		a.statusMsg = "扩展配置无效：" + err.Error()
+	} else {
+		a.shellExts = exts
+	}
+	go scanOpenWithApps()
 	a.reload()
 	return a
 }
@@ -72,6 +78,7 @@ func (a *App) view(c *ui.Context) {
 		})
 		a.statusBar(c)
 	})
+	a.quickLookModal(c)
 }
 
 // handleKeys maps Explorer shortcuts. A focused text field consumes its
@@ -81,27 +88,23 @@ func (a *App) handleKeys(c *ui.Context) {
 	if a.cur().renaming != "" || a.cur().editingPath {
 		return
 	}
-	// Media playback shortcuts, as Explorer's preview pane: Space toggles
-	// the audio preview, arrows seek. Only when an audio preview is loaded.
-	if a.previewOpen {
-		if st := a.preview.Load(); st != nil && st.kind == previewAudio && st.media.player != nil {
-			pl := st.media.player
-			switch {
-			case c.Shortcut(0, ui.KeySpace):
-				if pl.player.Playing() {
-					pl.player.Pause()
-				} else {
-					pl.player.Play()
-				}
-				pl.startTicker()
-				return
-			case c.Shortcut(0, ui.KeyLeft):
-				pl.player.Seek(pl.player.Position() - 5*time.Second)
-				return
-			case c.Shortcut(0, ui.KeyRight):
-				pl.player.Seek(pl.player.Position() + 5*time.Second)
-				return
-			}
+	// 空格 is the quick preview (Finder's Quick Look); ←/→ still seek a
+	// loaded audio preview.
+	if a.quickLook {
+		if c.Shortcut(0, ui.KeySpace) || c.Shortcut(0, ui.KeyEscape) {
+			a.quickLook = false
+			return
+		}
+	}
+	if st := a.preview.Load(); st != nil && st.kind == previewAudio && st.media.player != nil {
+		pl := st.media.player
+		switch {
+		case c.Shortcut(0, ui.KeyLeft):
+			pl.player.Seek(pl.player.Position() - 5*time.Second)
+			return
+		case c.Shortcut(0, ui.KeyRight):
+			pl.player.Seek(pl.player.Position() + 5*time.Second)
+			return
 		}
 	}
 	switch {
@@ -119,6 +122,12 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.doDelete()
 	case c.Shortcut(0, ui.KeyF2):
 		a.doRenameStart()
+	case c.Shortcut(0, ui.KeySpace):
+		if a.quickLook {
+			a.quickLook = false
+		} else {
+			a.openQuickLook()
+		}
 	case c.Shortcut(0, ui.KeyF5):
 		a.doRefresh()
 	case c.Shortcut(ui.Cmd, ui.KeyC), c.Shortcut(ui.Ctrl, ui.KeyC):

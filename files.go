@@ -607,6 +607,11 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	if m.Item("打开").Disabled(!anySel).Chosen() {
 		a.doOpen()
 	}
+	if one && !sel[0].IsDir && !onSpecial {
+		m.Submenu("打开方式", func(n *ui.Menu) {
+			a.openWithMenu(n, sel[0])
+		})
+	}
 	if oneDir && !onSpecial {
 		if a.store.isPinned(sel[0].Path) {
 			if m.Item("从快速访问取消固定").Chosen() {
@@ -647,6 +652,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	if m.Item("在终端中打开").Disabled(!oneDir).Chosen() {
 		a.openInTerminal(sel[0].Path)
 	}
+	a.extMenuItems(m)
 	if m.Item("删除").Disabled(!anySel).Chosen() {
 		a.doDelete()
 	}

@@ -66,6 +66,10 @@ type App struct {
 	// focusSearch is set by Ctrl+E/Ctrl+F and consumed by the search
 	// field, which takes the focus on the next frame.
 	focusSearch bool
+	// quickLook is the 空格 quick preview modal (quicklook.go).
+	quickLook bool
+	// shellExts are the registered context-menu commands (extensions.go).
+	shellExts []shellExt
 	// store is the persisted 快速访问 pins, 最近使用的文件 and 回收站
 	// restore log (statestore.go).
 	store *persistedState

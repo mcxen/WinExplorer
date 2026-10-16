@@ -23,10 +23,10 @@ func pick(light, dark string) ui.Color {
 	return ui.Hex(light)
 }
 
-func colorWindow() ui.Color  { return pick("#FFFFFF", "#1C1C1C") }
-func colorChrome() ui.Color  { return pick("#F3F3F3", "#2B2B2B") }
+func colorWindow() ui.Color  { return pick("#F3F3F3", "#202020") }
+func colorChrome() ui.Color  { return pick("#F3F3F3", "#202020") }
 func colorNav() ui.Color     { return pick("#F3F3F3", "#202020") }
-func colorContent() ui.Color { return pick("#FFFFFF", "#1C1C1C") }
+func colorContent() ui.Color { return pick("#FFFFFF", "#272727") }
 
 func colorHover() ui.Color {
 	if darkMode() {
@@ -39,7 +39,11 @@ func colorSelected() ui.Color { return pick("#CCE4F7", "#004C87") }
 func colorText() ui.Color     { return pick("#1A1A1A", "#F3F3F3") }
 func colorMuted() ui.Color    { return pick("#5C5C5C", "#A0A0A0") }
 func colorAccent() ui.Color   { return pick("#0067C0", "#4CC2FF") }
-func colorDivider() ui.Color  { return pick("#E5E5E5", "#3A3A3A") }
+func colorDivider() ui.Color  { return pick("#E5E5E5", "#383838") }
 func colorFolder() ui.Color   { return pick("#F0C14D", "#E8B84A") }
-func colorStatus() ui.Color   { return pick("#F3F3F3", "#2B2B2B") }
-func colorAddress() ui.Color  { return pick("#FFFFFF", "#2C2C2C") }
+func colorStatus() ui.Color   { return pick("#F3F3F3", "#202020") }
+func colorAddress() ui.Color  { return pick("#FFFFFF", "#2D2D2D") }
+
+// colorCloseHover is the caption close button's hover, the red Windows 11
+// paints over it in both appearances.
+func colorCloseHover() ui.Color { return ui.Hex("#C42B1C") }

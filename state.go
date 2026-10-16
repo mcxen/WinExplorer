@@ -1,7 +1,10 @@
 package main
 
 import (
+	"sync/atomic"
 	"time"
+
+	"github.com/egoist/mygo"
 )
 
 // tabState holds the navigation and listing of one Explorer tab. It is the
@@ -40,10 +43,26 @@ type App struct {
 	clipPaths []string
 	clipCut   bool
 
-	navWidth float32
+	navWidth    float32
+	previewOpen bool    // Windows preview pane toggle
+	previewW    float32 // pane width, 220–460
 
 	// statusMsg is shown by the status bar until the next navigation.
 	statusMsg string
+
+	// win is the main window; the title bar's caption buttons call it.
+	win *mygo.Window
+	// homePath is the user's home directory, the 主文件夹 nav place.
+	homePath string
+	// navPCExpanded is the 此电脑 tree node's expanded state.
+	navPCExpanded bool
+
+	// preview holds the loaded preview for the selected file; replaced
+	// atomically once a background load finishes (see preview.go).
+	preview atomic.Pointer[previewState]
+	// previewGen increments per requestPreview so a slow load cannot
+	// replace a newer selection's result.
+	previewGen uint64
 }
 
 type ViewMode int

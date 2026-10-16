@@ -73,6 +73,8 @@ func (a *App) uiIcon(c *ui.Context, name string, px float32) {
 			drawSort(p, r, ink)
 		case "view":
 			drawView(p, r, ink)
+		case "preview":
+			drawPreview(p, r, ink)
 		default:
 			drawFileSheet(p, r, colorMuted(), ink)
 		}
@@ -377,4 +379,22 @@ func drawView(p *ui.Painter, r ui.Rect, ink ui.Color) {
 			}, ink, s*0.08, s*0.08)
 		}
 	}
+}
+
+// drawPreview is a document with an eye — the Windows 11 preview-pane
+// toggle glyph, drawn in the command bar.
+func drawPreview(p *ui.Painter, r ui.Rect, ink ui.Color) {
+	x, y, s := r.X, r.Y, r.W
+	sheet := ui.Rect{X: x + s*0.18, Y: y + s*0.16, W: s * 0.56, H: s * 0.68}
+	p.Fill(sheet, ui.RGB(255, 255, 255), s*0.06)
+	p.Stroke(sheet, ink, s*0.06, s*0.04)
+	cx, cy, rad := x+s*0.62, y+s*0.5, s*0.18
+	var eye ui.Path
+	eye.MoveTo(cx-rad, cy)
+	eye.QuadTo(cx, cy-rad*0.8, cx+rad, cy)
+	eye.QuadTo(cx, cy+rad*0.8, cx-rad, cy)
+	p.StrokePath(&eye, s*0.05, ink)
+	var pupil ui.Path
+	pupil.Circle(cx, cy, rad*0.42)
+	p.FillPath(&pupil, ink)
 }

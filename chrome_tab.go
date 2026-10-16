@@ -111,6 +111,10 @@ func (a *App) commandBar(c *ui.Context) {
 
 		a.commandMenu(c, "sort", "排序", "排序", a.sortMenu)
 		a.commandMenu(c, "view", "查看", "查看", a.viewMenu)
+
+		a.commandSep(c)
+
+		a.commandButton(c, "preview", "预览窗格", "预览窗格 (Alt+P)", true, a.togglePreview)
 	})
 	ui.Box(c).Height(1).FillWidth().Background(colorDivider())
 }

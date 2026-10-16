@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -11,14 +12,16 @@ import (
 func main() {
 	app := newApp()
 	mygo.App.WhenReady(func() {
-		mygo.NewWindow(mygo.WindowOptions{
+		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "文件资源管理器",
 			Width:     1100,
 			Height:    720,
 			MinWidth:  640,
 			MinHeight: 420,
+			Frameless: true,
 			Content:   ui.View(app.view),
 		})
+		app.win = win
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
@@ -31,13 +34,16 @@ func newApp() *App {
 		home = "/"
 	}
 	a := &App{
-		tabs:       []*tabState{newTab(home)},
-		activeTab:  0,
-		sortKey:    SortName,
-		sortAsc:    true,
-		mode:       ViewDetails,
-		showHidden: false,
-		navWidth:   248,
+		tabs:        []*tabState{newTab(home)},
+		activeTab:   0,
+		sortKey:     SortName,
+		sortAsc:     true,
+		mode:        ViewDetails,
+		showHidden:  false,
+		navWidth:    248,
+		homePath:    home,
+		previewOpen: false,
+		previewW:    320,
 	}
 	a.reload()
 	return a
@@ -55,6 +61,9 @@ func (a *App) view(c *ui.Context) {
 		ui.Row(c).FillWidth().Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 			a.sidebar(c)
 			a.filePane(c)
+			if a.previewOpen {
+				a.previewPane(c)
+			}
 		})
 		a.statusBar(c)
 	})
@@ -66,6 +75,29 @@ func (a *App) view(c *ui.Context) {
 func (a *App) handleKeys(c *ui.Context) {
 	if a.cur().renaming != "" || a.cur().editingPath {
 		return
+	}
+	// Media playback shortcuts, as Explorer's preview pane: Space toggles
+	// the audio preview, arrows seek. Only when an audio preview is loaded.
+	if a.previewOpen {
+		if st := a.preview.Load(); st != nil && st.kind == previewAudio && st.media.player != nil {
+			pl := st.media.player
+			switch {
+			case c.Shortcut(0, ui.KeySpace):
+				if pl.player.Playing() {
+					pl.player.Pause()
+				} else {
+					pl.player.Play()
+				}
+				pl.startTicker()
+				return
+			case c.Shortcut(0, ui.KeyLeft):
+				pl.player.Seek(pl.player.Position() - 5*time.Second)
+				return
+			case c.Shortcut(0, ui.KeyRight):
+				pl.player.Seek(pl.player.Position() + 5*time.Second)
+				return
+			}
+		}
 	}
 	switch {
 	case c.Shortcut(0, ui.KeyBackspace):
@@ -92,6 +124,8 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.doPaste()
 	case c.Shortcut(ui.Cmd, ui.KeyA), c.Shortcut(ui.Ctrl, ui.KeyA):
 		a.selectAll()
+	case c.Shortcut(ui.Alt, ui.KeyP):
+		a.togglePreview()
 	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyN):
 		a.doNewFolder()
 	case c.Shortcut(ui.Cmd, ui.KeyT), c.Shortcut(ui.Ctrl, ui.KeyT):
@@ -109,6 +143,7 @@ func (a *App) selectOnly(path string) {
 	t := a.cur()
 	t.selected = map[string]bool{path: true}
 	t.anchor = path
+	a.requestPreview()
 }
 
 func (a *App) toggleSelect(path string) {
@@ -121,10 +156,12 @@ func (a *App) toggleSelect(path string) {
 		if t.anchor == path {
 			t.anchor = ""
 		}
+		a.requestPreview()
 		return
 	}
 	t.selected[path] = true
 	t.anchor = path
+	a.requestPreview()
 }
 
 // selectRange selects every visible entry from the anchor through path,
@@ -157,6 +194,7 @@ func (a *App) selectRange(path string) {
 		next[e.Path] = true
 	}
 	t.selected = next
+	a.requestPreview()
 }
 
 func (a *App) selectAll() {
@@ -170,12 +208,28 @@ func (a *App) selectAll() {
 	if t.anchor == "" && len(vis) > 0 {
 		t.anchor = vis[0].Path
 	}
+	a.requestPreview()
 }
 
 func (a *App) clearSelection() {
 	t := a.cur()
 	t.selected = map[string]bool{}
 	t.anchor = ""
+	a.requestPreview()
+}
+
+// togglePreview flips the preview pane on or off, refreshing its contents
+// for the current selection. Closing the pane stops a playing preview,
+// as Explorer's preview pane does.
+func (a *App) togglePreview() {
+	a.previewOpen = !a.previewOpen
+	if a.previewOpen {
+		a.requestPreview()
+		return
+	}
+	if st := a.preview.Load(); st != nil && st.media.player != nil {
+		st.media.player.stop()
+	}
 }
 
 func (a *App) isSelected(path string) bool {

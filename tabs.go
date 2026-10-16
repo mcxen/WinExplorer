@@ -27,6 +27,7 @@ func (a *App) navigate(path string) {
 		t.histIdx = len(t.history) - 1
 	}
 	a.reload()
+	a.requestPreview()
 }
 
 func (a *App) canBack() bool { return a.cur().histIdx > 0 }
@@ -65,6 +66,7 @@ func (a *App) restoreHistory() {
 	t.editingPath = false
 	t.pathDraft = ""
 	a.reload()
+	a.requestPreview()
 }
 
 // up opens the parent of the active tab's folder. A volume root or "/" goes to

@@ -18,6 +18,9 @@ func (a *App) sidebar(c *ui.Context) {
 	pane.Children(func() {
 		ui.Scroll(c).Grow(1).FillWidth().Padding(8, 8, 12, 8).Gap(2).Children(func() {
 			a.navHome(c)
+			a.navItem(c, "nav-gallery", "画廊", "gallery", pathGallery, a.cur().path == pathGallery, func() {
+				a.navigate(pathGallery)
+			}, 0)
 			for _, p := range a.pinnedPlaces() {
 				a.navPlace(c, p, 0)
 			}

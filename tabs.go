@@ -75,7 +75,7 @@ func (a *App) restoreHistory() {
 // This PC; This PC itself has no parent.
 func (a *App) up() {
 	switch a.cur().path {
-	case pathThisPC, pathHome, pathTrash:
+	case pathThisPC, pathHome, pathGallery, pathTrash:
 		return
 	}
 	a.navigate(parentPath(a.cur().path))
@@ -83,7 +83,7 @@ func (a *App) up() {
 
 func (a *App) canUp() bool {
 	switch a.cur().path {
-	case pathThisPC, pathHome, pathTrash:
+	case pathThisPC, pathHome, pathGallery, pathTrash:
 		return false
 	}
 	return true
@@ -116,6 +116,10 @@ func (a *App) reload() {
 		return
 	case pathTrash:
 		t.entries = trashEntries()
+		return
+	case pathGallery:
+		t.entries = nil // the gallery renders from its own scan
+		refreshGallery()
 		return
 	}
 	dir, err := os.ReadDir(t.path)

@@ -55,6 +55,7 @@ func newApp() *App {
 		a.shellExts = exts
 	}
 	go scanOpenWithApps()
+	startGalleryScan()
 	a.reload()
 	return a
 }

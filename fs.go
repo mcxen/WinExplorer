@@ -12,6 +12,19 @@ import (
 // directories before files, each group ordered by the current sort.
 func (a *App) visibleEntries() []Entry {
 	t := a.cur()
+	// The gallery page's items come from its own scan, so selection,
+	// copy, delete and the status bar see the same photos the view shows.
+	if t.path == pathGallery {
+		st := galleryScan.Load()
+		if st == nil || !st.loaded {
+			return nil
+		}
+		out := make([]Entry, 0, len(st.photos))
+		for _, ph := range st.photos {
+			out = append(out, galleryEntry(ph))
+		}
+		return out
+	}
 	q := strings.ToLower(strings.TrimSpace(t.query))
 	// A query on a real folder shows the recursive search results, once
 	// the walk for it has landed; until then the pane keeps the plain
@@ -76,6 +89,8 @@ func (a *App) breadcrumbs() []Crumb {
 		return []Crumb{{Name: "主文件夹", Path: pathHome}}
 	case pathTrash:
 		return []Crumb{{Name: "回收站", Path: pathTrash}}
+	case pathGallery:
+		return []Crumb{{Name: "画廊", Path: pathGallery}}
 	}
 	known := knownFolderNames()
 	crumbs := []Crumb{{Name: "此电脑", Path: pathThisPC}}
@@ -230,7 +245,7 @@ func statDevice(path string) (uint64, bool) {
 // files can be created, pasted or moved into.
 func specialPath(path string) bool {
 	switch path {
-	case pathThisPC, pathHome, pathTrash:
+	case pathThisPC, pathHome, pathGallery, pathTrash:
 		return true
 	}
 	return false
@@ -244,6 +259,8 @@ func cleanNav(path string) string {
 		return pathHome
 	case pathTrash, "回收站":
 		return pathTrash
+	case pathGallery, "画廊":
+		return pathGallery
 	}
 	if path == "" {
 		return pathHome

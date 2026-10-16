@@ -44,6 +44,8 @@ func (a *App) placeIcon(c *ui.Context, kind string, px float32) {
 			drawDrive(p, r)
 		case "trash":
 			drawTrash(p, r)
+		case "gallery":
+			drawPictures(p, r)
 		case "thispc":
 			drawThisPC(p, r)
 		default:

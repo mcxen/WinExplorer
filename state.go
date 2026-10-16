@@ -127,9 +127,10 @@ type Crumb struct{ Name, Path string }
 type Place struct{ Name, Path, Kind string }
 
 const (
-	pathThisPC = "::{this-pc}"
-	pathHome   = "::{home}"
-	pathTrash  = "::{trash}"
+	pathThisPC  = "::{this-pc}"
+	pathHome    = "::{home}"
+	pathGallery = "::{gallery}"
+	pathTrash   = "::{trash}"
 )
 
 func newTab(path string) *tabState {

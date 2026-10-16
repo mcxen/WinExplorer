@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	colDateW float32 = 168
-	colTypeW float32 = 120
-	colSizeW float32 = 96
-	colLocW  float32 = 200
-	rowInset float32 = 4
+	colDateW  float32 = 168
+	colTypeW  float32 = 120
+	colSizeW  float32 = 96
+	colDriveW float32 = 260
+	colLocW   float32 = 200
+	rowInset  float32 = 4
 )
 
 // detailsRowH is 30, or 22 with 查看>紧凑视图 on, as Explorer's Compact
@@ -48,6 +49,10 @@ func (a *App) filePane(c *ui.Context) {
 		}
 		if a.cur().path == pathHome {
 			a.homeView(c)
+			return
+		}
+		if a.cur().path == pathGallery {
+			a.galleryView(c)
 			return
 		}
 		entries := a.visibleEntries()
@@ -190,7 +195,7 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 		} else {
 			a.headerCell(c, "类型", SortType, colTypeW, false)
 		}
-		a.headerCell(c, "大小", SortSize, colSizeW, false)
+		a.headerCell(c, "大小", SortSize, a.sizeColW(), false)
 	})
 
 	rows := a.groupedRows(entries)
@@ -221,7 +226,17 @@ func (a *App) detailsWidth() float32 {
 	if strings.TrimSpace(a.cur().query) != "" {
 		extra = colLocW
 	}
-	return 220 + colDateW + extra + colSizeW + rowInset*2
+	return 220 + colDateW + extra + a.sizeColW() + rowInset*2
+}
+
+// sizeColW is the 大小 column's width. The 此电脑 page's drive rows carry
+// "可用 X，共 Y", which the 96px file-size column cannot hold, so drives get
+// the wider column Explorer gives 总大小 and 可用空间.
+func (a *App) sizeColW() float32 {
+	if a.cur().path == pathThisPC {
+		return colDriveW
+	}
+	return colSizeW
 }
 
 func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool) {
@@ -271,7 +286,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 			a.detailText(c, typeLabel(e), colTypeW, false)
 		}
 		if e.VolTotal > 0 {
-			a.detailText(c, driveCapacity(e), colSizeW, false)
+			a.driveCapCell(c, e)
 		} else {
 			size := ""
 			if !e.IsDir {
@@ -293,12 +308,55 @@ func searchLocation(e Entry) string {
 	return filepath.Base(e.Dir)
 }
 
-// driveCapacity is the 此电脑 page's drive text: free of total.
+// driveCapCell is the 此电脑 page's drive usage cell: a slim capacity bar
+// then the free/total text, as Explorer's drive tiles show. The tooltip
+// carries the percentage.
+func (a *App) driveCapCell(c *ui.Context, e Entry) {
+	cell := ui.Row(c).Width(a.sizeColW()).Shrink(0).Height(a.detailsRowH()).
+		Padding(0, 8).Gap(8).AlignItems(ui.Center)
+	cell.Tooltip(driveCapacity(e) + "（" + drivePercent(e) + " 可用）")
+	cell.Children(func() {
+		bar := ui.Box(c).Width(64).Height(8).Shrink(0)
+		bar.Draw(func(p *ui.Painter, r ui.Rect) {
+			drawCapacityBar(p, r, e.VolFree, e.VolTotal)
+		})
+		ui.Text(c, driveCapacity(e)).FontSize(12).TextColor(colorText()).SingleLine()
+	})
+}
+
+// driveCapacity is the 此电脑 page's drive text: free of total, as
+// Explorer's 可用空间 / 总大小 columns read.
 func driveCapacity(e Entry) string {
 	if e.VolTotal <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("可用 %s / 共 %s", formatBytes(e.VolFree), formatBytes(e.VolTotal))
+	return fmt.Sprintf("可用 %s，共 %s", formatBytes(e.VolFree), formatBytes(e.VolTotal))
+}
+
+// drivePercent is the free share of a volume, for the usage tooltip.
+func drivePercent(e Entry) string {
+	if e.VolTotal <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%.0f%%", float64(e.VolFree)/float64(e.VolTotal)*100)
+}
+
+// drawCapacityBar paints a rounded usage bar: a muted track with an accent
+// fill sized to the used fraction, the way Explorer fills its drive bars.
+func drawCapacityBar(p *ui.Painter, r ui.Rect, free, total int64) {
+	rad := r.H / 2
+	p.Fill(r, colorDivider(), rad)
+	if total <= 0 {
+		return
+	}
+	used := float64(total-free) / float64(total)
+	if used <= 0.002 {
+		return
+	}
+	if used > 1 {
+		used = 1
+	}
+	p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * float32(used), H: r.H}, colorAccent(), rad)
 }
 
 func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
@@ -352,7 +410,7 @@ func (a *App) listRow(c *ui.Context, e Entry) {
 // label under the icon; small icons put it beside, in a shorter tile.
 func (a *App) iconView(c *ui.Context, entries []Entry) {
 	box := iconBoxSize(a.mode)
-	minW, height := iconTileSize(a.mode, box)
+	minW, height := a.iconTileSize(a.mode, box)
 	if a.grouping != groupNone && !specialPath(a.cur().path) {
 		scroll := ui.Scroll(c).Grow(1).FillWidth().Padding(8)
 		scroll.Children(func() {
@@ -413,11 +471,15 @@ func iconBoxSize(mode ViewMode) float32 {
 	}
 }
 
-func iconTileSize(mode ViewMode, box float32) (minW, height float32) {
+func (a *App) iconTileSize(mode ViewMode, box float32) (minW, height float32) {
 	if mode == ViewSmallIcons {
 		return 180, 44
 	}
-	return box + 40, box + 52
+	h := box + 52
+	if a.cur().path == pathThisPC {
+		h += 12 // room for the drive usage bar under the name
+	}
+	return box + 40, h
 }
 
 // iconTile is one grid cell. ButtonBase is a row, so a small icon sits
@@ -425,6 +487,9 @@ func iconTileSize(mode ViewMode, box float32) (minW, height float32) {
 // the name under it.
 func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 	tile := ui.ButtonBase(c.Key(e.Path)).Fill().Radius(4).Label(e.Name)
+	if e.VolTotal > 0 {
+		tile.Tooltip(driveCapacity(e) + "（" + drivePercent(e) + " 可用）")
+	}
 	if a.mode == ViewSmallIcons {
 		tile.Padding(4, 6).Gap(8).AlignItems(ui.Center).Justify(ui.Start)
 	}
@@ -446,6 +511,12 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 			}
 			ui.Text(c, a.displayName(e)).FontSize(12).TextColor(colorText()).
 				TextAlign(ui.Center).MaxLines(2).FillWidth()
+			if e.VolTotal > 0 {
+				bar := ui.Box(c).Width(box).Height(6).Shrink(0)
+				bar.Draw(func(p *ui.Painter, r ui.Rect) {
+					drawCapacityBar(p, r, e.VolFree, e.VolTotal)
+				})
+			}
 		})
 	})
 	a.bindItemInput(c, tile, e)

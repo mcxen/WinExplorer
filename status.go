@@ -26,6 +26,12 @@ func (a *App) statusBar(c *ui.Context) {
 func (a *App) statusLeft() string {
 	visible := a.visibleEntries()
 	selected := a.selectedEntries()
+	if a.cur().path == pathGallery {
+		if st := galleryScan.Load(); st != nil && st.loaded {
+			return fmt.Sprintf("%d 张图片  画廊（按月分组）", len(st.photos))
+		}
+		return "正在扫描图片…"
+	}
 	text := fmt.Sprintf("%d 个项目", len(visible))
 	if a.cur().search.busy {
 		text = "正在搜索…  " + text

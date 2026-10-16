@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -11,14 +12,14 @@ import (
 // written under the old directory is still loaded, and the first save lands in
 // the new one.
 func TestStateDirMigration(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	cfg, err := os.UserConfigDir()
 	if err != nil {
 		t.Skip("no user config dir on this platform")
 	}
-	t.Setenv("HOME", t.TempDir())
-	cfg, err = os.UserConfigDir()
-	if err != nil {
-		t.Fatal(err)
+	if !strings.HasPrefix(cfg, home) {
+		t.Skip("HOME does not redirect the user config dir on this platform")
 	}
 
 	legacy := filepath.Join(cfg, legacyStateDirName)

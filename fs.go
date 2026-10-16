@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 // visibleEntries filters hidden names and the search query, then lists
@@ -227,18 +226,6 @@ func sameDevice(path string, id uint64) (same, ok bool) {
 		return false, false
 	}
 	return got == id, true
-}
-
-func statDevice(path string) (uint64, bool) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0, false
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || st == nil {
-		return 0, false
-	}
-	return uint64(st.Dev), true
 }
 
 // specialPath reports whether the path is a page, not a real folder that

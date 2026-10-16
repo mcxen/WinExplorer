@@ -16,3 +16,8 @@ coverage.txt
 
 # Local temp builds
 /tmp/
+
+# Packaged apps (mygo build)
+dist/
+/.mygo/
+mygo_windows_*.syso

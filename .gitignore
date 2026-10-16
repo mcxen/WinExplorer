@@ -1,0 +1,16 @@
+# Binaries
+winexplorer
+winexplorer.exe
+
+# Test and coverage output
+*.test
+*.out
+coverage.txt
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+
+# Local temp builds
+/tmp/

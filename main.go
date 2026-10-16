@@ -3,32 +3,88 @@ package main
 import (
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
+// apps is every open window's App, so closing a window can stop its
+// preview's audio and drop its state.
+var (
+	appsMu sync.Mutex
+	apps   []*App
+)
+
+func registerApp(a *App) {
+	appsMu.Lock()
+	defer appsMu.Unlock()
+	apps = append(apps, a)
+}
+
+// unregisterApp retires a closed window's app: audio stops, tickers end,
+// and the tab state becomes garbage.
+func unregisterApp(a *App) {
+	appsMu.Lock()
+	for i, x := range apps {
+		if x == a {
+			apps = append(apps[:i], apps[i+1:]...)
+			break
+		}
+	}
+	appsMu.Unlock()
+	if st := a.preview.Load(); st != nil && st.media.player != nil {
+		st.media.player.stop()
+	}
+	a.quickLook = false
+}
+
 func main() {
 	app := newApp()
+	registerApp(app)
 	mygo.App.WhenReady(func() {
-		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "晴谷",
-			Width:     1100,
-			Height:    720,
-			MinWidth:  640,
-			MinHeight: 420,
-			Frameless: true,
-			Content:   ui.View(app.view),
-		})
-		app.win = win
+		win := newAppWindow(app)
+		win.OnClosed(func() { unregisterApp(app) })
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func newApp() *App {
+// newAppWindow opens the window an App drives. Ctrl+N opens another one
+// over its own App, so each window has its own tabs, undo and clipboard.
+func newAppWindow(app *App) *mygo.Window {
+	win := mygo.NewWindow(mygo.WindowOptions{
+		Title:     "晴谷",
+		Width:     1100,
+		Height:    720,
+		MinWidth:  640,
+		MinHeight: 420,
+		Frameless: true,
+		Content:   ui.View(app.view),
+	})
+	app.win = win
+	return win
+}
+
+// openNewWindow is Ctrl+N: a new window on the same place, as Explorer's.
+func (a *App) openNewWindow(path string) {
+	app := newAppWithStore(a.store)
+	if !specialPath(path) {
+		app.navigate(path)
+	}
+	registerApp(app)
+	win := newAppWindow(app)
+	win.OnClosed(func() { unregisterApp(app) })
+}
+
+func newApp() *App { return newAppWithStore(loadState()) }
+
+// newAppWithStore builds one window's worth of app state over the shared
+// persisted store: pins, recents and the trash log stay one collection
+// across every open window.
+func newAppWithStore(store *persistedState) *App {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		home = "/"
@@ -47,14 +103,18 @@ func newApp() *App {
 		homePath:    home,
 		previewOpen: false,
 		previewW:    320,
-		store:       loadState(),
+		store:       store,
 	}
 	if exts, err := loadShellExtensions(); err != nil {
 		a.statusMsg = "扩展配置无效：" + err.Error()
 	} else {
 		a.shellExts = exts
 	}
-	go scanOpenWithApps()
+	// The app and open-with registries are process-wide; scan once no
+	// matter how many windows open.
+	if openWith.Load() == nil {
+		go scanOpenWithApps()
+	}
 	startGalleryScan()
 	a.reload()
 	return a

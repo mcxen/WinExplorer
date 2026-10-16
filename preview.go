@@ -129,8 +129,8 @@ func repaint() {
 		return
 	}
 	mygo.RunOnMain(func() {
-		if win := mygo.Windows(); len(win) > 0 {
-			win[0].Invalidate()
+		for _, win := range mygo.Windows() {
+			win.Invalidate()
 		}
 	})
 }

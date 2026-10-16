@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 // tabState holds the navigation and listing of one Explorer tab. It is the
@@ -18,7 +19,11 @@ type tabState struct {
 	history  []string
 	histIdx  int
 	selected map[string]bool
-	anchor   string
+	// anchor is where Shift ranges start, as Explorer's; cursor is the item
+	// the keyboard moves from, which a click, Shift+click or an arrow key
+	// moves as well.
+	anchor string
+	cursor string
 
 	query string
 
@@ -26,6 +31,19 @@ type tabState struct {
 	renameBuf   string
 	editingPath bool
 	pathDraft   string
+
+	// The pane's views keep their own states so the keyboard can raise the
+	// row it moved to into view: a List for each row-based view, a Grid for
+	// the icon views. gridCols and gridRows are the icon grid's shape, as
+	// measured in the frame before, which sizes the arrows' row steps.
+	details  ui.ListState
+	list     ui.ListState
+	grid     ui.GridState
+	gridCols int
+	gridRows int
+	// reveal is the path the keyboard moved to: the view showing it scrolls
+	// it into view in that frame (handleKeys clears it each frame).
+	reveal string
 
 	// search is this tab's query walk state (search.go).
 	search searchState
@@ -41,6 +59,7 @@ type App struct {
 	sortKey        SortKey
 	sortAsc        bool
 	mode           ViewMode
+	iconZoom       float32 // 查看>放大/缩小: icon views' size, 1 being the mode's own
 	showHidden     bool
 	showExt        bool    // 查看>显示>文件扩展名 off hides known extensions
 	compact        bool    // 查看>紧凑视图: tighter rows
@@ -73,6 +92,12 @@ type App struct {
 	// focusSearch is set by Ctrl+E/Ctrl+F and consumed by the search
 	// field, which takes the focus on the next frame.
 	focusSearch bool
+	// fieldFocused is whether the search field held the keyboard focus in
+	// the frame before: a text field keeps the arrows to itself, as ↑/↓
+	// and the Page keys are not its own and would otherwise move the pane's
+	// selection under what the user is typing. The rename and path fields
+	// stop handleKeys outright.
+	fieldFocused bool
 	// quickLook is the 空格 quick preview modal (quicklook.go).
 	quickLook bool
 	// propsOpen is the 属性 dialog modal (propsdialog.go).

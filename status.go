@@ -88,14 +88,23 @@ func (a *App) viewModeLabel() string {
 	case ViewList:
 		return "列表"
 	case ViewSmallIcons:
-		return "小图标"
+		return a.iconLabel("小图标")
 	case ViewMediumIcons:
-		return "中等图标"
+		return a.iconLabel("中等图标")
 	case ViewLargeIcons:
-		return "大图标"
+		return a.iconLabel("大图标")
 	case ViewExtraLarge:
-		return "超大图标"
+		return a.iconLabel("超大图标")
 	default:
 		return "详细信息"
 	}
+}
+
+// iconLabel names an icon view, with the tile size once 放大/缩小 has
+// moved it off the mode's own.
+func (a *App) iconLabel(name string) string {
+	if a.iconZoom <= 1 {
+		return name
+	}
+	return fmt.Sprintf("%s（%d 像素）", name, int(a.iconBoxSize(a.mode)+0.5))
 }

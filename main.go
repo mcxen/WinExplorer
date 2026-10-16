@@ -46,7 +46,13 @@ func main() {
 	mygo.App.WhenReady(func() {
 		win := newAppWindow(app)
 		win.OnClosed(func() { unregisterApp(app) })
+		if app.remoteConf().Enabled {
+			go app.remoteStart()
+		}
 	})
+	// remoteStop waits for the requests in flight, so it runs once the
+	// windows are gone and the event loop is about to stop, not per window.
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { app.remoteStop() })
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -96,6 +102,7 @@ func newAppWithStore(store *persistedState) *App {
 		sortKey:     SortName,
 		sortAsc:     true,
 		mode:        ViewDetails,
+		iconZoom:    1,
 		showHidden:  false,
 		showExt:     true,
 		grouping:    groupNone,
@@ -147,6 +154,10 @@ func (a *App) view(c *ui.Context) {
 // own editing keys before Context.Shortcut sees them, so Escape and Enter
 // stay with the rename field and the path editor.
 func (a *App) handleKeys(c *ui.Context) {
+	// The row a keyboard move went to scrolls into view in the frame that
+	// moved it: clear the request first, so a wheel scroll right after a
+	// move keeps the user's place.
+	a.cur().reveal = ""
 	if a.cur().renaming != "" || a.cur().editingPath {
 		return
 	}
@@ -219,6 +230,10 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.doPaste()
 	case c.Shortcut(ui.Cmd, ui.KeyA), c.Shortcut(ui.Ctrl, ui.KeyA):
 		a.selectAll()
+	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyEqual), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyEqual):
+		a.zoomIn()
+	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyMinus), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyMinus):
+		a.zoomOut()
 	case c.Shortcut(ui.Alt, ui.KeyP):
 		a.togglePreview()
 	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyN):
@@ -266,12 +281,55 @@ func (a *App) handleKeys(c *ui.Context) {
 	if c.Shortcut(ui.Ctrl, ui.Key9) || c.Shortcut(ui.Cmd, ui.Key9) {
 		a.switchTo(len(a.tabs) - 1)
 	}
+	// The pane's keyboard navigation: the arrows step the selection, Home
+	// and End go to its ends, Page Up and Page Down by a screenful, and
+	// Shift extends from the anchor as Shift+click does. A modal owns the
+	// keys while it is up, and the search field keeps them while it has
+	// the focus.
+	if a.quickLook || a.propsOpen || a.fieldFocused {
+		return
+	}
+	switch {
+	case c.Shortcut(0, ui.KeyUp):
+		a.moveSelection(-1, 0, false)
+	case c.Shortcut(0, ui.KeyDown):
+		a.moveSelection(1, 0, false)
+	case c.Shortcut(0, ui.KeyLeft):
+		a.moveSelection(0, -1, false)
+	case c.Shortcut(0, ui.KeyRight):
+		a.moveSelection(0, 1, false)
+	case c.Shortcut(0, ui.KeyHome):
+		a.moveSelectionEnd(false, false)
+	case c.Shortcut(0, ui.KeyEnd):
+		a.moveSelectionEnd(true, false)
+	case c.Shortcut(0, ui.KeyPageUp):
+		a.moveSelectionPage(-1, false)
+	case c.Shortcut(0, ui.KeyPageDown):
+		a.moveSelectionPage(1, false)
+	case c.Shortcut(ui.Shift, ui.KeyUp):
+		a.moveSelection(-1, 0, true)
+	case c.Shortcut(ui.Shift, ui.KeyDown):
+		a.moveSelection(1, 0, true)
+	case c.Shortcut(ui.Shift, ui.KeyLeft):
+		a.moveSelection(0, -1, true)
+	case c.Shortcut(ui.Shift, ui.KeyRight):
+		a.moveSelection(0, 1, true)
+	case c.Shortcut(ui.Shift, ui.KeyHome):
+		a.moveSelectionEnd(false, true)
+	case c.Shortcut(ui.Shift, ui.KeyEnd):
+		a.moveSelectionEnd(true, true)
+	case c.Shortcut(ui.Shift, ui.KeyPageUp):
+		a.moveSelectionPage(-1, true)
+	case c.Shortcut(ui.Shift, ui.KeyPageDown):
+		a.moveSelectionPage(1, true)
+	}
 }
 
 func (a *App) selectOnly(path string) {
 	t := a.cur()
 	t.selected = map[string]bool{path: true}
 	t.anchor = path
+	t.cursor = path
 	a.requestPreview()
 }
 
@@ -290,6 +348,7 @@ func (a *App) toggleSelect(path string) {
 	}
 	t.selected[path] = true
 	t.anchor = path
+	t.cursor = path
 	a.requestPreview()
 }
 
@@ -323,6 +382,7 @@ func (a *App) selectRange(path string) {
 		next[e.Path] = true
 	}
 	t.selected = next
+	t.cursor = path
 	a.requestPreview()
 }
 
@@ -344,6 +404,7 @@ func (a *App) clearSelection() {
 	t := a.cur()
 	t.selected = map[string]bool{}
 	t.anchor = ""
+	t.cursor = ""
 	a.requestPreview()
 }
 

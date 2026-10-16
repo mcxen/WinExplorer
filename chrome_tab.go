@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -247,6 +248,14 @@ func (a *App) moreButton(c *ui.Context) {
 		if m.Item("预览窗格").Checked(a.previewOpen).Chosen() {
 			a.togglePreview()
 		}
+		m.Separator()
+		if m.Item("远程访问").Checked(a.remoteConf().Enabled).Chosen() {
+			a.remoteToggle()
+		}
+		if m.Item("复制远程地址").Chosen() {
+			mygo.Clipboard.WriteText(a.remoteLANURL() + "\n账号 " + a.remoteConf().Username + "\n密码 " + a.remotePlainPassword())
+			a.statusMsg = "已复制远程地址"
+		}
 	})
 }
 
@@ -297,6 +306,13 @@ func (a *App) viewMenu(m *ui.Menu) {
 	}
 	if m.Item("紧凑视图").Checked(a.compact).Chosen() {
 		a.compact = !a.compact
+	}
+	m.Separator()
+	if m.Item("放大图标").Disabled(!a.canZoomIn()).Chosen() {
+		a.zoomIn()
+	}
+	if m.Item("缩小图标").Disabled(!a.canZoomOut()).Chosen() {
+		a.zoomOut()
 	}
 	m.Submenu("显示", func(n *ui.Menu) {
 		if n.Item("文件扩展名").Checked(a.showExt).Chosen() {

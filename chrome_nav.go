@@ -169,6 +169,7 @@ func (a *App) searchField(c *ui.Context) {
 		components.Icon(c, lucide.Search).Size(14, 14).TextColor(colorMuted())
 		in := ui.TextInputBase(c, &a.cur().query).Grow(1).MinWidth(0).Height(24).
 			FontSize(12).Placeholder("搜索")
+		a.fieldFocused = in.FocusWithin()
 		if a.focusSearch {
 			in.Focus()
 			a.focusSearch = false

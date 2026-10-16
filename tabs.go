@@ -167,6 +167,54 @@ func (a *App) toggleSort(key SortKey) {
 
 func (a *App) setMode(mode ViewMode) { a.mode = mode }
 
+// iconZoomSteps are the 放大/缩小 stops. 1 is the mode's own size and 4 the
+// largest, so 超大图标 reaches 384 px — big enough to read a photo by.
+var iconZoomSteps = []float32{1, 1.25, 1.5, 2, 2.5, 3, 4}
+
+// zoomStep is the stop the current factor sits on.
+func (a *App) zoomStep() int {
+	for i, z := range iconZoomSteps {
+		if z >= a.iconZoom {
+			return i
+		}
+	}
+	return len(iconZoomSteps) - 1
+}
+
+func (a *App) canZoomIn() bool {
+	return !isIconMode(a.mode) || a.zoomStep() < len(iconZoomSteps)-1
+}
+
+func (a *App) canZoomOut() bool {
+	return !isIconMode(a.mode) || a.zoomStep() > 0
+}
+
+// zoomIn enlarges the icon tiles one stop. From 详细信息 or 列表 it opens
+// the icon view instead, where there is something to enlarge.
+func (a *App) zoomIn() {
+	if !isIconMode(a.mode) {
+		a.mode = ViewMediumIcons
+		a.iconZoom = 1
+		return
+	}
+	if i := a.zoomStep(); i+1 < len(iconZoomSteps) {
+		a.iconZoom = iconZoomSteps[i+1]
+	}
+}
+
+// zoomOut shrinks the icon tiles one stop, or opens the small icon view
+// from 详细信息 or 列表.
+func (a *App) zoomOut() {
+	if !isIconMode(a.mode) {
+		a.mode = ViewSmallIcons
+		a.iconZoom = 1
+		return
+	}
+	if i := a.zoomStep(); i > 0 {
+		a.iconZoom = iconZoomSteps[i-1]
+	}
+}
+
 func (a *App) toggleHidden() { a.showHidden = !a.showHidden }
 
 // openTab opens path in a new tab and makes it active, mirroring Windows 11

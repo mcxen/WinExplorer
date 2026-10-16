@@ -26,6 +26,8 @@ const (
 	galleryMaxPhotos = 2000 // scan bound
 	galleryCap       = 400  // thumbnails kept in memory
 	galleryWorkers   = 4    // concurrent decodes
+	galleryCellSide  = 120  // a month grid's cell, the tile's 112 px inside
+	galleryScrollPad = 20   // the page scroll's padding, above and below
 )
 
 // galleryPhoto is one picture the gallery shows.
@@ -204,6 +206,16 @@ func decodeThumb(path string, side int) (*ui.Bitmap, error) {
 // decodeScaled decodes with the stdlib (the ui package registers
 // png/jpeg/gif/webp/bmp) and shrinks with Catmull-Rom.
 func decodeScaled(path string, side int) (*ui.Bitmap, error) {
+	img, err := decodeImageScaled(path, side)
+	if err != nil {
+		return nil, err
+	}
+	return ui.NewBitmap(img), nil
+}
+
+// decodeImageScaled is decodeScaled as the decoded picture, for callers
+// that compose several into one cover.
+func decodeImageScaled(path string, side int) (image.Image, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -213,15 +225,22 @@ func decodeScaled(path string, side int) (*ui.Bitmap, error) {
 	if err != nil {
 		return nil, err
 	}
+	return scaleToFit(img, side), nil
+}
+
+// scaleToFit shrinks img to fit side px on its longest edge, or returns it
+// unchanged when it is no bigger.
+func scaleToFit(img image.Image, side int) image.Image {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if scale := float64(side) / float64(max(w, h)); scale < 1 {
-		tw, th := max(1, int(float64(w)*scale)), max(1, int(float64(h)*scale))
-		dst := image.NewRGBA(image.Rect(0, 0, tw, th))
-		xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, b, xdraw.Over, nil)
-		img = dst
+	scale := float64(side) / float64(max(w, h))
+	if scale >= 1 {
+		return img
 	}
-	return ui.NewBitmap(img), nil
+	tw, th := max(1, int(float64(w)*scale)), max(1, int(float64(h)*scale))
+	dst := image.NewRGBA(image.Rect(0, 0, tw, th))
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, b, xdraw.Over, nil)
+	return dst
 }
 
 // galleryView renders the 画廊 page: month-sectioned grids of
@@ -247,13 +266,23 @@ func (a *App) galleryView(c *ui.Context) {
 				end++
 			}
 			a.homeSection(c, fmt.Sprintf("%s（%d 张）", key, end-i))
-			grid := ui.GridView(c, nil, end-i, 120, 120, func(j int) {
+			grid := ui.GridView(c, nil, end-i, galleryCellSide, galleryCellSide, func(j int) {
 				if j >= 0 && j < end-i {
 					a.galleryTile(c, photos[i+j])
 				}
 			}).FillWidth().Shrink(0)
 			grid.Children(func() {})
+			// The month grids share the pane's width, so the arrows step by
+			// their columns, whatever 查看 mode the page was left in.
+			if b := grid.Bounds(); b.W > 0 {
+				a.cur().gridCols = gridCols(c, b.W, galleryCellSide, 0)
+			}
 			i = end
+		}
+		// The page's scroll says how many rows of tiles it shows, which
+		// Page Up and Page Down move by.
+		if b := scroll.Bounds(); b.H > 0 {
+			a.cur().gridRows = max(int((b.H-galleryScrollPad)/galleryCellSide), 1)
 		}
 	})
 	a.bindPaneMenu(c, scroll)
@@ -291,6 +320,11 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 	tile.ContextMenu(func(m *ui.Menu) {
 		a.itemMenu(m, galleryEntry(p))
 	})
+	// The month grids are rows inside one plain Scroll, so every tile is
+	// built: the one the keyboard moved to raises itself into view.
+	if a.cur().reveal == p.path {
+		tile.ScrollIntoView()
+	}
 }
 
 // galleryEntry is the file pane's Entry for a picture, so every

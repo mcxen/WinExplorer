@@ -12,15 +12,17 @@ import (
 // persistedState is everything Sunvale keeps between runs, at
 // os.UserConfigDir()/sunvale/state.json: the folders pinned to 快速访问
 // (Explorer keeps them in the registry), the recently opened files the Home
-// page lists (Explorer's 最近使用的文件), and the delete log that lets the
+// page lists (Explorer's 最近使用的文件), the delete log that lets the
 // 回收站 page restore files to where they came from (Explorer keeps this in
-// the recycle bin metadata).
+// the recycle bin metadata), and the remote access account (remote.go).
 type persistedState struct {
 	mu sync.Mutex `json:"-"`
 
 	Pinned   []string      `json:"pinned"`
 	Recent   []string      `json:"recent"`
 	TrashLog []trashRecord `json:"trash"`
+	Remote   *remoteConfig `json:"remote"`
+	Shares   []remoteShare `json:"shares"`
 }
 
 // trashRecord maps a file in ~/.Trash back to the path it was deleted from.
@@ -203,6 +205,29 @@ func (st *persistedState) clearTrash() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.TrashLog = nil
+	st.saveLocked()
+}
+
+// setRemote persists the remote access configuration (remote.go).
+func (st *persistedState) setRemote(rc *remoteConfig) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.Remote = rc
+	st.saveLocked()
+}
+
+// shareAll returns a copy of the saved shares, newest first (remote_share.go).
+func (st *persistedState) shareAll() []remoteShare {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]remoteShare(nil), st.Shares...)
+}
+
+// shareSaveAll replaces the saved shares.
+func (st *persistedState) shareSaveAll(list []remoteShare) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.Shares = append([]remoteShare(nil), list...)
 	st.saveLocked()
 }
 

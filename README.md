@@ -46,10 +46,13 @@ go build -o sunvale .
 双击进入文件夹、`Enter` 打开、面包屑任意层级跳转、地址栏直输路径（`此电脑` 可回到此电脑页）、前进/后退/向上、刷新（`F5`）；卷根或 `/` 向上回到“此电脑”。
 
 **选择**
-单击、`Cmd/Ctrl+单击` 多选、`Shift+单击` 范围选、`Cmd/Ctrl+A` 全选；选择按标签独立，剪贴板为应用级（跨标签复制/粘贴可用）。
+单击、`Cmd/Ctrl+单击` 多选、`Shift+单击` 范围选、`Cmd/Ctrl+A` 全选；`↑`/`↓` 按行移动选择（图标视图与画廊里 `←`/`→` 横向移动），`Home`/`End` 到首尾，`PageUp`/`PageDown` 按一屏，`Shift+` 与方向键组合从锚点扩展——移到的行会自动滚入可视区，到列表两端即停。选择按标签独立，剪贴板为应用级（跨标签复制/粘贴可用）。
 
 **视图与排序**
-详细信息、列表、小/中/大/超大图标六种视图；按名称/修改日期/类型/大小排序，升序降序；点击列头切换排序。`查看` 菜单还提供**紧凑视图**（行距 30→22）、**显示 > 文件扩展名**（关闭时隐藏已知扩展名，同资源管理器默认）、**显示 > 隐藏的项目**。
+详细信息、列表、小/中/大/超大图标六种视图；按名称/修改日期/类型/大小排序，升序降序；点击列头切换排序。`查看` 菜单还提供**紧凑视图**（行距 30→22）、**放大图标 / 缩小图标**（七档、最大 4×，故超大图标可达 384 像素；`Cmd/Ctrl+Shift+=` / `-`，在详细信息或列表中按一次即切到图标视图）、**显示 > 文件扩展名**（关闭时隐藏已知扩展名，同资源管理器默认）、**显示 > 隐藏的项目**。
+
+**媒体缩略图与文件夹封面**
+中等图标及以上的图标视图不再只画文件类型图标：图片与视频直接显示自身画面——图片走内置解码器，HEIC/TIFF/AVIF 交给 Quick Look，视频用 `ffmpeg` 抽帧并叠加播放角标；**含图片或视频的文件夹显示由其中最多 4 个媒体拼成的封面**（1 张铺满、2 张左右分栏、3 张左一右二、4 张 2×2，与资源管理器一致）。解码在后台以 4 路并发进行、按 LRU 缓存（64 MB 预算），放大跨过一档时按更大尺寸重解，`F5` 刷新清空缓存重新读取。详情/列表视图的 16 像素图标仍用自绘图标，既省解码也更清楚。
 
 **分组依据**
 `查看 > 分组依据`（无/名称/修改日期/类型/大小），四种视图都插入组头（组名 + 数量）：名称按首字母、日期按 今天/昨天/本周/上周/更早、大小按 空/小于 100 KB/小于 1 MB/中/大/巨大、类型按文件类型。
@@ -99,6 +102,34 @@ go build -o sunvale .
 **此电脑**
 以 `/`（命名为 Macintosh HD）加各 `/Volumes` 挂载点列出卷（含外接磁盘），按设备号去重；每个卷显示**容量使用条**（蓝色为已用比例）与「可用 X，共 Y」，详细信息视图有专门的宽列，图标视图在名称下方画条，悬停出百分比提示（`statfs`）。
 
+## 远程访问（OpenList 兼容）
+
+把主文件夹（虚拟根 `/` 即本机 home 目录）通过局域网 HTTP 暴露给手机或其他设备，协议兼容 [OpenList](https://github.com/OpenListTeam/OpenList)（AList v3 API）的读、写与分享接口集。
+
+**开启与账号**
+
+- 命令栏 `查看更多（…）> 远程访问` 开关服务；开启后状态栏显示局域网地址（默认端口 5244，被占用时自动顺延 5245–5254）。
+- `查看更多 > 复制远程地址` 一次复制 地址 / 账号 / 密码。账号默认 `admin`；密码首次使用时随机生成，仅在本轮运行内可知——重启后点「复制远程地址」会重置一个新密码（旧密码随之失效）。
+- 账号与端口持久化在 `sunvale/state.json` 的 `remote` 字段；应用退出时自动停服务，已签发的登录令牌全部失效。
+
+**`/@manage` 管理界面**：浏览器打开 `http://局域网IP:5244/@manage` 即是内置管理控制台（单文件内嵌，无外部资源）——仪表盘（运行状态与开关、存储容量、分享概览、OpenList 客户端接入信息）、文件（浏览、新建、上传、重命名、移动、复制、删除、多选批量、预览与下载）、分享（创建、复制链接、启停、删除）、设置（改用户名/密码、重置 API Token、改端口、远程访问开关）。
+
+**写操作与上传**：`/api/fs/mkdir`、`rename`、`move`、`copy`、`remove`、`dirs`（只列一层子文件夹）、`put`（`PUT` 上传：`File-Path` 头携带 URL 转义的目标路径，`Overwrite: false` 时冲突拒绝，`Last-Modified` 毫秒时间戳随行，落地走临时文件+原子改名）。删除与桌面端同语义：**移入 `~/.Trash` 并记录来源路径**，回收站页可还原；move/copy 整批预检——冲突既不跳过也不覆盖时整批拒绝且源不动，目录复制可 `merge` 合并，移入自身子树自动跳过。
+
+**分享系统**：管理端 `/api/share/{create,list,get,update,delete,enable,disable}`（8 位随机 id、自定义 id 支持中文、密码/过期时间/访问次数上限/备注），访客链接形如 `http://IP:5244/@s/<id>`，**免登录**浏览（挂在 `fs/list`、`fs/get` 的 `@s` 分支）与下载（`/sd/<id>/<路径>?pwd=` 直链，支持 Range/HEAD）；同一 IP 半小时内多次访问只计一次，分享内的对象 `sign` 恒为空、`write` 恒为关；过期/停用/超次后访客得到协议的失效应答。分享持久化在 `sunvale/state.json`。主页面直接打开分享链接：带密码时弹框输入重试，单文件分享直接进预览。
+
+**`/api/sunvale/*` 管理端点**：`status`（开关/端口/地址/容量/分享数）、`account`（改用户名/密码；改密后所有已签发登录立即失效）、`reset-token`（换发主令牌——它同时是登录签发与下载签名的密钥，旧令牌与旧签名直链全部失效）、`port`（范围校验、占用时整段顺延、失败回滚旧端口）、`enabled`（幂等开关）。供 `/@manage` 使用，OpenList 客户端不感知。
+
+**内置网页端**：浏览器直接打开地址即可——登录、目录浏览（目录在前）、面包屑导航、当前目录递归搜索、图片/视频/音频/PDF/文本预览、下载、分享链接的访客模式（密码重试、免登录），右上角「管理」直达 `/@manage`。
+
+**OpenList 客户端接入**：站点地址填 `http://局域网IP:5244`，账号 `admin` + 复制到的密码；列目录、取文件、写操作、上传、签名直链下载（含 Range 断点续传）均可用。
+
+**协议范围**
+
+- 已实现：`/api/public/settings`、`/api/public/archive_extensions`、`/api/auth/login`（明文）与 `/api/auth/login/hash`（StaticHash）、`/api/me`、`/api/auth/logout`、`/api/fs/list`、`/api/fs/get`、`/api/fs/search`、`/api/fs/mkdir`、`/api/fs/rename`、`/api/fs/move`、`/api/fs/copy`、`/api/fs/remove`、`/api/fs/dirs`、`/api/fs/put`、`/api/share/{create,list,get,update,delete,enable,disable}`、`/d/`（下载）、`/p/`（流式代理，支持 Range/HEAD）、`/sd/`（分享直链下载）、`/@s/<id>`（分享访客浏览）、`/@manage`（管理界面）、`/api/sunvale/{status,account,reset-token,port,enabled}`、`/`（内置网页）与 `/ping`。
+- 未实现：`/api/admin/*` 与异步任务队列（写操作与上传同步完成，即答即毕）——OpenList 客户端中的站点管理类按钮不可用属预期。
+- 所有 `/api/*` 响应恒为 HTTP 200，错误以 body `{"code":...}` 表达；`Authorization` 头携带裸令牌（无 `Bearer` 前缀）；下载签名 `sign = base64url(HMAC-SHA256(令牌, 路径 + ":0")) + ":0"`。
+
 ## 快捷键
 
 对齐微软官方 File Explorer 快捷键表（`ui.Cmd` 为平台命令键）：
@@ -107,7 +138,11 @@ go build -o sunvale .
 | --- | --- |
 | `Enter` | 打开 |
 | `空格` | 快速预览选中文件（音频预览打开时为播放/暂停） |
-| `←` / `→` | 音频预览时快退 / 快进 5 秒 |
+| `↑` / `↓` | 移动选择：列表与详细信息按行，图标视图与画廊按整行 |
+| `←` / `→` | 图标视图与画廊中横向移动选择（音频预览打开时为快退 / 快进 5 秒） |
+| `Home` / `End` | 选择第一个 / 最后一个项目 |
+| `PageUp` / `PageDown` | 按一屏移动选择 |
+| `Shift+方向键`、`Shift+Home`·`End`、`Shift+PageUp`·`PageDown` | 从锚点扩展选择 |
 | `Backspace` / `Alt+↑` | 向上 |
 | `Alt+←` / `Cmd+[` | 后退 |
 | `Alt+→` / `Cmd+]` | 前进 |
@@ -129,6 +164,7 @@ go build -o sunvale .
 | `Cmd+]` / `Ctrl+Tab`，`Cmd+[` / `Ctrl+Shift+Tab` | 下一个 / 上一个标签页 |
 | `Cmd/Ctrl+1..8`，`Cmd/Ctrl+9` | 第 N 个 / 最后一个标签页 |
 | `Cmd/Ctrl+Shift+1..6` | 视图：超大图标 / 大图标 / 中等图标 / 小图标 / 列表 / 详细信息 |
+| `Cmd/Ctrl+Shift+=` / `Cmd/Ctrl+Shift+-` | 放大 / 缩小图标（图标视图，最大 4×；在详细信息或列表中按一次切到图标视图） |
 | `Alt+P` | 预览窗格开关 |
 | `Esc` | 关闭快速预览 / 取消重命名 / 取消路径编辑 / 清空搜索 |
 
@@ -195,6 +231,8 @@ go build -o sunvale .
 | `chrome_nav.go` | 导航行：后退/前进/向上、地址栏、搜索框 |
 | `sidebar.go` | 左侧导航树与宽度拖拽手柄 |
 | `files.go` | 详情/列表/图标视图、分组、选择、行与空白右键菜单、内联重命名 |
+| `keynav.go` | 键盘导航：`↑`/`↓`/`←`/`→`、`Home`/`End`、`PageUp`/`PageDown` 移动选择，`Shift` 从锚点扩展，并把移到的行滚入可视区 |
+| `thumb.go` | 图标视图的媒体缩略图与文件夹封面：四档解码尺寸、后台并发解码、面向像素预算的 LRU 缓存、封面拼图 |
 | `status.go` | 状态栏 |
 | `ops.go` | 文件操作：打开、复制、剪切、粘贴、删除、重命名、新建、终端、属性、复制为路径 |
 | `undo.go` | `Ctrl+Z` 撤销栈（created / moved 两类记录） |
@@ -212,6 +250,7 @@ go build -o sunvale .
 | `statestore.go` | 持久化状态：固定项、最近文件、回收站还原日志（JSON），旧目录名迁移 |
 | `statfs_unix.go` / `statfs_other.go` | 按平台读取卷容量 |
 | `birthtime_darwin.go` / `birthtime_other.go` | 按平台读取文件创建时间 |
+| `remote*.go` | 远程访问（OpenList 兼容）：服务生命周期/账号与 JWT（`remote.go`）、auth/public API（`remote_api.go`）、fs/list·get·search 与虚拟路径映射、下载签名（`remote_fs.go`）、fs 写操作与上传（`remote_manage.go`）、分享协议、`/@s` 访客流与 `/sd` 直链（`remote_share.go`）、`/api/sunvale/*` 管理端点（`remote_admin.go`）、`/d`/`/p` 流式下载（`remote_dl.go`）、内置网页（`remote_web.go` + `remote_web.html`）、管理界面（`remote_manage_web.go` + `remote_manage_web.html`） |
 
 ## 测试
 
@@ -219,12 +258,16 @@ go build -o sunvale .
 go test ./...
 ```
 
-无界面回归测试（不启动 `mygo.App`）：
+无界面回归测试（不启动 `mygo.App`；`keynav_ui_test.go` 用 MyGo 的 `ui.NewTester` 跑真实窗口视图）：
 
 - `archive_drop_test.go` —— 压缩→解压 ZIP 回环、tar.gz（系统 tar）、zip-slip 拒绝、唯一命名、拖拽移动/复制/边界情形。
 - `features_test.go` —— 特殊路径与中文别名、固定/最近状态、主页条目、回收站还原 + 撤销、撤销移动/新建、递归搜索、分组行。
+- `keynav_test.go` —— 方向键步进与两端即停、`Shift` 从锚点扩展、图标视图按行/按屏、分组头下的行号映射。
+- `keynav_ui_test.go` —— 真实视图上的同一套按键：快捷键分发、移到的行滚入可视区（详情/列表/图标/分组图标）、搜索框持有焦点时独占按键。
 - `statestore_test.go` —— 旧目录名（`winexplorer`）状态迁移。
 - `ext_openwith_test.go` —— 扩展命令配置解析与匹配、占位符展开、`Info.plist` 扩展名解析、快速预览门控。
+- `remote_test.go` —— 远程访问协议回归：登录三态（错误/明文/StaticHash）、`/api/me` 三态、fs 列表/获取/搜索、签名下载（全量/Range/HEAD/过期签名/目录拒绝）、路径防逃逸，及真实端口 + curl 端到端冒烟。
+- `remote_manage_test.go` —— 管理界面一轮回归：fs 写操作（mkdir/rename/move/copy/remove 进回收站/dirs/put 上传，含中文与转义路径）、分享全链路（管理端 CRUD 与改名、`/@s` 免登录访客流、密码/过期/停用/超次、按 IP 去重计数、`/sd` 下载与 Range/HEAD）、`/api/sunvale/*`（状态、改密后旧登录失效、重置令牌、端口校验、开关幂等与真实启停）、`/@manage` 页面，及真实端口 + curl 全故事线冒烟（登录→上传→分享→访客下载→管理页→状态）。
 
 > 删除/还原相关测试会真实地在 `~/.Trash` 中创建并恢复一个临时文件。
 
@@ -232,7 +275,7 @@ go test ./...
 
 ## 实现说明
 
-- **图标分层**：单色命令/导航图标（后退、前进、向上、刷新、剪切、复制、粘贴、重命名、分享、删除、新建、排序、查看、更多、搜索、播放/暂停等）统一使用 Onevra 内置 Lucide 图标，经 `components.Icon` 渲染、继承文本色；命令栏与导航行的图标按钮用 `components.IconButton`。**彩色**文件、文件夹、盘符、位置图标仍由 MyGo `ui` 包在 GPU 上以 Painter 路径自绘——它们承载资源管理器的视觉识别度，单色图标集无法替代。
+- **图标分层**：单色命令/导航图标（后退、前进、向上、刷新、剪切、复制、粘贴、重命名、分享、删除、新建、排序、查看、更多、搜索、播放/暂停等）统一使用 Onevra 内置 Lucide 图标，经 `components.Icon` 渲染、继承文本色；命令栏与导航行的图标按钮用 `components.IconButton`。**彩色**文件、文件夹、盘符、位置图标仍由 MyGo `ui` 包在 GPU 上以 Painter 路径自绘——它们承载资源管理器的视觉识别度，单色图标集无法替代。第三层是**真实画面**：图标视图里的图片/视频用解码出的缩略图，含媒体的文件夹用拼合封面（`thumb.go`），经 `ui.Image(...).Fit(ui.Cover)` 铺满方块；三层各有各的用意，媒体缩略图不是替代自绘图标，而是叠在它上面——解码未落地的那几帧显示的正是自绘图标。
 - **Onevra 本地依赖**：`go.mod` 以 `replace` 指向本地克隆 `/Users/mcx/onevra/source`（含未发布的提交）；下一个 Onevra 版本发布后可移除该行。
 - **删除语义**：删除是「移动到 `~/.Trash`」而非直接抹除，并在状态文件里记录来源路径，供还原与撤销使用。
 - **剪贴板**：应用内实现（`clipPaths` / `clipCut`），不污染系统剪贴板；跨标签复制/粘贴可用。仅「复制为路径」写入系统剪贴板。
@@ -250,7 +293,7 @@ go test ./...
 ## 已知限制
 
 - Windows 的 **Snap Layouts**（悬停最大化按钮弹出布局选择）未实现；ribbon、画廊（Gallery）页、OneDrive、网络发现等高级功能未实现。
-- `Ctrl+滚轮` 缩放图标不可用：MyGo 不向应用暴露原始滚轮事件（滚轮仅驱动滚动），图标大小请用 `查看` 菜单切换。
+- `Ctrl+滚轮` 缩放图标不可用：MyGo 不向应用暴露原始滚轮事件（滚轮仅驱动滚动）；图标大小改用 `查看 > 放大图标 / 缩小图标`、`Cmd/Ctrl+Shift+=` / `-` 或 `Cmd/Ctrl+Shift+1..6` 切换。封面与缩略图依赖目录读取：网络卷或极深的目录里，首帧先显示自绘图标，解码落地后再换成画面。
 - 视频预览依赖 `ffmpeg`/`ffprobe`（Homebrew 安装）；缺失时无海报帧，仅剩 Quick Look 兜底与「打开」按钮。
 - 7z / rar 解压依赖 `7zz` 或 `unar`；tar.xz 依赖系统 `bsdtar`。
 - 跨平台**仅验证 macOS**：`qlmanage` / `mdls` / `open -a` / `~/.Trash` / `/Volumes` 均为 macOS 专属；`fs.go` 的 `statDevice` 直接断言 `*syscall.Stat_t` 且无构建标签，**无法在 Windows 上编译**。非 macOS 上 `statfs_other.go` / `birthtime_other.go` 提供降级实现。

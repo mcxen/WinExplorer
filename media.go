@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"image"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,35 +127,54 @@ func videoDuration(path string) float64 {
 	return d
 }
 
-// videoPoster renders a frame from a video to a PNG with ffmpeg and
-// decodes it into a ui.Bitmap. It tries one second in (where a clip has a
-// title card) and falls back to the first frame. Returns nil when ffmpeg
-// is unavailable or the extraction fails.
+// videoPoster renders a frame from a video at preview size.
 func videoPoster(path string) *ui.Bitmap {
-	dir, err := os.MkdirTemp("", "we-vp")
+	img, err := videoPosterImage(path, 1024)
 	if err != nil {
 		return nil
 	}
+	return ui.NewBitmap(img)
+}
+
+// videoPosterImage renders a frame from a video to a PNG with ffmpeg and
+// decodes it. It tries one second in (where a clip has a title card) and
+// falls back to the first frame, scaled to fit side px. Returns an error
+// when ffmpeg is unavailable or the extraction fails.
+func videoPosterImage(path string, side int) (image.Image, error) {
+	side = max(side, 16)
+	dir, err := os.MkdirTemp("", "we-vp")
+	if err != nil {
+		return nil, err
+	}
 	defer os.RemoveAll(dir)
 	out := filepath.Join(dir, "poster.png")
+	filter := fmt.Sprintf("scale='min(%d,iw)':-1", side)
 
 	attempts := [][]string{
-		{"-y", "-ss", "00:00:01", "-i", path, "-frames:v", "1", "-update", "1",
-			"-vf", "scale='min(1024,iw)':-1", out},
-		{"-y", "-i", path, "-frames:v", "1", "-update", "1",
-			"-vf", "scale='min(1024,iw)':-1", out},
+		{"-y", "-ss", "00:00:01", "-i", path, "-frames:v", "1", "-update", "1", "-vf", filter, out},
+		{"-y", "-i", path, "-frames:v", "1", "-update", "1", "-vf", filter, out},
 	}
+	var last error
 	for _, args := range attempts {
-		cmd := exec.Command("ffmpeg", args...)
-		if b, e := cmd.CombinedOutput(); e == nil {
-			if data, re := os.ReadFile(out); re == nil {
-				if b, de := ui.DecodeBitmap(data); de == nil {
-					return b
-				}
-			}
-		} else {
-			_ = b
+		if b, e := exec.Command("ffmpeg", args...).CombinedOutput(); e != nil {
+			last = fmt.Errorf("ffmpeg: %s", strings.TrimSpace(string(b)))
+			continue
 		}
+		f, e := os.Open(out)
+		if e != nil {
+			last = e
+			continue
+		}
+		img, _, e := image.Decode(f)
+		f.Close()
+		if e != nil {
+			last = e
+			continue
+		}
+		return img, nil
 	}
-	return nil
+	if last == nil {
+		last = fmt.Errorf("没有提取到画面")
+	}
+	return nil, last
 }

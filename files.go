@@ -165,6 +165,33 @@ func sameDay(a, b time.Time) bool {
 	return ay == by && am == bm && ad == bd
 }
 
+// rowIndexOf is the render row showing the entry at path, or -1: 分组依据
+// inserts header rows, so an entry sits below its listing index.
+func rowIndexOf(rows []groupRow, path string) int {
+	if path == "" {
+		return -1
+	}
+	for i, r := range rows {
+		if r.e.Path == path {
+			return i
+		}
+	}
+	return -1
+}
+
+// entryIndexOf is the index of the entry at path among entries, or -1.
+func entryIndexOf(entries []Entry, path string) int {
+	if path == "" {
+		return -1
+	}
+	for i, e := range entries {
+		if e.Path == path {
+			return i
+		}
+	}
+	return -1
+}
+
 // groupHeaderRow is a 分组 band: the label and its item count.
 func (a *App) groupHeaderRow(c *ui.Context, label string, count int) {
 	row := ui.Row(c).FillWidth().Height(30).Shrink(0).Padding(0, 12, 0, 12).
@@ -199,7 +226,11 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 	})
 
 	rows := a.groupedRows(entries)
-	list := ui.List(c, nil, len(rows), func(i int) {
+	t := a.cur()
+	if i := rowIndexOf(rows, t.reveal); i >= 0 {
+		t.details.ScrollIntoView(i)
+	}
+	list := ui.List(c, &t.details, len(rows), func(i int) {
 		if i < 0 || i >= len(rows) {
 			return
 		}
@@ -376,7 +407,11 @@ func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
 // listView is one column of compact icon-and-name rows, 28px each.
 func (a *App) listView(c *ui.Context, entries []Entry) {
 	rows := a.groupedRows(entries)
-	list := ui.List(c, nil, len(rows), func(i int) {
+	t := a.cur()
+	if i := rowIndexOf(rows, t.reveal); i >= 0 {
+		t.list.ScrollIntoView(i)
+	}
+	list := ui.List(c, &t.list, len(rows), func(i int) {
 		if i < 0 || i >= len(rows) {
 			return
 		}
@@ -409,10 +444,10 @@ func (a *App) listRow(c *ui.Context, e Entry) {
 // iconView lays tiles in a grid. Extra large, large and medium put the
 // label under the icon; small icons put it beside, in a shorter tile.
 func (a *App) iconView(c *ui.Context, entries []Entry) {
-	box := iconBoxSize(a.mode)
+	box := a.iconBoxSize(a.mode)
 	minW, height := a.iconTileSize(a.mode, box)
 	if a.grouping != groupNone && !specialPath(a.cur().path) {
-		scroll := ui.Scroll(c).Grow(1).FillWidth().Padding(8)
+		scroll := ui.Scroll(c).Grow(1).FillWidth().Padding(iconGridPad)
 		scroll.Children(func() {
 			rows := a.groupedRows(entries)
 			var group []Entry
@@ -441,24 +476,62 @@ func (a *App) iconView(c *ui.Context, entries []Entry) {
 				a.paneMessage(c, "此文件夹为空")
 			}
 		})
+		// The per-group grids share the scroll's width, so its box says how
+		// many tiles a row takes.
+		a.measureGrid(c, scroll, minW, height, iconGridPad)
 		a.bindPaneMenu(c, scroll)
 		return
 	}
-	grid := ui.GridView(c, nil, len(entries), minW, height, func(i int) {
+	t := a.cur()
+	if i := entryIndexOf(entries, t.reveal); i >= 0 {
+		t.grid.ScrollIntoView(i)
+	}
+	grid := ui.GridView(c, &t.grid, len(entries), minW, height, func(i int) {
 		if i < 0 || i >= len(entries) {
 			return
 		}
 		a.iconTile(c, entries[i], box)
-	}).Grow(1).FillWidth().MinHeight(0).Padding(8)
+	}).Grow(1).FillWidth().MinHeight(0).Padding(iconGridPad)
 	grid.Children(func() {
 		if len(entries) == 0 {
 			a.paneMessage(c, "此文件夹为空")
 		}
 	})
 	a.bindPaneMenu(c, grid)
+	a.measureGrid(c, grid, minW, height, iconGridPad)
 }
 
-func iconBoxSize(mode ViewMode) float32 {
+// iconGridPad is the padding the icon views leave around their grid, which
+// the columns and the grid's measurement both take off its width.
+const iconGridPad float32 = 8
+
+// measureGrid records the icon view's shape as the frame before laid it
+// out: how many tiles a row takes, and how many rows the pane shows, for
+// the arrows' row-sized steps and the Page keys. box is the element the
+// tiles are laid in — the grid, or the scroll holding the grouped view's
+// per-group grids — and pad the padding between its edge and them.
+func (a *App) measureGrid(c *ui.Context, box ui.Element, minW, height, pad float32) {
+	b := box.Bounds()
+	if b.W <= 0 || b.H <= 0 {
+		return
+	}
+	t := a.cur()
+	t.gridCols = gridCols(c, b.W, minW, pad)
+	t.gridRows = max(int((b.H-pad*2)/height), 1)
+}
+
+// gridCols is how many items a grid lays in a row of width w, as GridView
+// counts them: what fits at least minW wide and gap apart, inside pad on
+// either side. A keyboard step down lands on the item under this one only
+// where the count agrees with the grid's own.
+func gridCols(c *ui.Context, w, minW, pad float32) int {
+	gap := c.Theme().Space(2)
+	return max(int((w-pad*2+gap)/(minW+gap)), 1)
+}
+
+// iconBaseSize is a view's icon box before 查看>放大/缩小: the four sizes
+// Explorer's icon views use.
+func iconBaseSize(mode ViewMode) float32 {
 	switch mode {
 	case ViewExtraLarge:
 		return 96
@@ -471,15 +544,42 @@ func iconBoxSize(mode ViewMode) float32 {
 	}
 }
 
+// isIconMode reports whether mode lays out a grid of tiles, the views
+// 放大/缩小 resizes.
+func isIconMode(mode ViewMode) bool {
+	switch mode {
+	case ViewSmallIcons, ViewMediumIcons, ViewLargeIcons, ViewExtraLarge:
+		return true
+	}
+	return false
+}
+
+// iconBoxSize is a view's icon box with the 放大/缩小 factor applied, so
+// 超大图标 reaches as far as 4× its 96 px.
+func (a *App) iconBoxSize(mode ViewMode) float32 {
+	base := iconBaseSize(mode)
+	if !isIconMode(mode) {
+		return base
+	}
+	return base * a.iconZoom
+}
+
 func (a *App) iconTileSize(mode ViewMode, box float32) (minW, height float32) {
 	if mode == ViewSmallIcons {
-		return 180, 44
+		return box + 148, max(44, box+12)
 	}
 	h := box + 52
 	if a.cur().path == pathThisPC {
 		h += 12 // room for the drive usage bar under the name
 	}
 	return box + 40, h
+}
+
+// tileFont is the tile label's size, which grows a little with the tile so
+// a 384 px icon does not sit over a 12 pt name.
+func tileFont(box float32) float32 {
+	f := 12 + (box-96)/32
+	return min(max(f, 12), 18)
 }
 
 // iconTile is one grid cell. ButtonBase is a row, so a small icon sits
@@ -499,17 +599,18 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 			a.nameCell(c, e, box, 12)
 			return
 		}
+		font := tileFont(box)
 		body := ui.Column(c).FillWidth().Gap(6).AlignItems(ui.Center).Padding(6, 4)
 		body.Children(func() {
 			glyph := ui.Box(c).Size(box, box).Shrink(0)
 			glyph.Children(func() {
-				a.fileIcon(c, e, box)
+				a.tileGlyph(c, e, box)
 			})
 			if a.cur().renaming == e.Name {
-				a.renameField(c, 12)
+				a.renameField(c, font)
 				return
 			}
-			ui.Text(c, a.displayName(e)).FontSize(12).TextColor(colorText()).
+			ui.Text(c, a.displayName(e)).FontSize(font).TextColor(colorText()).
 				TextAlign(ui.Center).MaxLines(2).FillWidth()
 			if e.VolTotal > 0 {
 				bar := ui.Box(c).Width(box).Height(6).Shrink(0)
@@ -521,6 +622,80 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 	})
 	a.bindItemInput(c, tile, e)
 	a.attachRowMenu(tile, e)
+	// The grouped icon views lay every tile out inside one plain Scroll, so
+	// the tile the keyboard moved to is built even off screen and raises
+	// itself: the ungrouped grid scrolls to its row through GridState.
+	if a.grouping != groupNone && !specialPath(a.cur().path) && a.cur().reveal == e.Path {
+		tile.ScrollIntoView()
+	}
+}
+
+// tileGlyph is a tile's icon area: a picture or video shows its own frame,
+// a folder holding media shows a cover tiled from it, and everything else
+// keeps the drawn file or folder glyph. The drawn glyphs stay under
+// thumbMinBox, where 16 px of picture says less than the file-type colour.
+func (a *App) tileGlyph(c *ui.Context, e Entry, box float32) {
+	if box >= thumbMinBox {
+		var bm *ui.Bitmap
+		if e.IsDir {
+			if a.folderCoverEligible(e) {
+				bm = folderCoverThumb(e.Path, box)
+			}
+		} else {
+			bm = mediaThumb(e.Path, box)
+		}
+		if bm != nil {
+			frame := ui.Box(c).Size(box, box).Shrink(0).Radius(4).Clip()
+			frame.Children(func() {
+				ui.Image(c, bm).Fit(ui.Cover).Size(box, box)
+				if isVideoExt(lowerExt(e.Path)) {
+					a.videoBadge(c, box)
+				}
+			})
+			return
+		}
+	}
+	a.fileIcon(c, e, box)
+}
+
+// videoBadge marks a video's thumbnail with the round play badge Explorer
+// paints over one.
+func (a *App) videoBadge(c *ui.Context, box float32) {
+	size := min(max(box*0.2, 20), 40)
+	ui.Box(c).Absolute().Left(6).Bottom(6).Size(size, size).Shrink(0).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			d := min(r.W, r.H)
+			p.Fill(ui.Rect{X: r.X, Y: r.Y, W: d, H: d}, ui.RGBA(0, 0, 0, 0.55), d/2)
+			var tri ui.Path
+			tri.MoveTo(r.X+d*0.36, r.Y+d*0.28)
+			tri.LineTo(r.X+d*0.74, r.Y+d*0.50)
+			tri.LineTo(r.X+d*0.36, r.Y+d*0.72)
+			tri.Close()
+			p.FillPath(&tri, ui.RGB(255, 255, 255))
+		})
+}
+
+// folderCoverEligible reports whether a folder tile may show a cover of
+// its contents: only real folders may, and never a volume root, whose
+// contents are not a folder's.
+func (a *App) folderCoverEligible(e Entry) bool {
+	if e.Path == "" || specialPath(e.Path) || isVolumeRoot(e.Path) {
+		return false
+	}
+	return a.cur().path != pathThisPC
+}
+
+// isVolumeRoot reports whether path is a mount point — "/" or
+// "/Volumes/…" — rather than a folder inside one.
+func isVolumeRoot(path string) bool {
+	clean := filepath.Clean(path)
+	if clean == "/" || clean == "." {
+		return true
+	}
+	if vol := filepath.VolumeName(clean); vol != "" && filepath.Clean(vol) == clean {
+		return true
+	}
+	return filepath.Dir(clean) == clean
 }
 
 // nameCell is the icon plus the name, or the rename field when this entry

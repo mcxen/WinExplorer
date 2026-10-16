@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -340,8 +341,18 @@ func decodeImage(path string) (*ui.Bitmap, error) {
 }
 
 // quickLookThumb asks macOS Quick Look for a thumbnail of path and decodes
-// the PNG it writes. No cgo involved.
+// the PNG it writes into a ui.Bitmap.
 func quickLookThumb(path string, size int) (*ui.Bitmap, error) {
+	img, err := quickLookImage(path, size)
+	if err != nil {
+		return nil, err
+	}
+	return ui.NewBitmap(img), nil
+}
+
+// quickLookImage is quickLookThumb as the decoded picture, for callers
+// that compose it with others. No cgo involved.
+func quickLookImage(path string, size int) (image.Image, error) {
 	dir, err := os.MkdirTemp("", "we-ql")
 	if err != nil {
 		return nil, err
@@ -355,11 +366,16 @@ func quickLookThumb(path string, size int) (*ui.Bitmap, error) {
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("没有生成缩略图")
 	}
-	data, err := os.ReadFile(matches[0])
+	f, err := os.Open(matches[0])
 	if err != nil {
 		return nil, err
 	}
-	return ui.DecodeBitmap(data)
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
 }
 
 // pdfPoster renders the first page of a PDF to an image via Quick Look.

@@ -534,6 +534,7 @@ func uniqueNewFolderName(dir string) (string, error) {
 }
 
 func (a *App) doRefresh() {
+	clearThumbs()
 	a.reload()
 }
 

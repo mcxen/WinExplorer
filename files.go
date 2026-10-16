@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	detailsRowH float32 = 36
+	detailsRowH float32 = 30
 	listRowH    float32 = 28
 	colDateW    float32 = 168
 	colTypeW    float32 = 120
 	colSizeW    float32 = 96
+	rowInset    float32 = 4
 )
 
 // filePane is the content area to the right of the sidebar. It fills the
@@ -37,14 +38,15 @@ func (a *App) filePane(c *ui.Context) {
 			a.detailsView(c, entries)
 		}
 	})
-	a.bindPaneMenu(pane)
+	a.bindPaneMenu(c, pane)
 }
 
-// detailsView is 详细信息: a sticky header and a virtualized list of 36px
-// rows. ui.Table sorts through its own ListState and keeps the choice in a
-// Selection, which this app does not; the header calls toggleSort and the
-// rows call the selection methods, and the header scrolls sideways with the
-// rows the way a table's does.
+// detailsView is 详细信息: a sticky header and a virtualized list of 30px
+// rows, each inset 4px with a rounded selection, as Explorer's are. ui.Table
+// sorts through its own ListState and keeps the choice in a Selection, which
+// this app does not; the header calls toggleSort and the rows call the
+// selection methods, and the header scrolls sideways with the rows the way
+// a table's does.
 func (a *App) detailsView(c *ui.Context, entries []Entry) {
 	width := a.detailsWidth()
 	head := ui.Row(c).Height(detailsRowH).FillWidth().Shrink(0).Clip().
@@ -72,16 +74,16 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 		}
 	})
 	head.ScrollWith(list)
-	a.bindPaneMenu(list)
+	a.bindPaneMenu(c, list)
 }
 
 func (a *App) detailsWidth() float32 {
-	return 220 + colDateW + colTypeW + colSizeW
+	return 220 + colDateW + colTypeW + colSizeW + rowInset*2
 }
 
 func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool) {
 	cell := ui.ButtonBase(c).Height(detailsRowH).Padding(0, 8).Gap(4).
-		AlignItems(ui.Center).Radius(0).Label(title)
+		AlignItems(ui.Center).Margin(0, rowInset).Radius(4).Label(title)
 	if flex {
 		cell.Grow(1).Shrink(1).MinWidth(160)
 	} else {
@@ -114,7 +116,8 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 func (a *App) detailsRow(c *ui.Context, entries []Entry, i int) {
 	e := entries[i]
 	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(detailsRowH).
-		AlignItems(ui.Center).MinWidth(a.detailsWidth()).Radius(0).Label(e.Name)
+		AlignItems(ui.Center).Margin(0, rowInset).MinWidth(a.detailsWidth()).
+		Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
 	row.Children(func() {
 		name := ui.Row(c).Grow(1).Shrink(1).MinWidth(160).Height(detailsRowH).
@@ -130,7 +133,7 @@ func (a *App) detailsRow(c *ui.Context, entries []Entry, i int) {
 		}
 		a.detailText(c, size, colSizeW, true)
 	})
-	a.bindItemInput(row, entries, i)
+	a.bindItemInput(c, row, entries, i)
 	row.ContextMenu(func(m *ui.Menu) {
 		a.itemMenu(m, entries, i)
 	})
@@ -163,18 +166,19 @@ func (a *App) listView(c *ui.Context, entries []Entry) {
 			a.paneMessage(c, "此文件夹为空")
 		}
 	})
-	a.bindPaneMenu(list)
+	a.bindPaneMenu(c, list)
 }
 
 func (a *App) listRow(c *ui.Context, entries []Entry, i int) {
 	e := entries[i]
 	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(listRowH).
-		Padding(0, 8).Gap(8).AlignItems(ui.Center).Radius(4).Label(e.Name)
+		Padding(0, 8).Gap(8).AlignItems(ui.Center).Margin(0, rowInset).
+		Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
 	row.Children(func() {
 		a.nameCell(c, e, 16, 12)
 	})
-	a.bindItemInput(row, entries, i)
+	a.bindItemInput(c, row, entries, i)
 	row.ContextMenu(func(m *ui.Menu) {
 		a.itemMenu(m, entries, i)
 	})
@@ -196,7 +200,7 @@ func (a *App) iconView(c *ui.Context, entries []Entry) {
 			a.paneMessage(c, "此文件夹为空")
 		}
 	})
-	a.bindPaneMenu(grid)
+	a.bindPaneMenu(c, grid)
 }
 
 func iconBoxSize(mode ViewMode) float32 {
@@ -248,7 +252,7 @@ func (a *App) iconTile(c *ui.Context, entries []Entry, i int, box float32) {
 				TextAlign(ui.Center).MaxLines(2).FillWidth()
 		})
 	})
-	a.bindItemInput(tile, entries, i)
+	a.bindItemInput(c, tile, entries, i)
 	tile.ContextMenu(func(m *ui.Menu) {
 		a.itemMenu(m, entries, i)
 	})
@@ -305,15 +309,26 @@ func (a *App) paintSelect(el ui.Element, path string) {
 // bindItemInput applies Explorer selection on the row the pointer hit.
 // Double-click and Enter both open: Enter is the window shortcut in
 // handleKeys, a double-click selects the row first and then doOpen.
-func (a *App) bindItemInput(el ui.Element, entries []Entry, i int) {
+// Every row is also a drag source (the selection when the row is in it,
+// else the row alone), and folder rows accept drops that move files into
+// them.
+func (a *App) bindItemInput(c *ui.Context, el ui.Element, entries []Entry, i int) {
+	if i < 0 || i >= len(entries) {
+		return
+	}
+	e := entries[i]
 	if el.Clicked() {
 		a.clickEntry(entries, i, el.ClickModifiers())
 	}
 	if el.DoubleClicked() {
-		if i >= 0 && i < len(entries) {
-			a.selectOnly(entries[i].Path)
-		}
+		a.selectOnly(e.Path)
 		a.doOpen()
+	}
+	if a.cur().path != pathThisPC && e.Path != "" && e.Path != pathThisPC {
+		el.Drag(a.dragValueFor(e.Path))
+		if e.IsDir {
+			a.bindDropFolder(c, el, e.Path)
+		}
 	}
 }
 
@@ -332,32 +347,69 @@ func (a *App) clickEntry(entries []Entry, i int, mods ui.Modifiers) {
 	}
 }
 
-// bindPaneMenu is the menu of the pane background: paste, new folder,
-// refresh. A row's own menu is the innermost one, so it takes the click
-// when the pointer is on a row.
-func (a *App) bindPaneMenu(el ui.Element) {
+// bindPaneMenu is the menu of the pane background: New (folder / text
+// document), paste, open in Terminal, refresh, hidden items and the
+// folder's properties. A row's own menu is the innermost one, so it takes
+// the click when the pointer is on a row. The pane also accepts files
+// dragged from other applications, moving them into the current folder.
+func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
+	if a.cur().path != pathThisPC {
+		if files := el.DroppedFiles(); len(files) > 0 {
+			a.doDropInto(c, a.cur().path, files)
+		}
+	}
 	el.ContextMenu(func(m *ui.Menu) {
+		m.Submenu("新建", func(n *ui.Menu) {
+			if n.Item("文件夹").Disabled(a.cur().path == pathThisPC).Chosen() {
+				a.doNewFolder()
+			}
+			if n.Item("文本文档").Disabled(a.cur().path == pathThisPC).Chosen() {
+				a.doNewTextFile()
+			}
+		})
 		if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || a.cur().path == pathThisPC).Chosen() {
 			a.doPaste()
 		}
-		if m.Item("新建文件夹").Disabled(a.cur().path == pathThisPC).Chosen() {
-			a.doNewFolder()
+		m.Separator()
+		if m.Item("在终端中打开").Disabled(a.cur().path == pathThisPC).Chosen() {
+			a.openInTerminal(a.cur().path)
 		}
 		m.Separator()
 		if m.Item("刷新").Chosen() {
 			a.doRefresh()
+		}
+		if m.Item("显示隐藏的项目").Checked(a.showHidden).Chosen() {
+			a.toggleHidden()
+		}
+		m.Separator()
+		if m.Item("属性").Chosen() {
+			a.showProperties()
 		}
 	})
 }
 
 // itemMenu is the row menu. A right-click on a row that was not selected
 // selects it first, so the ops methods act on the row the menu opened on.
+// The items follow Windows 11's: Open, Cut/Copy/Paste, Copy as path,
+// Rename, Compress to ZIP, Extract all, Open in Terminal (folders),
+// Delete, Properties.
 func (a *App) itemMenu(m *ui.Menu, entries []Entry, i int) {
 	if i >= 0 && i < len(entries) && !a.isSelected(entries[i].Path) {
 		a.selectOnly(entries[i].Path)
 	}
-	one := len(a.selectedEntries()) == 1
-	anySel := len(a.cur().selected) > 0
+	sel := a.selectedEntries()
+	one := len(sel) == 1
+	anySel := len(sel) > 0
+	allArchives := anySel
+	for _, e := range sel {
+		if e.IsDir || !isArchive(e.Name) {
+			allArchives = false
+			break
+		}
+	}
+	oneDir := one && sel[0].IsDir
+	inThisPC := a.cur().path == pathThisPC
+
 	if m.Item("打开").Disabled(!anySel).Chosen() {
 		a.doOpen()
 	}
@@ -368,15 +420,32 @@ func (a *App) itemMenu(m *ui.Menu, entries []Entry, i int) {
 	if m.Item("复制").Disabled(!anySel).Chosen() {
 		a.doCopy()
 	}
-	if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || a.cur().path == pathThisPC).Chosen() {
+	if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || inThisPC).Chosen() {
 		a.doPaste()
 	}
-	if m.Item("重命名").Disabled(!one).Chosen() {
+	if m.Item("复制为路径").Disabled(!anySel || inThisPC).Chosen() {
+		a.doCopyAsPath()
+	}
+	if m.Item("重命名").Disabled(!one || inThisPC).Chosen() {
 		a.doRenameStart()
 	}
 	m.Separator()
+	if m.Item("压缩为 ZIP 文件").Disabled(!anySel || inThisPC).Chosen() {
+		a.doCompress()
+	}
+	if m.Item("全部解压").Disabled(!allArchives || inThisPC).Chosen() {
+		a.doExtract()
+	}
+	m.Separator()
+	if m.Item("在终端中打开").Disabled(!oneDir).Chosen() {
+		a.openInTerminal(sel[0].Path)
+	}
 	if m.Item("删除").Disabled(!anySel).Chosen() {
 		a.doDelete()
+	}
+	m.Separator()
+	if m.Item("属性").Disabled(!one).Chosen() {
+		a.showProperties()
 	}
 }
 

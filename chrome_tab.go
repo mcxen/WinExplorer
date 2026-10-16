@@ -176,7 +176,7 @@ func tabTitle(path string) string {
 // does not touch the filesystem.
 func (a *App) commandBar(c *ui.Context) {
 	hasSel := len(a.cur().selected) > 0
-	canPaste := len(a.clipPaths) > 0
+	canPaste := a.canPaste()
 
 	ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
 		Padding(0, 6).Gap(2).Background(colorChrome()).

@@ -8,8 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 )
 
 func (a *App) doOpen() {
@@ -67,6 +69,44 @@ func (a *App) storeClip(cut bool) {
 	a.clipPaths = paths
 	a.clipCut = cut
 	a.statusMsg = ""
+	// Explorer's clipboard is the system's: files copied here paste into
+	// other apps too. Cut is an in-app notion — Finder pastes them as a
+	// copy, which is how Windows behaves against apps that ignore the
+	// preferred effect.
+	if data, err := transfer.FileData(paths...); err == nil {
+		if err := mygo.Clipboard.Write(data); err != nil {
+			a.statusMsg = "写入系统剪贴板失败：" + err.Error()
+		}
+	}
+}
+
+// systemClipboardFiles returns the local file paths on the system
+// clipboard, cached briefly so per-frame affordances stay cheap.
+func (a *App) systemClipboardFiles() []string {
+	if time.Since(a.sysClipAt) < 400*time.Millisecond {
+		return a.sysClip
+	}
+	a.sysClipAt = time.Now()
+	a.sysClip = nil
+	if !mygo.App.IsReady() {
+		return nil
+	}
+	data, err := mygo.Clipboard.Read()
+	if err != nil {
+		return nil
+	}
+	paths, err := data.Files()
+	if err != nil {
+		return nil
+	}
+	a.sysClip = paths
+	return paths
+}
+
+// canPaste reports whether anything can land in the current folder: the
+// app's own clipboard, or files another app put on the system's.
+func (a *App) canPaste() bool {
+	return len(a.clipPaths) > 0 || len(a.systemClipboardFiles()) > 0
 }
 
 func (a *App) doPaste() {
@@ -74,12 +114,18 @@ func (a *App) doPaste() {
 		a.statusMsg = "无法粘贴到此页面"
 		return
 	}
-	if len(a.clipPaths) == 0 {
-		return
+	srcPaths, cut := a.clipPaths, a.clipCut
+	if len(srcPaths) == 0 {
+		// Nothing of our own: paste files another application copied,
+		// as a copy — Finder and Windows cannot signal a cut.
+		srcPaths, cut = a.systemClipboardFiles(), false
+		if len(srcPaths) == 0 {
+			return
+		}
 	}
 	dstDir := a.cur().path
-	if a.clipCut {
-		for _, src := range a.clipPaths {
+	if cut {
+		for _, src := range srcPaths {
 			if src == "" || src == pathThisPC {
 				continue
 			}
@@ -94,13 +140,13 @@ func (a *App) doPaste() {
 	var moved []string
 	var undoCreated []string
 	var undoMoved []undoMove
-	for _, src := range a.clipPaths {
+	for _, src := range srcPaths {
 		if src == "" || src == pathThisPC {
 			continue
 		}
 		// Cutting into the folder that already holds the item is a no-op.
 		// Removing it afterwards would delete the only copy.
-		if a.clipCut && filepath.Clean(filepath.Dir(src)) == filepath.Clean(dstDir) {
+		if cut && filepath.Clean(filepath.Dir(src)) == filepath.Clean(dstDir) {
 			pasted = append(pasted, src)
 			continue
 		}
@@ -111,14 +157,14 @@ func (a *App) doPaste() {
 		}
 		dst := filepath.Join(dstDir, name)
 		pasted = append(pasted, dst)
-		if a.clipCut {
+		if cut {
 			moved = append(moved, src)
 			undoMoved = append(undoMoved, undoMove{From: src, To: dst})
 		} else {
 			undoCreated = append(undoCreated, dst)
 		}
 	}
-	if a.clipCut && len(failed) == 0 && len(moved) > 0 {
+	if cut && len(failed) == 0 && len(moved) > 0 {
 		var removeFailed []string
 		for _, src := range moved {
 			if err := os.RemoveAll(src); err != nil {
@@ -126,6 +172,8 @@ func (a *App) doPaste() {
 			}
 		}
 		if len(removeFailed) == 0 {
+			// Only the app's own clipboard had the cut; the system's copy
+			// stays as it was.
 			a.clipPaths = nil
 			a.clipCut = false
 		} else {
@@ -134,7 +182,7 @@ func (a *App) doPaste() {
 	}
 	if n := len(undoMoved) + len(undoCreated); n > 0 {
 		desc := "复制"
-		if a.clipCut {
+		if cut {
 			desc = "移动"
 		}
 		if n > 1 {

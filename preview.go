@@ -51,6 +51,7 @@ const (
 	previewVideo
 	previewDoc  // PDF/other document, poster only
 	previewMeta // any file we only have properties for
+	previewHex  // an unknown binary, shown as a hex dump
 )
 
 type propRow struct {
@@ -162,6 +163,15 @@ func (a *App) buildPreview(path string) *previewState {
 			st.err = "无法读取文本：" + e.Error()
 			st.kind = previewMeta
 		}
+	case previewMeta:
+		// No extension mapping said what this is: look inside. Text
+		// previews as text, binaries as a hex dump.
+		if !info.IsDir() {
+			k, txt, full, e := sniffKind(path, info.Size())
+			if e == nil {
+				st.kind, st.text, st.textFull = k, txt, full
+			}
+		}
 	case previewAudio:
 		st.media = loadAudio(path)
 		if st.media.player == nil {
@@ -229,6 +239,80 @@ func kindByExt(isDir bool, ext string) previewKind {
 	default:
 		return previewMeta
 	}
+}
+
+// sniffKind looks inside a file of unknown type: mostly-printable bytes
+// preview as text (Makefile, LICENSE…), anything binary as a hex dump —
+// Explorer shows nothing for these; we show what the file is.
+func sniffKind(path string, size int64) (previewKind, string, int, error) {
+	const sniffMax = 4 * 1024
+	f, err := os.Open(path)
+	if err != nil {
+		return previewMeta, "", 0, err
+	}
+	defer f.Close()
+	buf := make([]byte, min64(size, sniffMax))
+	n, _ := f.Read(buf)
+	buf = buf[:n]
+	if isMostlyText(buf) {
+		return previewText, string(buf), int(size), nil
+	}
+	return previewHex, hexDump(buf), int(size), nil
+}
+
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// isMostlyText reports whether b looks like human text: no NUL bytes and
+// at least 85% printable characters or common whitespace.
+func isMostlyText(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	printable := 0
+	for _, c := range b {
+		if c == 0 {
+			return false
+		}
+		if c == '\t' || c == '\n' || c == '\r' || (c >= 0x20 && c < 0x7f) || c >= 0x80 {
+			printable++
+		}
+	}
+	return float64(printable)/float64(len(b)) >= 0.85
+}
+
+// hexDump renders the classic 16-bytes-per-line dump with offsets and an
+// ASCII column.
+func hexDump(b []byte) string {
+	var sb strings.Builder
+	for off := 0; off < len(b); off += 16 {
+		chunk := b[off:min(off+16, len(b))]
+		fmt.Fprintf(&sb, "%08x  ", off)
+		for i := 0; i < 16; i++ {
+			if i < len(chunk) {
+				fmt.Fprintf(&sb, "%02x ", chunk[i])
+			} else {
+				sb.WriteString("   ")
+			}
+			if i == 7 {
+				sb.WriteByte(' ')
+			}
+		}
+		sb.WriteString(" |")
+		for _, c := range chunk {
+			if c >= 0x20 && c < 0x7f {
+				sb.WriteByte(c)
+			} else {
+				sb.WriteByte('.')
+			}
+		}
+		sb.WriteString("|\n")
+	}
+	return sb.String()
 }
 
 // decodeImage reads an image file and returns a ui.Bitmap. MyGo's

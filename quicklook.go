@@ -76,6 +76,16 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 			})
 			return
 		}
+	case previewHex:
+		if st.text != "" {
+			body := ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Radius(8).
+				Background(colorAddress()).Border(1, colorDivider()).Padding(12, 10).Clip()
+			body.Children(func() {
+				value := st.text
+				ui.TextArea(c, &value).ReadOnly(true).FontSize(12).TextColor(colorText())
+			})
+			return
+		}
 	case previewAudio:
 		card := ui.Box(c).Width(320).Shrink(0).Radius(8).
 			Background(colorAddress()).Border(1, colorDivider()).Padding(16, 14)

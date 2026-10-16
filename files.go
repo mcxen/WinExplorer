@@ -524,8 +524,12 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 }
 
 // nameCell is the icon plus the name, or the rename field when this entry
-// is the one being renamed.
+// is the one being renamed. With 查看>显示>项目复选框 on, a check box
+// leads them, as Explorer's item check boxes do.
 func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
+	if a.itemCheckboxes {
+		a.checkboxCell(c, e)
+	}
 	glyph := ui.Box(c).Size(icon, icon).Shrink(0)
 	glyph.Children(func() {
 		a.fileIcon(c, e, icon)
@@ -559,6 +563,43 @@ func (a *App) renameField(c *ui.Context, font float32) {
 	})
 	if in.Submitted() {
 		a.commitRename()
+	}
+}
+
+// checkboxCell is the item check box: a small square before the name,
+// checked when the item is selected. Clicking it toggles that item alone,
+// leaving the selection anchor where it was.
+func (a *App) checkboxCell(c *ui.Context, e Entry) {
+	box := ui.ButtonBase(c.Key("check-"+e.Path)).Size(16, 16).Shrink(0).
+		Radius(3).Label("选择 " + e.Name)
+	box.Draw(func(p *ui.Painter, r ui.Rect) {
+		selected := a.isSelected(e.Path)
+		ink := colorMuted()
+		if selected {
+			ink = colorAccent()
+		} else if box.Hovered() {
+			ink = colorText()
+		}
+		p.Stroke(r, ink, 3, 1)
+		if selected {
+			var mark ui.Path
+			mark.MoveTo(r.X+r.W*0.22, r.Y+r.H*0.55)
+			mark.LineTo(r.X+r.W*0.42, r.Y+r.H*0.75)
+			mark.LineTo(r.X+r.W*0.78, r.Y+r.H*0.28)
+			p.StrokePath(&mark, 1.8, colorAccent())
+		}
+	})
+	if box.Clicked() {
+		t := a.cur()
+		if len(t.selected) == 0 {
+			t.selected = map[string]bool{}
+		}
+		if t.selected[e.Path] {
+			delete(t.selected, e.Path)
+		} else {
+			t.selected[e.Path] = true
+		}
+		a.requestPreview()
 	}
 }
 

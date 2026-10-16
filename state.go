@@ -38,13 +38,14 @@ type App struct {
 	tabs      []*tabState
 	activeTab int
 
-	sortKey    SortKey
-	sortAsc    bool
-	mode       ViewMode
-	showHidden bool
-	showExt    bool    // 查看>显示>文件扩展名 off hides known extensions
-	compact    bool    // 查看>紧凑视图: tighter rows
-	grouping   SortKey // 分组依据; groupNone when off
+	sortKey        SortKey
+	sortAsc        bool
+	mode           ViewMode
+	showHidden     bool
+	showExt        bool    // 查看>显示>文件扩展名 off hides known extensions
+	compact        bool    // 查看>紧凑视图: tighter rows
+	itemCheckboxes bool    // 查看>显示>项目复选框
+	grouping       SortKey // 分组依据; groupNone when off
 
 	clipPaths []string
 	clipCut   bool

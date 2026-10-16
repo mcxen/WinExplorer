@@ -305,6 +305,9 @@ func (a *App) viewMenu(m *ui.Menu) {
 		if n.Item("隐藏的项目").Checked(a.showHidden).Chosen() {
 			a.toggleHidden()
 		}
+		if n.Item("项目复选框").Checked(a.itemCheckboxes).Chosen() {
+			a.itemCheckboxes = !a.itemCheckboxes
+		}
 	})
 	m.Submenu("分组依据", func(n *ui.Menu) {
 		groups := []struct {

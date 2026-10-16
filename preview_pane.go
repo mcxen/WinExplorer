@@ -66,6 +66,13 @@ func (a *App) previewBody(c *ui.Context, st *previewState) {
 		} else {
 			a.previewNote(c, st.err)
 		}
+	case previewHex:
+		if st.text != "" {
+			a.previewNote(c, "十六进制预览（前 4 KB）")
+			a.previewText(c, st)
+		} else {
+			a.previewNote(c, st.err)
+		}
 	case previewAudio:
 		a.previewAudio(c, st)
 		if st.media.player == nil {

@@ -673,7 +673,7 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 				a.doNewTextFile()
 			}
 		})
-		if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || special).Chosen() {
+		if m.Item("粘贴").Disabled(!a.canPaste() || special).Chosen() {
 			a.doPaste()
 		}
 		m.Separator()
@@ -744,7 +744,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	if m.Item("复制").Disabled(!anySel).Chosen() {
 		a.doCopy()
 	}
-	if m.Item("粘贴").Disabled(len(a.clipPaths) == 0 || onSpecial).Chosen() {
+	if m.Item("粘贴").Disabled(!a.canPaste() || onSpecial).Chosen() {
 		a.doPaste()
 	}
 	if m.Item("复制为路径").Disabled(!anySel || onSpecial).Chosen() {

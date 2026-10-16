@@ -142,7 +142,7 @@ func (a *App) homePin(c *ui.Context, pins []Entry, i int) {
 // homeRecent is one row of 最近使用的文件: icon, name, date and location.
 func (a *App) homeRecent(c *ui.Context, recents []Entry, i int) {
 	e := recents[i]
-	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(detailsRowH).
+	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(a.detailsRowH()).
 		Radius(4).Padding(0, 8).Gap(10).AlignItems(ui.Center).Label(e.Name)
 	a.paintSelect(row, e.Path)
 	if row.Hovered() {

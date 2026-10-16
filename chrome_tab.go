@@ -295,6 +295,9 @@ func (a *App) viewMenu(m *ui.Menu) {
 			a.setMode(mode.mode)
 		}
 	}
+	if m.Item("紧凑视图").Checked(a.compact).Chosen() {
+		a.compact = !a.compact
+	}
 	m.Submenu("显示", func(n *ui.Menu) {
 		if n.Item("文件扩展名").Checked(a.showExt).Chosen() {
 			a.showExt = !a.showExt

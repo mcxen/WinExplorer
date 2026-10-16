@@ -43,6 +43,7 @@ type App struct {
 	mode       ViewMode
 	showHidden bool
 	showExt    bool    // 查看>显示>文件扩展名 off hides known extensions
+	compact    bool    // 查看>紧凑视图: tighter rows
 	grouping   SortKey // 分组依据; groupNone when off
 
 	clipPaths []string

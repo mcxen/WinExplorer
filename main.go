@@ -13,7 +13,7 @@ func main() {
 	app := newApp()
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     "文件资源管理器",
+			Title:     "晴谷",
 			Width:     1100,
 			Height:    720,
 			MinWidth:  640,
@@ -115,7 +115,7 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.up()
 	case c.Shortcut(0, ui.KeyEnter):
 		a.doOpen()
-	case c.Shortcut(0, ui.KeyDelete), c.Shortcut(ui.Cmd, ui.KeyBackspace):
+	case c.Shortcut(0, ui.KeyDelete), c.Shortcut(ui.Cmd, ui.KeyBackspace), c.Shortcut(ui.Ctrl, ui.KeyD):
 		a.doDelete()
 	case c.Shortcut(0, ui.KeyF2):
 		a.doRenameStart()
@@ -131,8 +131,15 @@ func (a *App) handleKeys(c *ui.Context) {
 		if sel := a.selectedEntries(); len(sel) == 1 {
 			a.showProperties()
 		}
-	case c.Shortcut(ui.Cmd, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyF), c.Shortcut(ui.Cmd, ui.KeyF):
+	case c.Shortcut(ui.Cmd, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyE),
+		c.Shortcut(ui.Ctrl, ui.KeyF), c.Shortcut(ui.Cmd, ui.KeyF), c.Shortcut(0, ui.KeyF3):
 		a.focusSearch = true
+	case c.Shortcut(ui.Alt, ui.KeyD), c.Shortcut(ui.Ctrl, ui.KeyL), c.Shortcut(0, ui.KeyF4):
+		a.beginPathEdit()
+	case c.Shortcut(0, ui.KeyF11):
+		if a.win != nil {
+			a.win.ToggleMaximize()
+		}
 	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyC), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyC):
 		a.doCopyAsPath()
 	case c.Shortcut(ui.Cmd, ui.KeyX), c.Shortcut(ui.Ctrl, ui.KeyX):
@@ -156,6 +163,24 @@ func (a *App) handleKeys(c *ui.Context) {
 	}
 	// Ctrl/Cmd+1..8 goes to that tab, +9 to the last, as Explorer's tab
 	// shortcuts.
+	// Ctrl+Shift+1..6: view styles, as Explorer's.
+	styles := []struct {
+		key  ui.Key
+		mode ViewMode
+	}{
+		{ui.Key1, ViewExtraLarge},
+		{ui.Key2, ViewLargeIcons},
+		{ui.Key3, ViewMediumIcons},
+		{ui.Key4, ViewSmallIcons},
+		{ui.Key5, ViewList},
+		{ui.Key6, ViewDetails},
+	}
+	for _, st := range styles {
+		if c.Shortcut(ui.Ctrl|ui.Shift, st.key) || c.Shortcut(ui.Cmd|ui.Shift, st.key) {
+			a.setMode(st.mode)
+			return
+		}
+	}
 	digits := []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4,
 		ui.Key5, ui.Key6, ui.Key7, ui.Key8}
 	for i, key := range digits {

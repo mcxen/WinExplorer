@@ -9,8 +9,8 @@ import (
 	"sync"
 )
 
-// persistedState is everything WinExplorer keeps between runs, at
-// os.UserConfigDir()/winexplorer/state.json: the folders pinned to 快速访问
+// persistedState is everything Sunvale keeps between runs, at
+// os.UserConfigDir()/sunvale/state.json: the folders pinned to 快速访问
 // (Explorer keeps them in the registry), the recently opened files the Home
 // page lists (Explorer's 最近使用的文件), and the delete log that lets the
 // 回收站 page restore files to where they came from (Explorer keeps this in
@@ -30,17 +30,30 @@ type trashRecord struct {
 }
 
 const (
+	stateDirName       = "sunvale"
+	legacyStateDirName = "winexplorer"
+
 	maxRecent   = 20
 	maxUndoKeep = 64
 )
 
 // loadState reads the persisted state, seeding 快速访问 with the standard
-// user folders on first run, as Explorer's first-run Quick Access does.
+// user folders on first run, as Explorer's first-run Quick Access does. It
+// falls back to the directory the app used before the Sunvale rename, so pins
+// and 最近使用的文件 survive the upgrade.
 func loadState() *persistedState {
 	st := &persistedState{}
 	if dir, err := os.UserConfigDir(); err == nil {
-		if data, err := os.ReadFile(filepath.Join(dir, "winexplorer", "state.json")); err == nil {
-			_ = json.Unmarshal(data, st)
+		for _, name := range []string{stateDirName, legacyStateDirName} {
+			data, err := os.ReadFile(filepath.Join(dir, name, "state.json"))
+			if err != nil {
+				continue
+			}
+			if err := json.Unmarshal(data, st); err != nil {
+				st = &persistedState{}
+				continue
+			}
+			break
 		}
 	}
 	if len(st.Pinned) == 0 {
@@ -52,20 +65,21 @@ func loadState() *persistedState {
 }
 
 // saveLocked writes the state back, with the mutex already held by the
-// caller. Errors are ignored: a lost pin is harmless.
+// caller. Errors are ignored: a lost pin is harmless. Saving into the new
+// directory is what completes the move away from the pre-rename one.
 func (st *persistedState) saveLocked() {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "winexplorer"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, stateDirName), 0o755); err != nil {
 		return
 	}
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(dir, "winexplorer", "state.json"), data, 0o644)
+	_ = os.WriteFile(filepath.Join(dir, stateDirName, "state.json"), data, 0o644)
 }
 
 // defaultPins are the folders Explorer pins on a fresh profile.
@@ -75,7 +89,7 @@ func defaultPins() []string {
 		return nil
 	}
 	var out []string
-	for _, name := range []string{"Desktop", "Downloads", "Documents", "Pictures"} {
+	for _, name := range []string{"Desktop", "Downloads", "Documents", "Pictures", "Music", "Videos"} {
 		p := filepath.Join(home, name)
 		if info, err := os.Stat(p); err == nil && info.IsDir() {
 			out = append(out, p)

@@ -1,4 +1,4 @@
-module winexplorer
+module sunvale
 
 go 1.27.2
 

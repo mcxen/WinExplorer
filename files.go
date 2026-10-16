@@ -11,14 +11,28 @@ import (
 )
 
 const (
-	detailsRowH float32 = 30
-	listRowH    float32 = 28
-	colDateW    float32 = 168
-	colTypeW    float32 = 120
-	colSizeW    float32 = 96
-	colLocW     float32 = 200
-	rowInset    float32 = 4
+	colDateW float32 = 168
+	colTypeW float32 = 120
+	colSizeW float32 = 96
+	colLocW  float32 = 200
+	rowInset float32 = 4
 )
+
+// detailsRowH is 30, or 22 with 查看>紧凑视图 on, as Explorer's Compact
+// view tightens the list.
+func (a *App) detailsRowH() float32 {
+	if a.compact {
+		return 22
+	}
+	return 30
+}
+
+func (a *App) listRowH() float32 {
+	if a.compact {
+		return 22
+	}
+	return 28
+}
 
 // filePane is the content area to the right of the sidebar. It fills the
 // leftover width and the body row's leftover height, and shows the current
@@ -164,7 +178,7 @@ func (a *App) groupHeaderRow(c *ui.Context, label string, count int) {
 // a table's does.
 func (a *App) detailsView(c *ui.Context, entries []Entry) {
 	width := a.detailsWidth()
-	head := ui.Row(c).Height(detailsRowH).FillWidth().Shrink(0).Clip().
+	head := ui.Row(c).Height(a.detailsRowH()).FillWidth().Shrink(0).Clip().
 		AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(colorDivider())
 	searching := strings.TrimSpace(a.cur().query) != ""
@@ -211,7 +225,7 @@ func (a *App) detailsWidth() float32 {
 }
 
 func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool) {
-	cell := ui.ButtonBase(c).Height(detailsRowH).Padding(0, 8).Gap(4).
+	cell := ui.ButtonBase(c).Height(a.detailsRowH()).Padding(0, 8).Gap(4).
 		AlignItems(ui.Center).Margin(0, rowInset).Radius(4).Label(title)
 	if flex {
 		cell.Grow(1).Shrink(1).MinWidth(160)
@@ -240,12 +254,12 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 }
 
 func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
-	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(detailsRowH).
+	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(a.detailsRowH()).
 		AlignItems(ui.Center).Margin(0, rowInset).MinWidth(a.detailsWidth()).
 		Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
 	row.Children(func() {
-		name := ui.Row(c).Grow(1).Shrink(1).MinWidth(160).Height(detailsRowH).
+		name := ui.Row(c).Grow(1).Shrink(1).MinWidth(160).Height(a.detailsRowH()).
 			Padding(0, 8).Gap(8).AlignItems(ui.Center)
 		name.Children(func() {
 			a.nameCell(c, e, 16, 12)
@@ -288,7 +302,7 @@ func driveCapacity(e Entry) string {
 }
 
 func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
-	cell := ui.Row(c).Width(width).Shrink(0).Height(detailsRowH).
+	cell := ui.Row(c).Width(width).Shrink(0).Height(a.detailsRowH()).
 		Padding(0, 8).AlignItems(ui.Center)
 	if end {
 		cell.Justify(ui.End)
@@ -323,7 +337,7 @@ func (a *App) listView(c *ui.Context, entries []Entry) {
 }
 
 func (a *App) listRow(c *ui.Context, e Entry) {
-	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(listRowH).
+	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(a.listRowH()).
 		Padding(0, 8).Gap(8).AlignItems(ui.Center).Margin(0, rowInset).
 		Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)

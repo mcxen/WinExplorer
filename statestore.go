@@ -51,10 +51,9 @@ func loadState() *persistedState {
 	return st
 }
 
-// save writes the state back. Errors are ignored: a lost pin is harmless.
-func (st *persistedState) save() {
-	st.mu.Lock()
-	defer st.mu.Unlock()
+// saveLocked writes the state back, with the mutex already held by the
+// caller. Errors are ignored: a lost pin is harmless.
+func (st *persistedState) saveLocked() {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return
@@ -94,7 +93,7 @@ func (st *persistedState) pin(path string) bool {
 		return false
 	}
 	st.Pinned = slices.Insert(st.Pinned, 0, path)
-	st.save()
+	st.saveLocked()
 	return true
 }
 
@@ -105,7 +104,7 @@ func (st *persistedState) unpin(path string) bool {
 	for i, p := range st.Pinned {
 		if p == filepath.Clean(path) {
 			st.Pinned = slices.Delete(st.Pinned, i, i+1)
-			st.save()
+			st.saveLocked()
 			return true
 		}
 	}
@@ -132,7 +131,7 @@ func (st *persistedState) pushRecent(path string) {
 	if len(st.Recent) > maxRecent {
 		st.Recent = st.Recent[:maxRecent]
 	}
-	st.save()
+	st.saveLocked()
 }
 
 // PinnedList returns a copy of the pinned folder paths, newest first.
@@ -162,7 +161,7 @@ func (st *persistedState) logTrash(original, trashName string) {
 	if len(st.TrashLog) > 512 {
 		st.TrashLog = st.TrashLog[len(st.TrashLog)-512:]
 	}
-	st.save()
+	st.saveLocked()
 }
 
 func (st *persistedState) originalForTrash(trashName string) (string, bool) {
@@ -182,7 +181,7 @@ func (st *persistedState) forgetTrash(trashName string) {
 	st.TrashLog = slices.DeleteFunc(st.TrashLog, func(r trashRecord) bool {
 		return r.TrashName == trashName
 	})
-	st.save()
+	st.saveLocked()
 }
 
 // clearTrash drops the whole restore log, after 清空回收站.
@@ -190,7 +189,7 @@ func (st *persistedState) clearTrash() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.TrashLog = nil
-	st.save()
+	st.saveLocked()
 }
 
 // CompactPaths drops empties and duplicates in place.

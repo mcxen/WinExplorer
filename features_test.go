@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func newStoreApp(t *testing.T, dir string) *App {
@@ -116,12 +118,19 @@ func TestTrashRestoreAndUndo(t *testing.T) {
 		t.Fatalf("undo stack = %d", len(a.undo))
 	}
 
-	// 回收站 page lists it, and the restore log knows its origin.
+	// 回收站 page lists it, and the restore log knows its origin. The
+	// real trash can hold other items, so find ours by name.
+	var found *Entry
 	entries := trashEntries()
-	if len(entries) != 1 {
-		t.Fatalf("trash = %v", entries)
+	for i := range entries {
+		if _, ok := a.store.originalForTrash(entries[i].Name); ok && entries[i].Size == 7 {
+			found = &entries[i]
+		}
 	}
-	orig, ok := a.store.originalForTrash(entries[0].Name)
+	if found == nil {
+		t.Fatalf("victim missing from trash: %v", entries)
+	}
+	orig, ok := a.store.originalForTrash(found.Name)
 	if !ok || orig != victim {
 		t.Fatalf("restore log = %q %v", orig, ok)
 	}
@@ -134,8 +143,14 @@ func TestTrashRestoreAndUndo(t *testing.T) {
 	if b, _ := os.ReadFile(victim); string(b) != "keep me" {
 		t.Fatalf("content changed: %q", b)
 	}
-	if a.canUndo() || len(trashEntries()) != 0 {
-		t.Fatal("undo stack / trash not drained")
+	if a.canUndo() {
+		t.Fatal("undo stack not drained")
+	}
+	// Our item is gone from the trash; other system items may remain.
+	for _, e := range trashEntries() {
+		if e.Name == found.Name {
+			t.Fatalf("restored item still in trash: %q", e.Name)
+		}
 	}
 }
 
@@ -228,9 +243,11 @@ func TestGroupedRows(t *testing.T) {
 	defer os.RemoveAll(dir)
 	a := newStoreApp(t, dir)
 	old := time.Now().AddDate(0, 0, -30)
+	// groupedRows receives entries already sorted, as visibleEntries
+	// returns them; sizes ascending.
 	entries := []Entry{
-		{Name: "b.txt", Ext: "txt", Size: 10, ModTime: old},
 		{Name: "a.md", Ext: "md", Size: 0, ModTime: time.Now()},
+		{Name: "b.txt", Ext: "txt", Size: 10, ModTime: old},
 		{Name: "c.bin", Ext: "bin", Size: 200 * 1024 * 1024, ModTime: old},
 	}
 	a.grouping = groupNone
@@ -239,11 +256,8 @@ func TestGroupedRows(t *testing.T) {
 	}
 	a.grouping = SortSize
 	rows := a.groupedRows(entries)
-	if len(rows) != 5 { // 3 entries + 2 headers
+	if len(rows) != 6 { // 3 entries + 3 headers
 		t.Fatalf("grouped rows = %d: %+v", len(rows), rows)
-	}
-	if rows[0].header != "空" || rows[1].e.Name != "a.md" {
-		t.Fatalf("size groups wrong: %+v", rows)
 	}
 	headers := []string{rows[0].header, rows[2].header, rows[4].header}
 	want := []string{"空", "小于 100 KB", "大"}
@@ -251,5 +265,8 @@ func TestGroupedRows(t *testing.T) {
 		if headers[i] != want[i] {
 			t.Fatalf("header[%d] = %q want %q", i, headers[i], want[i])
 		}
+	}
+	if rows[1].e.Name != "a.md" || rows[3].e.Name != "b.txt" || rows[5].e.Name != "c.bin" {
+		t.Fatalf("entries not under their headers: %+v", rows)
 	}
 }

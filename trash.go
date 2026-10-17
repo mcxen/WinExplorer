@@ -14,34 +14,8 @@ import (
 // bin, with 还原 (put back) for files this app deleted, 永久删除 and
 // 清空回收站.
 
-// trashEntries lists ~/.Trash. Only files this app deleted have a restore
-// record; the rest come from the system and can only be deleted.
-func trashEntries() []Entry {
-	trash, err := trashDir()
-	if err != nil {
-		return nil
-	}
-	dir, err := os.ReadDir(trash)
-	if err != nil {
-		return nil
-	}
-	entries := make([]Entry, 0, len(dir))
-	for _, d := range dir {
-		path := filepath.Join(trash, d.Name())
-		info, err := os.Lstat(path)
-		if err != nil {
-			continue
-		}
-		entries = append(entries, Entry{
-			Name:    d.Name(),
-			Path:    path,
-			IsDir:   info.IsDir(),
-			Size:    info.Size(),
-			ModTime: info.ModTime(),
-		})
-	}
-	return entries
-}
+// trashEntries is this OS's trash listing (platform.go).
+func trashEntries() []Entry { return sysTrashList() }
 
 // trashMenu is the trash page's item menu: 还原 where the original path is
 // known, 永久删除, properties.
@@ -52,7 +26,7 @@ func (a *App) trashMenu(m *ui.Menu, e Entry) {
 	sel := a.selectedEntries()
 	allRestorable := len(sel) > 0
 	for _, s := range sel {
-		if _, ok := a.store.originalForTrash(filepath.Base(s.Path)); !ok {
+		if _, ok := a.store.originalForTrash(sysTrashKey(s.Path)); !ok {
 			allRestorable = false
 			break
 		}
@@ -92,7 +66,7 @@ func (a *App) doRestore() {
 	var failed []string
 	var restored []string
 	for _, e := range sel {
-		original, ok := a.store.originalForTrash(filepath.Base(e.Path))
+		original, ok := a.store.originalForTrash(sysTrashKey(e.Path))
 		if !ok {
 			continue
 		}
@@ -107,11 +81,11 @@ func (a *App) doRestore() {
 			continue
 		}
 		dst := filepath.Join(parent, name)
-		if err := os.Rename(e.Path, dst); err != nil {
+		if err := sysTrashRestore(e.Path, dst); err != nil {
 			failed = append(failed, e.Name)
 			continue
 		}
-		a.store.forgetTrash(filepath.Base(e.Path))
+		a.store.forgetTrash(sysTrashKey(e.Path))
 		a.pushUndo(undoOp{
 			desc:  "还原 " + filepath.Base(original),
 			moved: []undoMove{{From: e.Path, To: dst}},
@@ -153,7 +127,7 @@ func (a *App) doPermanentDelete() {
 	}
 	var failed []string
 	for _, e := range sel {
-		if err := os.RemoveAll(e.Path); err != nil {
+		if err := sysTrashRemove(e.Path); err != nil {
 			failed = append(failed, e.Name)
 		}
 	}
@@ -180,8 +154,9 @@ func (a *App) doEmptyTrash() {
 	if err != nil || res.Button != 0 {
 		return
 	}
-	for _, e := range entries {
-		_ = os.RemoveAll(e.Path)
+	if err := sysTrashEmpty(); err != nil {
+		a.statusMsg = "无法清空回收站：" + err.Error()
+		return
 	}
 	a.store.clearTrash()
 	a.reload()

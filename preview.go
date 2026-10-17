@@ -344,42 +344,22 @@ func decodeImage(path string) (*ui.Bitmap, error) {
 	return quickLookThumb(path, 1024)
 }
 
-// quickLookThumb asks macOS Quick Look for a thumbnail of path and decodes
-// the PNG it writes into a ui.Bitmap.
+// quickLookThumb renders a system thumbnail of path (platform.go:
+// Quick Look on macOS; nil where the OS has none).
 func quickLookThumb(path string, size int) (*ui.Bitmap, error) {
-	img, err := quickLookImage(path, size)
+	img, err := sysThumbImage(path, size)
 	if err != nil {
 		return nil, err
+	}
+	if img == nil {
+		return nil, fmt.Errorf("系统缩略图不可用")
 	}
 	return ui.NewBitmap(img), nil
 }
 
-// quickLookImage is quickLookThumb as the decoded picture, for callers
-// that compose it with others. No cgo involved.
+// quickLookImage is quickLookThumb as the decoded picture.
 func quickLookImage(path string, size int) (image.Image, error) {
-	dir, err := os.MkdirTemp("", "we-ql")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(dir)
-	cmd := exec.Command("qlmanage", "-t", "-s", fmt.Sprint(size), "-o", dir, path)
-	if b, e := cmd.CombinedOutput(); e != nil {
-		return nil, fmt.Errorf("%s: %v", string(b), e)
-	}
-	matches, _ := filepath.Glob(filepath.Join(dir, "*"))
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("没有生成缩略图")
-	}
-	f, err := os.Open(matches[0])
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		return nil, err
-	}
-	return img, nil
+	return sysThumbImage(path, size)
 }
 
 // pdfPoster renders the first page of a PDF to an image via Quick Look.
@@ -419,25 +399,8 @@ func formatProps(path string, kind previewKind) []propRow {
 	return nil
 }
 
-// mdlsMeta parses a few useful attributes from `mdls`.
-func mdlsMeta(path string) ([]propRow, bool) {
-	out, err := exec.Command("mdls", "-name", "kMDItemPixelWidth",
-		"-name", "kMDItemPixelHeight", "-name", "kMDItemNumberOfPages",
-		"-name", "kMDItemFSOwnerName", path).Output()
-	if err != nil {
-		return nil, false
-	}
-	vals := parseMdls(string(out))
-	var rows []propRow
-	if w, ok := vals["kMDItemPixelWidth"]; ok && w != "(null)" {
-		h := vals["kMDItemPixelHeight"]
-		rows = append(rows, propRow{Key: "尺寸", Val: w + " × " + h + " 像素"})
-	}
-	if p, ok := vals["kMDItemNumberOfPages"]; ok && p != "(null)" {
-		rows = append(rows, propRow{Key: "页数", Val: p})
-	}
-	return rows, len(rows) > 0
-}
+// mdlsMeta adds the OS's own file metadata (platform.go).
+func mdlsMeta(path string) ([]propRow, bool) { return sysFileMeta(path) }
 
 func parseMdls(s string) map[string]string {
 	m := map[string]string{}

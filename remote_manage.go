@@ -418,20 +418,6 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 500, "object not found")
 		return
 	}
-	trash, err := trashDir()
-	if err != nil {
-		// ~/.Trash may be missing on a fresh account; the Finder creates it
-		// on demand, so do the same and look once more.
-		if home, herr := os.UserHomeDir(); herr == nil && home != "" {
-			if mkErr := os.MkdirAll(filepath.Join(home, ".Trash"), 0o700); mkErr == nil {
-				trash, err = trashDir()
-			}
-		}
-		if err != nil {
-			remoteErr(w, 500, err.Error())
-			return
-		}
-	}
 	for _, name := range req.Names {
 		if !remoteValidBatchName(name) {
 			continue
@@ -440,14 +426,15 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 		if _, err := os.Lstat(disk); err != nil {
 			continue // already gone: best effort, like OpenList
 		}
-		dst, err := moveToTrash(disk, trash)
+		dst, key, err := sysTrashMove(disk)
 		if err != nil {
 			remoteErr(w, 500, err.Error())
 			return
 		}
-		if a.store != nil {
-			a.store.logTrash(disk, filepath.Base(dst))
+		if a.store != nil && key != "" {
+			a.store.logTrash(disk, key)
 		}
+		_ = dst
 	}
 	remoteOK(w, nil)
 }

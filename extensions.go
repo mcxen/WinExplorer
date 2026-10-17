@@ -127,7 +127,7 @@ func (x shellExt) expand(e Entry) string {
 }
 
 // run executes the command for the entry. terminal:true runs it in a new
-// Terminal window, as Explorer's shell verbs can launch a console;
+// terminal window, as Explorer's shell verbs can launch a console;
 // otherwise it runs through sh detached, so a slow tool never blocks the
 // UI (the goroutine reaps it too).
 func (x shellExt) run(e Entry) error {
@@ -136,10 +136,7 @@ func (x shellExt) run(e Entry) error {
 		return nil
 	}
 	if x.Terminal {
-		script := strings.ReplaceAll(cmd, `\`, `\\`)
-		script = strings.ReplaceAll(script, `"`, `\"`)
-		return exec.Command("osascript", "-e",
-			`tell application "Terminal" to do script "`+script+`"`).Run()
+		return sysTerminalRun(cmd)
 	}
 	c := exec.Command("sh", "-c", cmd)
 	if err := c.Start(); err != nil {

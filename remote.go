@@ -231,6 +231,8 @@ func (a *App) remoteMux() *http.ServeMux {
 	mux.HandleFunc("/api/fs/remove", a.remoteHandleRemove)
 	mux.HandleFunc("/api/fs/dirs", a.remoteHandleDirs)
 	mux.HandleFunc("/api/fs/put", a.remoteHandlePut)
+	mux.HandleFunc("/api/fs/archive/unzip", a.remoteHandleArchiveUnzip)
+	mux.HandleFunc("/api/fs/archive/zip", a.remoteHandleArchiveZip)
 	mux.HandleFunc("/api/share/create", a.remoteHandleShareCreate)
 	mux.HandleFunc("/api/share/list", a.remoteHandleShareList)
 	mux.HandleFunc("/api/share/get", a.remoteHandleShareGet)

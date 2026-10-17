@@ -244,8 +244,20 @@ func TestRemotePublicEndpoints(t *testing.T) {
 	}
 
 	rr = e.api(http.MethodGet, "/api/public/archive_extensions", "", nil)
-	if rr.Code != 200 || string(rr.Data) != "[]" {
-		t.Fatalf("archive_extensions: code %d data %s, want an empty array", rr.Code, rr.Data)
+	var exts []string
+	if rr.Code != 200 || json.Unmarshal(rr.Data, &exts) != nil {
+		t.Fatalf("archive_extensions: code %d data %s, want an array of extensions", rr.Code, rr.Data)
+	}
+	for _, want := range []string{".zip", ".tar.gz", ".7z"} {
+		found := false
+		for _, ext := range exts {
+			if ext == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("archive_extensions = %v, missing %s", exts, want)
+		}
 	}
 
 	res, body := e.do(http.MethodGet, "/", nil)

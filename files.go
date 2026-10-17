@@ -631,31 +631,59 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 }
 
 // tileGlyph is a tile's icon area: a picture or video shows its own frame,
-// a folder holding media shows a cover tiled from it, and everything else
-// keeps the drawn file or folder glyph. The drawn glyphs stay under
-// thumbMinBox, where 16 px of picture says less than the file-type colour.
+// a folder holding media keeps its folder shape with the pictures inside
+// it, and everything else is the drawn file or folder glyph. The drawn
+// glyphs stay under thumbMinBox, where 16 px of picture says less than the
+// file-type colour.
 func (a *App) tileGlyph(c *ui.Context, e Entry, box float32) {
 	if box >= thumbMinBox {
-		var bm *ui.Bitmap
 		if e.IsDir {
 			if a.folderCoverEligible(e) {
-				bm = folderCoverThumb(e.Path, box)
-			}
-		} else {
-			bm = mediaThumb(e.Path, box)
-		}
-		if bm != nil {
-			frame := ui.Box(c).Size(box, box).Shrink(0).Radius(4).Clip()
-			frame.Children(func() {
-				ui.Image(c, bm).Fit(ui.Cover).Size(box, box)
-				if isVideoExt(lowerExt(e.Path)) {
-					a.videoBadge(c, box)
+				if bm := folderCoverThumb(e.Path, box); bm != nil {
+					a.folderCoverTile(c, box, bm)
+					return
 				}
-			})
+			}
+		} else if bm := mediaThumb(e.Path, box); bm != nil {
+			a.mediaTile(c, e, box, bm)
 			return
 		}
 	}
 	a.fileIcon(c, e, box)
+}
+
+// mediaTile is a picture's tile: the picture fills it, and a video's gets
+// the play badge over it.
+func (a *App) mediaTile(c *ui.Context, e Entry, box float32, bm *ui.Bitmap) {
+	frame := ui.Box(c).Size(box, box).Shrink(0).Radius(4).Clip()
+	frame.Children(func() {
+		ui.Image(c, bm).Fit(ui.Cover).Size(box, box)
+		if isVideoExt(lowerExt(e.Path)) {
+			a.videoBadge(c, box)
+		}
+	})
+}
+
+// folderCoverTile is a media folder's tile. The folder is still a folder —
+// its tab, its edges, its colour — and the pictures of its media fill the
+// front panel inside it, which is how Explorer draws a folder that holds
+// pictures: the folder's silhouette is what tells it apart from a file
+// among the tiles.
+func (a *App) folderCoverTile(c *ui.Context, box float32, bm *ui.Bitmap) {
+	glyph := ui.Box(c).Size(box, box).Shrink(0)
+	glyph.Children(func() {
+		shell := ui.Box(c).Absolute().Left(0).Top(0).Size(box, box).Shrink(0)
+		shell.Draw(func(p *ui.Painter, r ui.Rect) {
+			drawFolder(p, r, colorFolder())
+		})
+		panel := folderCoverPanel(box)
+		cover := ui.Box(c).Absolute().Left(panel.X).Top(panel.Y).
+			Size(panel.W, panel.H).Shrink(0).
+			Radius(folderCoverPanelRadius(box)).Clip()
+		cover.Children(func() {
+			ui.Image(c, bm).Fit(ui.Cover).Size(panel.W, panel.H)
+		})
+	})
 }
 
 // videoBadge marks a video's thumbnail with the round play badge Explorer
@@ -896,7 +924,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	}
 	if one && !sel[0].IsDir && !onSpecial {
 		m.Submenu("打开方式", func(n *ui.Menu) {
-			a.openWithMenu(n, sel[0])
+			sysOpenWithMenu(a, n, sel[0])
 		})
 	}
 	if oneDir && !onSpecial {

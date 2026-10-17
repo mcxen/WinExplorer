@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"os/exec"
 	"sync/atomic"
 
 	"github.com/egoist/mygo/ui"
@@ -111,7 +110,7 @@ func (a *App) propertiesBody(c *ui.Context) {
 				ui.Text(c, "在 Finder 中显示").FontSize(12).TextColor(colorText())
 			})
 			if reveal.Clicked() {
-				_ = exec.Command("open", "-R", e.Path).Run()
+				_ = sysReveal(e.Path)
 			}
 			open := ui.ButtonBase(c).Height(30).Radius(4).
 				Background(colorAddress()).Border(1, colorDivider()).Label("打开")

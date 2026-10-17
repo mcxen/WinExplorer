@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -39,9 +38,8 @@ func (a *App) doOpen() {
 	}
 }
 
-func openWithOS(path string) error {
-	return exec.Command("open", path).Run()
-}
+// openWithOS opens a file with the OS default application (platform.go).
+func openWithOS(path string) error { return sysOpen(path) }
 
 func (a *App) doCopy() {
 	a.storeClip(false)
@@ -360,11 +358,6 @@ func (a *App) doDelete() {
 	if len(sel) == 0 {
 		return
 	}
-	trash, err := trashDir()
-	if err != nil {
-		a.statusMsg = "无法删除：" + err.Error()
-		return
-	}
 	var failed []string
 	var moved []undoMove
 	var desc string
@@ -373,13 +366,17 @@ func (a *App) doDelete() {
 			failed = append(failed, e.Name)
 			continue
 		}
-		dst, err := moveToTrash(e.Path, trash)
+		dst, key, err := moveToTrash(e.Path)
 		if err != nil {
 			failed = append(failed, e.Name)
 			continue
 		}
-		a.store.logTrash(e.Path, filepath.Base(dst))
-		moved = append(moved, undoMove{From: e.Path, To: dst})
+		if key != "" {
+			a.store.logTrash(e.Path, key)
+		}
+		if dst != "" {
+			moved = append(moved, undoMove{From: e.Path, To: dst})
+		}
 	}
 	if n := len(moved); n > 0 {
 		desc = "删除"
@@ -397,37 +394,12 @@ func (a *App) doDelete() {
 	}
 }
 
-func trashDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return "", fmt.Errorf("找不到用户目录")
-	}
-	dir := filepath.Join(home, ".Trash")
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
-		return "", fmt.Errorf("找不到废纸篓")
-	}
-	return dir, nil
-}
+// trashDir is where this OS's trash lives (platform.go).
+func trashDir() (string, error) { return sysTrashDir() }
 
-// moveToTrash relocates path into ~/.Trash, uniquifying the name if
-// needed, and returns the trash path it landed at. It never deletes the
-// original in place.
-func moveToTrash(path, trash string) (string, error) {
-	base := filepath.Base(path)
-	if base == "" || base == "." || base == string(filepath.Separator) {
-		return "", fmt.Errorf("无效的路径")
-	}
-	name, err := uniqueTrashName(trash, base)
-	if err != nil {
-		return "", err
-	}
-	dst := filepath.Join(trash, name)
-	if err := os.Rename(path, dst); err != nil {
-		return "", err
-	}
-	return dst, nil
-}
+// moveToTrash sends path to this OS's trash, returning where it landed
+// plus the key the restore log files it under (platform.go).
+func moveToTrash(path string) (string, string, error) { return sysTrashMove(path) }
 
 func uniqueTrashName(dir, name string) (string, error) {
 	candidate := name
@@ -583,12 +555,12 @@ func (a *App) doNewTextFile() {
 	a.cur().renameBuf = name
 }
 
-// openInTerminal 在系统终端中打开目录（macOS 为 Terminal.app）。
+// openInTerminal opens a terminal window at dir (platform.go).
 func (a *App) openInTerminal(dir string) {
-	if dir == "" || dir == pathThisPC {
+	if dir == "" || specialPath(dir) {
 		return
 	}
-	if err := exec.Command("open", "-a", "Terminal", dir).Run(); err != nil {
+	if err := sysTerminal(dir); err != nil {
 		a.statusMsg = "无法打开终端：" + err.Error()
 	}
 }

@@ -180,10 +180,3 @@ var remoteSettings = map[string]string{
 func (a *App) remoteHandleSettings(w http.ResponseWriter, r *http.Request) {
 	remoteOK(w, remoteSettings)
 }
-
-// remoteHandleArchiveExt implements GET /api/public/archive_extensions,
-// which the web UI requests at startup and breaks without; Sunvale serves
-// no in-browser archive preview.
-func (a *App) remoteHandleArchiveExt(w http.ResponseWriter, r *http.Request) {
-	remoteOK(w, []string{})
-}

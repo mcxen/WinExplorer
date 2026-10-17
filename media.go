@@ -25,13 +25,14 @@ type audioPlayer struct {
 	f      *os.File
 	dur    time.Duration
 	ticker chan struct{}
-	// afplay mode covers the formats MyGo's decoders do not (m4a, aiff,
-	// flac…): the file plays through macOS's own afplay, with afinfo's
-	// duration for the clock. Seek is not available in that mode.
-	afplayPath string
-	afCmd      *exec.Cmd
-	afStarted  time.Time
-	mu         sync.Mutex
+	// The OS fallback covers the formats MyGo's decoders do not (m4a,
+	// aiff, flac…): the file plays through the OS's player with its
+	// reported duration for the clock. Seek is not available in it.
+	afName    string
+	afArgs    []string
+	afCmd     *exec.Cmd
+	afStarted time.Time
+	mu        sync.Mutex
 }
 
 // stop halts playback, ends the repaint ticker, stops an afplay run and
@@ -105,11 +106,11 @@ func (p *audioPlayer) toggle() {
 		p.mu.Unlock()
 		return
 	}
-	if p.afplayPath == "" {
+	if p.afName == "" {
 		p.mu.Unlock()
 		return
 	}
-	cmd := exec.Command("afplay", p.afplayPath)
+	cmd := exec.Command(p.afName, p.afArgs...)
 	if err := cmd.Start(); err != nil {
 		p.mu.Unlock()
 		return
@@ -178,26 +179,13 @@ func loadAudio(path string) mediaInfo {
 	if err != nil {
 		f.Close()
 		// Formats MyGo's decoders do not cover (m4a, aiff, flac…) still
-		// preview and play through macOS's own afplay.
-		if dur, ok := afplayDuration(path); ok {
-			return mediaInfo{player: &audioPlayer{afplayPath: path, dur: dur}}
+		// preview and play through the OS's fallback player.
+		if name, args, dur, ok := sysAudioPlay(path); ok {
+			return mediaInfo{player: &audioPlayer{afName: name, afArgs: args, dur: dur}}
 		}
 		return mediaInfo{}
 	}
 	return mediaInfo{player: &audioPlayer{player: player, f: f, dur: player.Duration()}}
-}
-
-// afplayDuration reports whether afplay can take the file, and how long
-// afinfo says it runs.
-func afplayDuration(path string) (time.Duration, bool) {
-	if _, err := exec.LookPath("afplay"); err != nil {
-		return 0, false
-	}
-	out, err := exec.Command("afinfo", path).Output()
-	if err != nil {
-		return 0, false
-	}
-	return parseAfinfoDuration(string(out))
 }
 
 // parseAfinfoDuration reads the "estimated duration: 123.456 sec" line.

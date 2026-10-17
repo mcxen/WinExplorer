@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // openwith.go is Explorer's 打开方式 (Open with) submenu: applications
@@ -30,7 +28,7 @@ var ensureOpenWithScanOnce atomic.Bool
 
 func ensureOpenWithScan() {
 	if ensureOpenWithScanOnce.CompareAndSwap(false, true) {
-		go scanOpenWithApps()
+		go sysOpenWithScan()
 	}
 }
 
@@ -47,7 +45,7 @@ func openWithApps(ext string) []string {
 // hundred subprocesses serially would take half a minute — and a fresh
 // snapshot is published as results arrive, so the 打开方式 menu fills
 // within a second of launch even though the scan continues behind it.
-func scanOpenWithApps() {
+func scanOpenWithAppsMac() {
 	var bundles []string
 	for _, dir := range []string{"/Applications", "/System/Applications"} {
 		apps, err := os.ReadDir(dir)
@@ -214,33 +212,4 @@ func cutFirst(s, sep string) (string, bool) {
 		return "", false
 	}
 	return s[i+len(sep):], true
-}
-
-// openWithApp launches path with the named application.
-func openWithApp(app, path string) error {
-	return exec.Command("open", "-a", app, path).Run()
-}
-
-// openWithMenu builds the 打开方式 submenu for the selected file: the
-// declaring applications, then a way to browse for more.
-func (a *App) openWithMenu(m *ui.Menu, e Entry) {
-	ensureOpenWithScan()
-	shown := 0
-	for _, app := range openWithApps(e.Ext) {
-		if shown >= 8 {
-			break
-		}
-		if m.Item(app).Chosen() {
-			if err := openWithApp(app, e.Path); err != nil {
-				a.statusMsg = "无法用 " + app + " 打开：" + err.Error()
-			}
-		}
-		shown++
-	}
-	if shown > 0 {
-		m.Separator()
-	}
-	if m.Item("在 /Applications 中查看…").Chosen() {
-		a.navigate("/Applications")
-	}
 }

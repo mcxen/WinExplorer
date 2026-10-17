@@ -201,17 +201,23 @@ func TestDupsDeleteExtras(t *testing.T) {
 	if !a.canUndo() {
 		t.Fatal("delete not recorded for undo")
 	}
-	// The trash log knows the extra by the name it landed under; the real
-	// trash can hold other items, so find ours through the log.
-	logged := false
-	for _, e := range trashEntries() {
-		if orig, ok := a.store.originalForTrash(e.Name); ok && orig == lose {
-			logged = true
-			break
+	// The trash log knows the extra by the name it landed under: the fresh
+	// store holds exactly one record, and the file must be in the trash
+	// under that name. The listing cross-check runs only when the trash is
+	// readable (macOS TCC denies reads of ~/.Trash to unprivileged
+	// processes while renames into it still work).
+	rec := loggedTrashRecord(t, a, lose)
+	if trashReadable(t) {
+		listed := false
+		for _, e := range trashEntries() {
+			if e.Name == rec.TrashName {
+				listed = true
+				break
+			}
 		}
-	}
-	if !logged {
-		t.Fatal("trash log does not know the extra")
+		if !listed {
+			t.Fatalf("extra %q missing from the trash listing", rec.TrashName)
+		}
 	}
 	a.doUndo()
 	if _, err := os.Stat(lose); err != nil {

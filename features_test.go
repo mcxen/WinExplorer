@@ -18,6 +18,43 @@ func newStoreApp(t *testing.T, dir string) *App {
 	return a
 }
 
+// trashReadable reports whether this process may list the trash. macOS's
+// TCC denies reads of ~/.Trash to terminals without Full Disk Access while
+// renames into it still work, so tests that enumerate the trash degrade to
+// log-and-Stat assertions when the listing is denied.
+func trashReadable(t *testing.T) bool {
+	t.Helper()
+	dir, err := trashDir()
+	if err != nil {
+		return false
+	}
+	_, rerr := os.ReadDir(dir)
+	return rerr == nil
+}
+
+// loggedTrashRecord asserts the fresh store's trash log knows exactly the
+// one deletion and that the file is really in the trash under the logged
+// name — no listing permission needed (see trashReadable) — and returns
+// the record.
+func loggedTrashRecord(t *testing.T, a *App, wantOriginal string) trashRecord {
+	t.Helper()
+	if len(a.store.TrashLog) != 1 {
+		t.Fatalf("trash log = %d records, want 1", len(a.store.TrashLog))
+	}
+	rec := a.store.TrashLog[0]
+	if rec.Original != wantOriginal || rec.TrashName == "" {
+		t.Fatalf("trash log = %+v, want it to know %q", rec, wantOriginal)
+	}
+	trash, err := trashDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(trash, rec.TrashName)); err != nil {
+		t.Fatalf("logged trash item missing: %v", err)
+	}
+	return rec
+}
+
 func TestSpecialPaths(t *testing.T) {
 	for _, p := range []string{pathThisPC, pathHome, pathTrash} {
 		if !specialPath(p) {
@@ -118,21 +155,22 @@ func TestTrashRestoreAndUndo(t *testing.T) {
 		t.Fatalf("undo stack = %d", len(a.undo))
 	}
 
-	// 回收站 page lists it, and the restore log knows its origin. The
-	// real trash can hold other items, so find ours by name.
-	var found *Entry
-	entries := trashEntries()
-	for i := range entries {
-		if _, ok := a.store.originalForTrash(entries[i].Name); ok && entries[i].Size == 7 {
-			found = &entries[i]
+	// 回收站 page lists it, and the restore log knows its origin. The log
+	// itself is checked directly — the fresh store holds exactly one record
+	// — and the file must be in the trash under the logged name. The
+	// listing cross-check runs only when the trash is readable (macOS TCC).
+	rec := loggedTrashRecord(t, a, victim)
+	if trashReadable(t) {
+		found := false
+		for _, e := range trashEntries() {
+			if e.Name == rec.TrashName {
+				found = true
+				break
+			}
 		}
-	}
-	if found == nil {
-		t.Fatalf("victim missing from trash: %v", entries)
-	}
-	orig, ok := a.store.originalForTrash(found.Name)
-	if !ok || orig != victim {
-		t.Fatalf("restore log = %q %v", orig, ok)
+		if !found {
+			t.Fatalf("victim %q missing from the trash listing", rec.TrashName)
+		}
 	}
 
 	// Ctrl+Z puts it back where it was.
@@ -147,9 +185,18 @@ func TestTrashRestoreAndUndo(t *testing.T) {
 		t.Fatal("undo stack not drained")
 	}
 	// Our item is gone from the trash; other system items may remain.
-	for _, e := range trashEntries() {
-		if e.Name == found.Name {
-			t.Fatalf("restored item still in trash: %q", e.Name)
+	trash, err := trashDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(trash, rec.TrashName)); !os.IsNotExist(err) {
+		t.Fatalf("restored item still in trash: %v", err)
+	}
+	if trashReadable(t) {
+		for _, e := range trashEntries() {
+			if e.Name == rec.TrashName {
+				t.Fatalf("restored item still in trash: %q", e.Name)
+			}
 		}
 	}
 }

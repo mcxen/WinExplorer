@@ -49,6 +49,10 @@ var (
 	// tokFieldBorder is the border of editable fields (text areas), a touch
 	// darker than tokDivider in the light theme so inputs read as inputs.
 	tokFieldBorder = pick("#D6D6D6", "#383838")
+	// tokHit is the search hit highlight, Everything's yellow mark: strong
+	// on the light theme, a softer amber on the dark one where pure yellow
+	// outshines the text.
+	tokHit = pick("#FFE28A", "#8A6D00")
 )
 
 var tokHover = func() ui.Color {
@@ -76,6 +80,7 @@ func colorMuted() ui.Color    { return tokMuted }
 func colorAccent() ui.Color   { return tokAccent }
 func colorDivider() ui.Color  { return tokDivider }
 func colorFolder() ui.Color   { return tokFolder }
+func colorHit() ui.Color      { return tokHit }
 func colorStatus() ui.Color   { return tokStatus }
 func colorAddress() ui.Color  { return tokAddress }
 

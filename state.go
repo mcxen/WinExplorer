@@ -45,8 +45,31 @@ type tabState struct {
 	// it into view in that frame (handleKeys clears it each frame).
 	reveal string
 
+	// marquee is the rubber-band selection's state while the pointer drags
+	// on the pane's empty space, and itemBounds the window box of every row
+	// or tile the frame before laid out, which the band hit-tests against.
+	marquee    marqueeState
+	itemBounds map[string]ui.Rect
+
 	// search is this tab's query walk state (search.go).
 	search searchState
+	// hlCache is the parsed query the pane highlights with (search.go):
+	// parsing on every row of every frame would show.
+	hlCache struct {
+		query  string
+		parsed searchQuery
+	}
+}
+
+// marqueeState tracks a rubber-band drag: where it began and where the
+// pointer is now, both in window DIPs, the modifiers held as it began, and
+// the selection as it was before the drag, which Shift and Ctrl build on.
+type marqueeState struct {
+	on     bool
+	x0, y0 float32
+	x1, y1 float32
+	mods   ui.Modifiers
+	base   map[string]bool
 }
 
 // App holds the window chrome state and the tab collection. The active tab's

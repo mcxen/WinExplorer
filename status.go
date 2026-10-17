@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -46,10 +45,10 @@ func (a *App) statusLeft() string {
 		return fmt.Sprintf("%d 个磁盘，%d 个健康  磁盘健康页", len(disks), good)
 	}
 	text := fmt.Sprintf("%d 个项目", len(visible))
-	if a.cur().search.busy {
-		text = "正在搜索…  " + text
-	} else if strings.TrimSpace(a.cur().query) != "" && !specialPath(a.cur().path) {
-		text = "搜索结果  " + text
+	// The search line is Everything's shape: count, elapsed, truncated
+	// query — streamed results keep it moving while the walk runs.
+	if label := a.searchStatusLabel(); label != "" {
+		text = label + "  " + text
 	}
 	if n := len(selected); n > 0 {
 		text += fmt.Sprintf("，%d 个项目被选中", n)

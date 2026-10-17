@@ -762,8 +762,42 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 		a.renameField(c, font)
 		return
 	}
+	// A live search marks the matched runs, Everything-style: the spans
+	// carry the hit background, the rest is the plain name. A query with
+	// no hit in this name (a path:-only match) falls through to plain text.
+	if q := a.activeSearchQuery(); len(q.terms) > 0 {
+		if spans := q.highlight(a.displayName(e)); len(spans) > 1 || (len(spans) == 1 && spans[0].hit) {
+			rich := ui.RichText(c, searchHitSpans(spans, font)...).
+				SingleLine().Grow(1).MinWidth(0)
+			_ = rich
+			return
+		}
+	}
 	ui.Text(c, a.displayName(e)).FontSize(font).TextColor(colorText()).
 		SingleLine().Grow(1).MinWidth(0)
+}
+
+// searchHitSpans converts the highlight runs into RichText spans: hit
+// runs carry the hit background, plain runs the ordinary text color. The
+// hit runs keep the text color: on the light theme the amber is pale
+// enough to carry dark text, and on the dark theme the amber is dark
+// enough for light text.
+func searchHitSpans(spans []highlightSpan, font float32) []ui.Span {
+	out := make([]ui.Span, 0, len(spans))
+	for _, s := range spans {
+		if s.text == "" {
+			continue
+		}
+		sp := ui.Span{Text: s.text, Size: font}
+		if s.hit {
+			sp.Background = colorHit()
+			sp.Color = colorText()
+		} else {
+			sp.Color = colorText()
+		}
+		out = append(out, sp)
+	}
+	return out
 }
 
 // renameField edits a.cur().renameBuf. Enter commits, Escape cancels, and both

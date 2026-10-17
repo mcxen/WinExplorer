@@ -102,6 +102,10 @@ type App struct {
 	quickLook bool
 	// propsOpen is the 属性 dialog modal (propsdialog.go).
 	propsOpen bool
+	// batch is the 批量重命名 dialog's state (batchrename.go).
+	batch batchRenameState
+	// settingsOpen is the 设置 dialog modal.
+	settingsOpen bool
 	// bootLogged reports the first-frame timing log has fired.
 	bootLogged bool
 	// shellExts are the registered context-menu commands (extensions.go).
@@ -191,4 +195,16 @@ func (a *App) allSelected() []string {
 		}
 	}
 	return out
+}
+
+// loadPersistedSettings copies the persisted settings into the app's
+// fields, so a new window starts the way the settings page left them.
+func (a *App) loadPersistedSettings() {
+	s := a.store.settings()
+	a.showHidden = s.ShowHidden
+	a.showExt = s.ShowExt
+	a.compact = s.Compact
+	a.itemCheckboxes = s.ItemCheckboxes
+	a.previewOpen = s.PreviewOpen
+	a.mode = ViewMode(s.Mode)
 }

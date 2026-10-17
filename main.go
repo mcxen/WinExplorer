@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -45,6 +46,9 @@ func unregisterApp(a *App) {
 }
 
 func main() {
+	// The updater plugin's window is native UI, as this app's windows
+	// are: it needs no webview.
+	mygo.Use(native.Plugin)
 	app := newApp()
 	registerApp(app)
 	// The archive associations in mygo.json open a folder for the
@@ -135,6 +139,9 @@ func newAppWithStore(store *persistedState) *App {
 	} else {
 		a.shellExts = exts
 	}
+	// The view settings the settings dialog last saved apply from the
+	// first listing on, so they land before the first reload.
+	a.loadPersistedSettings()
 	// The open-with and gallery registries are process-wide, and both scan
 	// lazily: the registry starts with the first 打开方式 menu, the
 	// gallery with the first visit of its page, so launching costs neither.
@@ -169,6 +176,8 @@ func (a *App) view(c *ui.Context) {
 	})
 	a.quickLookModal(c)
 	a.propertiesModal(c)
+	a.settingsModal(c)
+	a.batchRenameModal(c)
 }
 
 // handleKeys maps Explorer shortcuts. A focused text field consumes its
@@ -219,6 +228,8 @@ func (a *App) handleKeys(c *ui.Context) {
 		if sel := a.selectedEntries(); len(sel) == 1 {
 			a.showProperties()
 		}
+	case c.Shortcut(ui.Ctrl, ui.KeyComma), c.Shortcut(ui.Cmd, ui.KeyComma):
+		a.settingsOpen = true
 	case c.Shortcut(ui.Cmd, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyE),
 		c.Shortcut(ui.Ctrl, ui.KeyF), c.Shortcut(ui.Cmd, ui.KeyF), c.Shortcut(0, ui.KeyF3):
 		a.focusSearch = true

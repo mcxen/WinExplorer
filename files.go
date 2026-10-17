@@ -953,7 +953,8 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	if m.Item("复制为路径").Disabled(!anySel || onSpecial).Chosen() {
 		a.doCopyAsPath()
 	}
-	if m.Item("重命名").Disabled(!one || onSpecial).Chosen() {
+	// 单选内联重命名；多选为批量重命名对话框——菜单项都叫“重命名”。
+	if m.Item("重命名").Disabled(!anySel || onSpecial).Chosen() {
 		a.doRenameStart()
 	}
 	m.Separator()

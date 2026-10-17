@@ -422,16 +422,6 @@ func uniqueTrashName(dir, name string) (string, error) {
 	return "", fmt.Errorf("废纸篓中名称冲突")
 }
 
-func (a *App) doRenameStart() {
-	sel := a.selectedEntries()
-	if len(sel) != 1 {
-		return
-	}
-	a.cur().renaming = sel[0].Name
-	a.cur().renameBuf = sel[0].Name
-	a.cur().editingPath = false
-}
-
 func (a *App) commitRename() {
 	if a.cur().renaming == "" {
 		return

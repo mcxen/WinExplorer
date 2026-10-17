@@ -2,5 +2,23 @@
   "name": "Sunvale",
   "identifier": "com.mcxen.sunvale",
   "version": "0.1.1",
-  "out": "dist"
+  "out": "dist",
+  "fileAssociations": [
+    {
+      "ext": [
+        "zip",
+        "tar",
+        "gz",
+        "tgz",
+        "bz2",
+        "tbz2",
+        "xz",
+        "7z",
+        "rar"
+      ],
+      "name": "压缩文件",
+      "mimeType": "application/zip"
+    }
+  ],
+  "copyright": "© 2026 mcx"
 }

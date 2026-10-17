@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -46,6 +47,11 @@ func unregisterApp(a *App) {
 func main() {
 	app := newApp()
 	registerApp(app)
+	// The archive associations in mygo.json open a folder for the
+	// archive: a new window shows it, ready to 全部解压.
+	mygo.App.OnOpenFile(func(path string) {
+		app.openArchiveWindow(path)
+	})
 	mygo.App.WhenReady(func() {
 		win := newAppWindow(app)
 		win.OnClosed(func() { unregisterApp(app) })
@@ -59,6 +65,15 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// openArchiveWindow opens a window showing the folder an archive lives
+// in, with the archive selected, as Explorer does for an opened file
+// type it owns.
+func (a *App) openArchiveWindow(path string) {
+	dir := filepath.Dir(path)
+	a.openNewWindow(dir)
+	a.selectOnly(path)
 }
 
 // newAppWindow opens the window an App drives. Ctrl+N opens another one

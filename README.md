@@ -326,4 +326,6 @@ go test ./...
 
 - 回收站的还原日志（`state.json`）跨平台通用：删除时记录来源路径与箱内键名，Windows 的键取自 `$I/$R` 共享后缀。
 - 交叉编译矩阵：`darwin/arm64`、`linux/amd64`、`linux/arm64`、`windows/amd64`、`windows/arm64`、`js/wasm` 全部零错误（`GOOS=js` 走 `sys_other.go` 降级，保证可编译）。
-- 发布：`git tag v0.1.x` 触发 `release.yml` —— 测试 → 草稿 → 三平台并行构建安装包并上传 → 发布。
+- 发布：`git tag v0.1.x` 触发 `release.yml` —— 测试 → 草稿 → 三平台并行构建安装包并上传 → 发布。Windows 安装包由 NSIS 制作（CI 中 `apt install nsis`；本机 `brew install makensis`），用户级安装到 `%LOCALAPPDATA%\Programs\Sunvale`，无需管理员，带开始菜单快捷方式、控制面板卸载项、**文件关联**（压缩格式双击即在 Sunvale 中打开并选中，`OnOpenFile` 接收路径）与 URL scheme 注册，末页可选运行与桌面快捷方式，支持 `/S` 静默安装。
+- 应用图标 `resources/icon.png`（1024²，程序生成的 Windows 11 双色黄文件夹），构建时由 CLI 转成 .icns（macOS）/ 可执行文件图标资源（Windows）/ desktop entry 图标（Linux）。
+- `mygo.json` 的 `fileAssociations` 注册 zip/tar/gz/tgz/bz2/tbz2/xz/7z/rar 九种压缩格式；本机构建 Windows 安装包：`go run github.com/egoist/mygo/cmd/mygo@v0.5.5 build -platform windows/amd64`。

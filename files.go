@@ -55,6 +55,10 @@ func (a *App) filePane(c *ui.Context) {
 			a.galleryView(c)
 			return
 		}
+		if a.cur().path == pathDisks {
+			a.disksView(c)
+			return
+		}
 		entries := a.visibleEntries()
 		switch a.mode {
 		case ViewList:
@@ -66,6 +70,10 @@ func (a *App) filePane(c *ui.Context) {
 		}
 	})
 	a.bindPaneMenu(c, pane)
+	// The 重复文件查找 plugin's dialog renders over the window while open.
+	a.dupsModal(c)
+	// The 可视化查看占用 plugin's treemap dialog renders the same way.
+	a.usageModal(c)
 }
 
 // groupRow is one render row: either a group header band, or an entry.
@@ -857,7 +865,7 @@ func (a *App) clickEntry(path string, mods ui.Modifiers) {
 // the click when the pointer is on a row. The pane also accepts files
 // dragged from other applications, moving them into the current folder.
 func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
-	if a.cur().path != pathThisPC {
+	if a.cur().path != pathThisPC && a.cur().path != pathDisks {
 		if files := el.DroppedFiles(); len(files) > 0 {
 			a.doDropInto(c.Modifiers(), a.cur().path, files)
 		}
@@ -882,6 +890,18 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 		m.Separator()
 		if m.Item("在终端中打开").Disabled(special).Chosen() {
 			a.openInTerminal(a.cur().path)
+		}
+		// The 重复文件查找 plugin's scan of this folder's subtree.
+		if a.pluginEnabled(dupsPluginID) {
+			if m.Item("重复文件查找").Disabled(special).Chosen() {
+				a.openDups()
+			}
+		}
+		// The 可视化查看占用 plugin's treemap of this folder.
+		if a.pluginEnabled(usagePluginID) {
+			if m.Item("可视化查看占用").Disabled(special).Chosen() {
+				a.openUsage(a.cur().path)
+			}
 		}
 		m.Separator()
 		if m.Item("刷新").Chosen() {
@@ -967,6 +987,12 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	m.Separator()
 	if m.Item("在终端中打开").Disabled(!oneDir).Chosen() {
 		a.openInTerminal(sel[0].Path)
+	}
+	// The 可视化查看占用 plugin's treemap of the selected folder.
+	if oneDir && !onSpecial && a.pluginEnabled(usagePluginID) {
+		if m.Item("可视化查看占用").Chosen() {
+			a.openUsage(sel[0].Path)
+		}
 	}
 	a.extMenuItems(m)
 	if m.Item("删除").Disabled(!anySel).Chosen() {

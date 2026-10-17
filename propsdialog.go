@@ -101,38 +101,27 @@ func (a *App) propertiesBody(c *ui.Context) {
 					Grow(1).MinWidth(0).MaxLines(2)
 			})
 		}
+		// The hash plugin's SHA-256 row, for files.
+		if !e.IsDir && a.pluginEnabled(hashPluginID) {
+			a.requestHash(e.Path)
+			a.hashMetaRowValue(c, e.Path, 84)
+		}
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End).Padding(0, 4, 0, 0)
 		btns.Children(func() {
-			reveal := ui.ButtonBase(c).Height(30).Radius(4).
-				Background(colorAddress()).Border(1, colorDivider()).
-				Label("在 Finder 中显示")
-			reveal.Children(func() {
-				ui.Text(c, "在 Finder 中显示").FontSize(12).TextColor(colorText())
-			})
-			if reveal.Clicked() {
+			uikitSecondaryButton(c, "在 Finder 中显示", func() {
 				_ = sysReveal(e.Path)
-			}
-			open := ui.ButtonBase(c).Height(30).Radius(4).
-				Background(colorAddress()).Border(1, colorDivider()).Label("打开")
-			open.Children(func() {
-				ui.Text(c, "打开").FontSize(12).TextColor(colorText())
 			})
-			if open.Clicked() {
+			uikitSecondaryButton(c, "打开", func() {
 				if err := openWithOS(e.Path); err != nil {
 					a.statusMsg = "无法打开：" + err.Error()
 				} else {
 					a.recordRecent(e.Path)
 				}
 				a.propsOpen = false
-			}
-			ok := ui.ButtonBase(c).Height(30).Radius(4).
-				Background(colorAccent()).Label("确定")
-			ok.Children(func() {
-				ui.Text(c, "确定").FontSize(12).TextColor(ui.Hex("#FFFFFF"))
 			})
-			if ok.Clicked() {
+			uikitPrimaryButton(c, "确定", func() {
 				a.propsOpen = false
-			}
+			})
 		})
 	})
 }

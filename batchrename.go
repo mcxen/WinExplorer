@@ -273,20 +273,15 @@ func (a *App) batchRenameBody(c *ui.Context) {
 
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End)
 		btns.Children(func() {
-			cancel := ui.ButtonBase(c).Height(30).Radius(4).
-				Background(colorAddress()).Border(1, colorDivider()).Label("取消")
-			cancel.Children(func() {
-				ui.Text(c, "取消").FontSize(12).TextColor(colorText())
-			})
-			if cancel.Clicked() {
+			uikitSecondaryButton(c, "取消", func() {
 				a.batch.open = false
-			}
-			ok := ui.ButtonBase(c).Height(30).Radius(4).
-				Background(colorAccent()).Label("重命名").Disabled(a.batchHasClash())
-			ok.Children(func() {
-				ui.Text(c, "重命名").FontSize(12).TextColor(ui.Hex("#FFFFFF"))
 			})
-			if ok.Clicked() {
+			btn := ui.ButtonBase(c).Height(30).Radius(4).
+				Background(colorAccent()).Label("重命名").Disabled(a.batchHasClash())
+			btn.Children(func() {
+				ui.Text(c, "重命名").FontSize(12).TextColor(colorBtnText())
+			})
+			if btn.Clicked() {
 				a.commitBatchRename()
 			}
 		})

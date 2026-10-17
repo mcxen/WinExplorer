@@ -5,7 +5,11 @@ name: Release
 #   git tag v0.1.0 && git push origin v0.1.0
 #
 # The tag creates a draft release, each platform job builds its installers with
-# the MyGo CLI and attaches them to it, and the last job publishes it.
+# the MyGo CLI and attaches them to it, and the last job publishes it. When the
+# UPDATE_PRIVATE_KEY secret is set, the builds also sign the update files and
+# attach them: the update-<platform>.json manifests must reach the published
+# release — which is --latest, what update checks read — or update checks
+# find nothing.
 
 on:
   push:
@@ -55,18 +59,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Assets cover the installers plus what `mygo build` writes for signed
+          # updates next to them: the update-<platform>.json manifests (which
+          # must be attached for update checks to work), the signed .tar.gz
+          # update archives, and the .delta files. None of the update files
+          # exist when UPDATE_PRIVATE_KEY is unset, and deltas exist only once
+          # a signed release is published — the upload step ignores globs that
+          # matched nothing. install.sh is identical for both Linux platforms
+          # (it picks its target from uname at runtime), so only one is attached.
           - name: macOS
             os: macos-latest
             platform: darwin/universal
-            assets: dist/darwin-universal/*.dmg
+            assets: dist/darwin-universal/*.dmg dist/darwin-universal/*.tar.gz dist/darwin-universal/*.delta dist/darwin-universal/update-darwin-universal.json
           - name: Windows
             os: ubuntu-latest
             platform: windows/amd64,windows/arm64
-            assets: dist/windows-*/*Setup*.exe
+            assets: dist/windows-*/*Setup*.exe dist/windows-*/*.tar.gz dist/windows-*/*.delta dist/windows-*/update-windows-*.json
           - name: Linux
             os: ubuntu-latest
             platform: linux/amd64,linux/arm64
-            assets: dist/linux-*/*.deb dist/linux-*/*.tar.gz
+            assets: dist/linux-*/*.deb dist/linux-*/*.tar.gz dist/linux-*/*.delta dist/linux-*/update-linux-*.json dist/linux-amd64/install.sh
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -80,6 +92,12 @@ jobs:
         if: matrix.name == 'Windows'
         run: sudo apt-get update && sudo apt-get install -y nsis
       - name: Build the installers
+        env:
+          # Signs the update files (the secret holds mygo-update.key, from
+          # `mygo keygen`); without it the build still succeeds and only skips
+          # the update files (docs/updates.md), so CI works before the secret
+          # is configured.
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.UPDATE_PRIVATE_KEY }}
         run: |
           cli="github.com/egoist/mygo/cmd/mygo@$(go list -m -f '{{.Version}}' github.com/egoist/mygo)"
           go run "$cli" build -platform "${{ matrix.platform }}"
@@ -87,6 +105,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Update-file globs may match nothing (no UPDATE_PRIVATE_KEY secret,
+          # or no earlier signed release to delta from): drop them rather than
+          # pass the literal patterns to gh as file names.
+          shopt -s nullglob
           gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             ${{ matrix.assets }} --clobber
 

@@ -18,9 +18,13 @@ func (a *App) sidebar(c *ui.Context) {
 	pane.Children(func() {
 		ui.Scroll(c).Grow(1).FillWidth().Padding(8, 8, 12, 8).Gap(2).Children(func() {
 			a.navHome(c)
-			a.navItem(c, "nav-gallery", "画廊", "gallery", pathGallery, a.cur().path == pathGallery, func() {
-				a.navigate(pathGallery)
-			}, 0)
+			// The gallery plugin owns the 画廊 place: switched off, the
+			// pane does not list it, the page itself keeping a note.
+			if a.pluginEnabled("gallery") {
+				a.navItem(c, "nav-gallery", "画廊", "gallery", pathGallery, a.cur().path == pathGallery, func() {
+					a.navigate(pathGallery)
+				}, 0)
+			}
 			for _, p := range a.pinnedPlaces() {
 				a.navPlace(c, p, 0)
 			}
@@ -29,6 +33,7 @@ func (a *App) sidebar(c *ui.Context) {
 				for _, p := range a.thisPCPlaces() {
 					a.navPlace(c, p, 24)
 				}
+				a.navDisks(c)
 				a.navTrash(c)
 			}
 		})
@@ -85,6 +90,13 @@ func (a *App) navThisPC(c *ui.Context) {
 func (a *App) navTrash(c *ui.Context) {
 	a.navItem(c, "nav-trash", "回收站", "trash", pathTrash, a.cur().path == pathTrash, func() {
 		a.navigate(pathTrash)
+	}, 24)
+}
+
+// navDisks is the 磁盘健康 row under the expanded 此电脑.
+func (a *App) navDisks(c *ui.Context) {
+	a.navItem(c, "nav-disks", "磁盘健康", "drive", pathDisks, a.cur().path == pathDisks, func() {
+		a.navigate(pathDisks)
 	}, 24)
 }
 

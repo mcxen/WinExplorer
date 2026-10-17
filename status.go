@@ -32,6 +32,16 @@ func (a *App) statusLeft() string {
 		}
 		return "正在扫描图片…"
 	}
+	if a.cur().path == pathDisks {
+		disks := readDiskHealth()
+		good := 0
+		for _, d := range disks {
+			if d.HealthOK {
+				good++
+			}
+		}
+		return fmt.Sprintf("%d 个磁盘，%d 个健康  磁盘健康页", len(disks), good)
+	}
 	text := fmt.Sprintf("%d 个项目", len(visible))
 	if a.cur().search.busy {
 		text = "正在搜索…  " + text

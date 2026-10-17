@@ -37,7 +37,7 @@ func (a *App) dragValueFor(path string) dragPayload {
 // bindDropFolder 让文件夹 el 接受窗口内拖拽移动到 dstDir，并在拖过
 // 时高亮。此电脑与目标自身的拖拽源被忽略。
 func (a *App) bindDropFolder(c *ui.Context, el ui.Element, dstDir string) {
-	if dstDir == "" || dstDir == pathThisPC {
+	if dstDir == "" || dstDir == pathThisPC || dstDir == pathDisks {
 		return
 	}
 	if over, ok := ui.DragOver[dragPayload](el); ok && over.paths != nil {

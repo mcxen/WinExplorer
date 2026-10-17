@@ -14,7 +14,11 @@ import (
 // (Explorer keeps them in the registry), the recently opened files the Home
 // page lists (Explorer's 最近使用的文件), the delete log that lets the
 // 回收站 page restore files to where they came from (Explorer keeps this in
-// the recycle bin metadata), and the remote access account (remote.go).
+// the recycle bin metadata), the remote access account (remote.go), the
+// view settings the settings dialog edits (Explorer's folder options), and
+// the built-in plugins the settings dialog's 插件 section has turned off —
+// Plugins records only those, so a nil list is every plugin on, a fresh
+// install's behavior.
 type persistedState struct {
 	mu sync.Mutex `json:"-"`
 
@@ -23,6 +27,27 @@ type persistedState struct {
 	TrashLog []trashRecord `json:"trash"`
 	Remote   *remoteConfig `json:"remote"`
 	Shares   []remoteShare `json:"shares"`
+	Settings *appSettings  `json:"settings"`
+	Plugins  []string      `json:"plugins"`
+}
+
+// appSettings is the view state the settings dialog edits: the 查看>显示
+// toggles, 紧凑视图, the preview pane, and the current view mode (state.go's
+// ViewMode).
+type appSettings struct {
+	ShowHidden     bool `json:"showHidden"`
+	ShowExt        bool `json:"showExt"`
+	Compact        bool `json:"compact"`
+	ItemCheckboxes bool `json:"itemCheckboxes"`
+	PreviewOpen    bool `json:"previewOpen"`
+	Mode           int  `json:"mode"`
+}
+
+// defaultSettings are the settings a fresh app starts with, mirroring
+// newAppWithStore in main.go: extensions shown, everything else off, and the
+// details view.
+func defaultSettings() *appSettings {
+	return &appSettings{ShowExt: true, Mode: int(ViewDetails)}
 }
 
 // trashRecord maps a file in ~/.Trash back to the path it was deleted from.
@@ -54,6 +79,9 @@ func loadState() *persistedState {
 			if err := json.Unmarshal(data, st); err != nil {
 				st = &persistedState{}
 				continue
+			}
+			if st.Settings == nil {
+				st.Settings = defaultSettings()
 			}
 			break
 		}
@@ -213,6 +241,62 @@ func (st *persistedState) setRemote(rc *remoteConfig) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.Remote = rc
+	st.saveLocked()
+}
+
+// settings returns a copy of the view settings, the defaults before the
+// first save.
+func (st *persistedState) settings() appSettings {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.Settings == nil {
+		return *defaultSettings()
+	}
+	return *st.Settings
+}
+
+// updateSettings applies fn to the view settings and saves, starting from
+// the defaults on the first change.
+func (st *persistedState) updateSettings(fn func(s *appSettings)) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.Settings == nil {
+		st.Settings = defaultSettings()
+	}
+	fn(st.Settings)
+	st.saveLocked()
+}
+
+// pluginList returns a copy of the turned-off plugin ids, nil when every
+// plugin is on.
+func (st *persistedState) pluginList() []string {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]string(nil), st.Plugins...)
+}
+
+// setPlugin records the plugin as turned off, or drops the record when it
+// is turned back on; only the off ids are kept, so the list is nil again
+// once every plugin is on. A state that already holds the record skips the
+// save, as pin does.
+func (st *persistedState) setPlugin(id string, on bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	i := slices.Index(st.Plugins, id)
+	if on {
+		if i < 0 {
+			return
+		}
+		st.Plugins = slices.Delete(st.Plugins, i, i+1)
+		if len(st.Plugins) == 0 {
+			st.Plugins = nil
+		}
+	} else {
+		if i >= 0 {
+			return
+		}
+		st.Plugins = append(st.Plugins, id)
+	}
 	st.saveLocked()
 }
 

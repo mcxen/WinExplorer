@@ -369,8 +369,10 @@ type remoteFSSearchData struct {
 }
 
 // remoteHandleFSSearch answers POST /api/fs/search: Explorer's walkMatches
-// under a virtual folder — hidden entries skipped, capped at three seconds
-// — mapped to OpenList hits, filtered by scope (0 all, 1 folders only,
+// under a virtual folder — hidden entries skipped, capped at three seconds,
+// or the desktop's eight-second searchTimeout when global asks for the
+// whole-home 全局搜索 (the virtual root "/" is the home directory) —
+// mapped to OpenList hits, filtered by scope (0 all, 1 folders only,
 // 2 files only) and paginated like /api/fs/list.
 func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
@@ -380,6 +382,7 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Parent   string `json:"parent"`
 		Keywords string `json:"keywords"`
+		Global   bool   `json:"global"`
 		Scope    int    `json:"scope"`
 		Page     int    `json:"page"`
 		PerPage  int    `json:"per_page"`
@@ -401,7 +404,11 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 500, "object not found")
 		return
 	}
-	hits := walkMatches(disk, req.Keywords, false, time.Now().Add(3*time.Second))
+	deadline := 3 * time.Second
+	if req.Global {
+		deadline = searchTimeout
+	}
+	hits := walkMatches(disk, req.Keywords, false, time.Now().Add(deadline))
 	items := make([]remoteFSSearchItem, 0, len(hits))
 	for _, h := range hits {
 		if (req.Scope == 1 && !h.IsDir) || (req.Scope == 2 && h.IsDir) {

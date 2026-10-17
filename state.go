@@ -171,6 +171,7 @@ const (
 	pathHome    = "::{home}"
 	pathGallery = "::{gallery}"
 	pathTrash   = "::{trash}"
+	pathDisks   = "::{disks}"
 )
 
 func newTab(path string) *tabState {

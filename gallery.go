@@ -246,9 +246,16 @@ func scaleToFit(img image.Image, side int) image.Image {
 // galleryView renders the 画廊 page: month-sectioned grids of
 // thumbnails, newest month first.
 func (a *App) galleryView(c *ui.Context) {
-	st := galleryScan.Load()
 	scroll := ui.Scroll(c).Grow(1).FillWidth().Padding(8, 8, 12, 8)
 	scroll.Children(func() {
+		// The gallery plugin owns the page: switched off, the pane keeps
+		// a quiet note instead of the scan, reachable only through a
+		// back/forward history the hidden place left behind.
+		if !a.pluginEnabled("gallery") {
+			a.paneMessage(c, "插件已停用")
+			return
+		}
+		st := galleryScan.Load()
 		if st == nil || !st.loaded {
 			a.paneMessage(c, "正在扫描图片…")
 			return

@@ -98,9 +98,12 @@ func (a *App) breadcrumbBar(c *ui.Context) {
 
 func (a *App) beginPathEdit() {
 	a.cur().editingPath = true
-	if a.cur().path == pathThisPC {
+	switch a.cur().path {
+	case pathThisPC:
 		a.cur().pathDraft = "此电脑"
-	} else {
+	case pathDisks:
+		a.cur().pathDraft = "磁盘健康"
+	default:
 		a.cur().pathDraft = a.cur().path
 	}
 }
@@ -133,6 +136,10 @@ func (a *App) commitPathEdit(text string) {
 	a.cur().pathDraft = ""
 	if text == "" || text == "此电脑" || text == pathThisPC {
 		a.navigate(pathThisPC)
+		return
+	}
+	if text == "磁盘健康" || text == pathDisks {
+		a.navigate(pathDisks)
 		return
 	}
 	a.navigate(text)

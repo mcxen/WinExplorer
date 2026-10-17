@@ -77,7 +77,15 @@ func (a *App) applySettings(fn func(s *appSettings)) {
 	all := slices.Clone(apps)
 	appsMu.Unlock()
 	for _, app := range all {
+		wasOpen := app.previewOpen
 		app.loadPersistedSettings()
+		// A settings change can close the preview pane; as togglePreview,
+		// closing it stops a playing preview's audio.
+		if wasOpen && !app.previewOpen {
+			if st := app.preview.Load(); st != nil && st.media.player != nil {
+				st.media.player.stop()
+			}
+		}
 	}
 }
 
@@ -93,31 +101,20 @@ func (a *App) settingsBody(c *ui.Context) {
 			a.settingsView(c)
 			settingsDivider(c)
 			a.settingsUpdates(c)
+			settingsDivider(c)
+			a.settingsPlugins(c)
 		})
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End).Padding(10, 16, 12, 16)
 		btns.Children(func() {
-			reset := ui.ButtonBase(c).Height(30).Radius(4).
-				Background(colorAddress()).Border(1, colorDivider()).
-				Label("恢复默认")
-			reset.Children(func() {
-				ui.Text(c, "恢复默认").FontSize(12).TextColor(colorText())
-			})
-			if reset.Clicked() {
-				// 恢复默认 puts the appearance and the view settings back;
-				// the updater keeps its own preferences.
+			// 恢复默认 puts the appearance and the view settings back;
+			// the updater keeps its own preferences.
+			uikitSecondaryButton(c, "恢复默认", func() {
 				mygo.Theme.SetSource(mygo.ThemeSystem)
-				a.applySettings(func(x *appSettings) {
-					*x = appSettings{ShowExt: true, Mode: int(ViewDetails)}
-				})
-			}
-			ok := ui.ButtonBase(c).Height(30).Radius(4).
-				Background(colorAccent()).Label("确定")
-			ok.Children(func() {
-				ui.Text(c, "确定").FontSize(12).TextColor(ui.Hex("#FFFFFF"))
+				a.applySettings(func(x *appSettings) { *x = *defaultSettings() })
 			})
-			if ok.Clicked() {
+			uikitPrimaryButton(c, "确定", func() {
 				a.settingsOpen = false
-			}
+			})
 		})
 	})
 }
@@ -131,6 +128,21 @@ func settingsDivider(c *ui.Context) {
 func settingsSectionHead(c *ui.Context, title string) {
 	ui.Text(c, title).FontSize(13).FontWeight(600).TextColor(colorText()).
 		Padding(10, 0, 2, 0)
+}
+
+// settingsPlugins is the 插件 section: one switch per built-in plugin, in
+// the registry's order, each reading its state fresh from the store like
+// the sections above, so a toggle shows at once. Switching a plugin off
+// stops what it is doing too — pluginSet owns that. 恢复默认 leaves the
+// plugins alone: they are not appearance or view settings.
+func (a *App) settingsPlugins(c *ui.Context) {
+	settingsSectionHead(c, "插件")
+	for _, p := range plugins {
+		id := p.ID
+		settingsSwitch(c, p.Name, p.Desc,
+			func() bool { return a.pluginEnabled(id) },
+			func(on bool) { a.pluginSet(id, on) })
+	}
 }
 
 // settingsRow is one setting's row, Windows 11 Settings' shape: the name
@@ -265,14 +277,9 @@ func (a *App) settingsUpdates(c *ui.Context) {
 	// while a check is under way brings that window to the front.
 	btnRow := ui.Row(c).FillWidth().Justify(ui.End).Padding(8, 0)
 	btnRow.Children(func() {
-		check := ui.ButtonBase(c).Height(30).Radius(4).
-			Background(colorAccent()).Label("检查更新")
-		check.Children(func() {
-			ui.Text(c, "检查更新").FontSize(12).TextColor(ui.Hex("#FFFFFF"))
-		})
-		if check.Clicked() {
+		uikitPrimaryButton(c, "检查更新", func() {
 			updater.CheckForUpdates()
-		}
+		})
 	})
 	if last := updater.LastCheck(); last.IsZero() {
 		settingsInfo(c, "上次检查", "从未")

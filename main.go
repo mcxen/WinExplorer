@@ -59,7 +59,10 @@ func main() {
 	mygo.App.WhenReady(func() {
 		win := newAppWindow(app)
 		win.OnClosed(func() { unregisterApp(app) })
-		if app.remoteConf().Enabled {
+		// The remote access plugin gates the server: the account may have
+		// it enabled, but a switched-off plugin keeps the LAN closed for
+		// the run — the settings dialog's switch brings it back.
+		if app.remoteConf().Enabled && app.pluginEnabled("remote") {
 			go app.remoteStart()
 		}
 	})
@@ -134,6 +137,10 @@ func newAppWithStore(store *persistedState) *App {
 		previewW:    320,
 		store:       store,
 	}
+	// The gif player checks the plugin registry from a preview's frame,
+	// where there is no App at hand, so the shared store goes where the
+	// package-level callers read it (plugins.go).
+	pluginStore.Store(store)
 	if exts, err := loadShellExtensions(); err != nil {
 		a.statusMsg = "扩展配置无效：" + err.Error()
 	} else {

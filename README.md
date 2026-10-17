@@ -100,7 +100,7 @@ go build -o sunvale .
 - **音频**：WAV/MP3/Ogg Vorbis 用 MyGo 的 `audio` 包（纯 Go、无 cgo）**内置播放**——播放/暂停按钮、点击进度条跳转、`空格` 播放/暂停、`←/→` 快退快进 5 秒；不支持的格式回退「打开」。
 - **文本/代码**：只读文本框显示前 64 KB，附「约 N · 已显示前 M」提示。
 - **PDF / Office 文档**：Quick Look 渲染首页 + 「打开」按钮。
-- **任意文件**：文件名、类型、大小、修改/创建日期、位置；图片/视频/音频再附加尺寸、页数、时长、分辨率、编码等元数据（`mdls` / `ffprobe`）。
+- **任意文件**：文件名、类型、大小、修改/创建日期、位置；图片/视频/音频再附加尺寸、页数、时长、分辨率、编码等元数据（`mdls` / `ffprobe`）；「文件哈希」插件启用时附 **SHA-256**（后台流式计算并缓存，「复制」写入剪贴板），属性对话框同样显示。
 
 加载全部在后台 goroutine 完成，结果以代际号（gen）原子替换，慢加载不会覆盖更新的选择。
 
@@ -108,7 +108,7 @@ go build -o sunvale .
 以 `/`（命名为 Macintosh HD）加各 `/Volumes` 挂载点列出卷（含外接磁盘），按设备号去重；每个卷显示**容量使用条**（蓝色为已用比例）与「可用 X，共 Y」，详细信息视图有专门的宽列，图标视图在名称下方画条，悬停出百分比提示（`statfs`）。
 
 **设置**
-命令栏 `查看更多（…）> 设置` 或 `Ctrl/Cmd+,` 打开设置对话框，三组设置：**外观**（跟随系统 / 浅色 / 深色）、**查看**（文件扩展名、隐藏的项目、项目复选框、紧凑视图、预览窗格、默认视图）、**更新**（当前版本、自动检查更新、自动下载并安装、检查更新、上次检查）。设置持久化在 `sunvale/state.json` 的 `settings` 字段，更改即时应用到所有打开的窗口。
+命令栏 `查看更多（…）> 设置` 或 `Ctrl/Cmd+,` 打开设置对话框，四组设置：**外观**（跟随系统 / 浅色 / 深色）、**查看**（文件扩展名、隐藏的项目、项目复选框、紧凑视图、预览窗格、默认视图）、**更新**（当前版本、自动检查更新、自动下载并安装、检查更新、上次检查）、**插件**（六个内置插件的启用开关，见下方「插件」）。设置持久化在 `sunvale/state.json` 的 `settings` 字段，更改即时应用到所有打开的窗口。
 
 ## 自动更新
 
@@ -125,19 +125,38 @@ go build -o sunvale .
 
 `go run .` 的开发构建与包管理器安装（deb 在 `/opt`）不能写安装位置，更新区显示「此构建不支持自动更新」；macOS 安装到 `/Applications`（或 `~/Applications`）、Windows 用户级安装（`%LOCALAPPDATA%\Programs`）与 Linux 的 `install.sh` 安装（`~/.local`）均可自更新，deb 安装交由系统包管理器更新。仓库暂无 `CHANGELOG.md`，清单的发行说明为空（发布页的自动 notes 不受影响）。
 
+## 插件
+
+内置插件（`plugins.go`）在设置对话框的**插件**区启用/停用，开关即时生效；停用状态记录在 `sunvale/state.json` 的 `plugins` 字段（只记停用的 id，字段缺省 = 全部启用，即首次运行的默认行为）。
+
+| 插件 | 功能 |
+| --- | --- |
+| 远程访问 | 把主文件夹通过局域网共享给手机（停用时停服务，`…` 菜单的远程访问两项一并隐藏；重新启用且账号开关仍开着时自动重启服务） |
+| 画廊 | 侧边栏的图片画廊页（停用时导航项隐藏，页面显示「插件已停用」） |
+| GIF 自动播放 | 预览窗格与图标视图播放 GIF 动画（停用时显示静态帧） |
+| 文件哈希 | 预览窗格与属性对话框显示文件的 SHA-256（后台流式计算，按路径+大小+修改时间缓存，「复制」写入剪贴板） |
+| 重复文件查找 | 文件区空白处右键「重复文件查找」：后台扫描当前文件夹子树（8 秒上限、跳过隐藏、符号链接不入子树、上限 2 万条目/2 千次摘要），按大小+SHA-256 分组，每组「删除多余项」（保留最旧的，移入回收站并记入 Ctrl+Z，弹系统确认） |
+| 可视化查看占用 | 文件夹右键（行或空白处）「可视化查看占用」：后台并发扫描子树（15 秒上限、6 个遍历器、跳过隐藏、符号链接不入子树、上限 12 万节点），对话框显示矩形树图（WizTree 式，面积即占用，小项并入「其他」，上限 400 块）与最大项列表，单击选中、双击文件夹下钻、上一级返回，「在窗口中打开」跳转文件窗口 |
+
 ## 远程访问（OpenList 兼容）
 
 把主文件夹（虚拟根 `/` 即本机 home 目录）通过局域网 HTTP 暴露给手机或其他设备，协议兼容 [OpenList](https://github.com/OpenListTeam/OpenList)（AList v3 API）的读、写与分享接口集。
 
 **开启与账号**
 
-- 命令栏 `查看更多（…）> 远程访问` 开关服务；开启后状态栏显示局域网地址（默认端口 5244，被占用时自动顺延 5245–5254）。
+- 命令栏 `查看更多（…）> 远程访问` 开关服务（插件「远程访问」停用时这两项从菜单隐藏，在设置的插件区重新启用）；开启后状态栏显示局域网地址（默认端口 5244，被占用时自动顺延 5245–5254）。
 - `查看更多 > 复制远程地址` 一次复制 地址 / 账号 / 密码。账号默认 `admin`；密码首次使用时随机生成，仅在本轮运行内可知——重启后点「复制远程地址」会重置一个新密码（旧密码随之失效）。
 - 账号与端口持久化在 `sunvale/state.json` 的 `remote` 字段；应用退出时自动停服务，已签发的登录令牌全部失效。
 
-**`/@manage` 管理界面**：浏览器打开 `http://局域网IP:5244/@manage` 即是内置管理控制台（单文件内嵌，无外部资源）——仪表盘（运行状态与开关、存储容量、分享概览、OpenList 客户端接入信息）、文件、分享（创建、复制链接、启停、删除）、设置（改用户名/密码、重置 API Token、改端口、远程访问开关）。
+**`/@manage` 管理界面**：浏览器打开 `http://局域网IP:5244/@manage` 即是内置管理控制台（单文件内嵌，无外部资源）——仪表盘（运行状态与开关、存储容量、分享概览、OpenList 客户端接入信息）、文件（预览窗格 + 全屏浮层预览、全局搜索、右键 shell 命令）、分享（创建、复制链接、启停、删除）、设置（改用户名/密码、重置 API Token、改端口、远程访问开关）。
 
-**文件页与桌面端同构**：命令栏 `新建▾ | 剪切 复制 粘贴 重命名 分享 删除 | 排序▾ 查看▾ | …`（没有选中时剪切/重命名/删除保持置灰，剪贴板为空时粘贴置灰，与客户端同一套开关规则）、地址行（后退/前进/向上/刷新 + 面包屑 + 搜索框）、左侧「位置 / 存储」导航树（主文件夹，桌面/文档/下载/图片/音乐/视频（存在才列出），以及本机存储与容量）、状态栏（项目数与选中体积，右侧当前视图）。六种视图（超大图标/大图标/中等图标/小图标/列表/详细信息）与名称·修改日期·类型·大小时升序/降序都可切换，选择记在 `localStorage`；详细信息视图可按列头排序，图标视图里图片直接以 `/d` 直链当缩略图。选择与键盘对齐客户端：单击、`Cmd/Ctrl+单击`、`Shift+单击` 范围选、`Ctrl+A` 全选，方向键移动（图标/列表视图按行列）、`Shift+方向键` 扩展、`Home`/`End` 到首尾、`Enter` 打开、`Backspace` 向上、`F2` 重命名、`F5` 刷新、`Delete` 删除、`空格` 快速预览、`Alt+P` 预览窗格。行右键菜单对齐 Windows 11：打开/预览、下载、剪切、复制、粘贴、复制为路径、重命名、压缩为 ZIP 文件、全部解压、解压到…、分享、删除、属性；空白处菜单提供新建文件夹/文本文档、上传、粘贴、排序方式、查看、显示隐藏的项目、显示项目复选框、刷新。
+**文件页与桌面端同构**：命令栏 `新建▾ | 剪切 复制 粘贴 重命名 分享 删除 | 排序▾ 查看▾ | …`（没有选中时剪切/重命名/删除保持置灰，剪贴板为空时粘贴置灰，与客户端同一套开关规则）、地址行（后退/前进/向上/刷新 + 面包屑 + 搜索框）、左侧「位置 / 存储」导航树（主文件夹，桌面/文档/下载/图片/音乐/视频（存在才列出），以及本机存储与容量）、状态栏（项目数与选中体积，右侧当前视图）。六种视图（超大图标/大图标/中等图标/小图标/列表/详细信息）与名称·修改日期·类型·大小时升序/降序都可切换，选择记在 `localStorage`；详细信息视图可按列头排序，图标视图里图片直接以 `/d` 直链当缩略图。选择与键盘对齐客户端：单击、`Cmd/Ctrl+单击`、`Shift+单击` 范围选、`Ctrl+A` 全选，方向键移动（图标/列表视图按行列）、`Shift+方向键` 扩展、`Home`/`End` 到首尾、`Enter` 打开、`Backspace` 向上、`F2` 重命名、`F5` 刷新、`Delete` 删除、`空格` 快速预览、`Alt+P` 预览窗格。行右键菜单对齐 Windows 11：打开/预览、下载、剪切、复制、粘贴、复制为路径、重命名、压缩为 ZIP 文件、全部解压、解压到…、在终端中打开、（登记的扩展命令）、分享、删除、属性；空白处菜单提供新建文件夹/文本文档、上传、粘贴、排序方式、查看、显示隐藏的项目、显示项目复选框、刷新。
+
+**预览（远程，参考 OpenList）**：预览窗格与全屏浮层共用一套渲染（图片 `<img>`、视频 `<video controls>` 自动播放、音频 `<audio controls>`、PDF `<iframe>`、文本 `<pre>` 前 64 KB，走 `/api/fs/get` 的 `raw_url`+`sign` 直链）。全屏浮层提供 **上一张 / 下一张**（在当前文件夹的图片与视频间循环步进，`←`/`→` 同步）与**图片缩放**（滚轮 0.2×–5× 居中缩放，双击复位）；预览窗格保持适合显示。
+
+**全局搜索（远程）**：地址栏搜索框旁的「本文件夹 / 全局」切换：全局模式下输入即递归搜索整个虚拟根（本机 home 目录），走 `/api/fs/search` 的 `global:true`（8 秒上限，与桌面端同一超时），结果带**位置**列（`/` 显示为主文件夹），点击结果跳到所在文件夹（文件并直接打开预览）；`Esc`、刷新、清空或导航即回到当前文件夹列表。
+
+**右键 shell（远程）**：管理端文件页右键菜单提供「在终端中打开」（文件夹；在本机打开系统终端并定位到该目录）与本机 `winexplorer/extensions.json` 登记的**扩展命令**（按匹配过滤、注册顺序排列，服务端分离执行，慢命令不阻塞页面）：`/api/fs/ext/list`（列出匹配项）、`/api/fs/ext/run`（执行）、`/api/fs/terminal`（开终端），均管理鉴权、拒绝 `..` 逃逸；扩展命令与桌面端右键共用同一注册表。
 
 **拖拽**：行可拖拽，文件夹行、面包屑、导航树都是放置目标——直接拖就是移动，按住 `Cmd/Ctrl` 拖是复制（同桌面端）；从系统（Finder / 资源管理器）拖文件到页面即上传到当前文件夹、拖到某个文件夹行则上传进那个文件夹，带进度条与失败重试。
 
@@ -155,7 +174,7 @@ go build -o sunvale .
 
 **协议范围**
 
-- 已实现：`/api/public/settings`、`/api/public/archive_extensions`（可解压后缀表）、`/api/auth/login`（明文）与 `/api/auth/login/hash`（StaticHash）、`/api/me`、`/api/auth/logout`、`/api/fs/list`、`/api/fs/get`、`/api/fs/search`、`/api/fs/mkdir`、`/api/fs/rename`、`/api/fs/move`、`/api/fs/copy`、`/api/fs/remove`、`/api/fs/dirs`、`/api/fs/put`、`/api/fs/archive/unzip`、`/api/fs/archive/zip`、`/api/share/{create,list,get,update,delete,enable,disable}`、`/d/`（下载）、`/p/`（流式代理，支持 Range/HEAD）、`/sd/`（分享直链下载）、`/@s/<id>`（分享访客浏览）、`/@manage`（管理界面）、`/api/sunvale/{status,account,reset-token,port,enabled}`、`/`（内置网页）与 `/ping`。
+- 已实现：`/api/public/settings`、`/api/public/archive_extensions`（可解压后缀表）、`/api/auth/login`（明文）与 `/api/auth/login/hash`（StaticHash）、`/api/me`、`/api/auth/logout`、`/api/fs/list`、`/api/fs/get`、`/api/fs/search`（`global:true` 全局）、`/api/fs/mkdir`、`/api/fs/rename`、`/api/fs/move`、`/api/fs/copy`、`/api/fs/remove`、`/api/fs/dirs`、`/api/fs/put`、`/api/fs/archive/unzip`、`/api/fs/archive/zip`、`/api/fs/ext/list`、`/api/fs/ext/run`、`/api/fs/terminal`、`/api/share/{create,list,get,update,delete,enable,disable}`、`/d/`（下载）、`/p/`（流式代理，支持 Range/HEAD）、`/sd/`（分享直链下载）、`/@s/<id>`（分享访客浏览）、`/@manage`（管理界面）、`/api/sunvale/{status,account,reset-token,port,enabled}`、`/`（内置网页）与 `/ping`。
 - 未实现：`/api/admin/*` 与异步任务队列（写操作、上传与解压同步完成，即答即毕）——OpenList 客户端中的站点管理类按钮不可用属预期；`/api/fs/archive/list`（归档内预览）未实现，故 `settings` 里 `preview_archives_by_default` 保持 `false`。
 - 所有 `/api/*` 响应恒为 HTTP 200，错误以 body `{"code":...}` 表达；`Authorization` 头携带裸令牌（无 `Bearer` 前缀）；下载签名 `sign = base64url(HMAC-SHA256(令牌, 路径 + ":0")) + ":0"`。
 
@@ -204,8 +223,8 @@ go build -o sunvale .
 
 | 位置 | 条目 |
 | --- | --- |
-| 文件 / 文件夹 | 打开 ｜ 固定到快速访问（文件夹）｜ 打开方式 ▸ ｜ 剪切、复制、粘贴、复制为路径、重命名 ｜ 压缩为 ZIP 文件、全部解压 ｜ 在终端中打开（文件夹）、删除 ｜ 属性（对话框）｜ （登记的扩展命令） |
-| 空白处 | 新建 ▸ 文件夹 / 文本文档 ｜ 粘贴 ｜ 在终端中打开 ｜ 刷新 ｜ 显示隐藏的项目 ｜ 属性 |
+| 文件 / 文件夹 | 打开 ｜ 固定到快速访问（文件夹）｜ 打开方式 ▸ ｜ 剪切、复制、粘贴、复制为路径、重命名 ｜ 压缩为 ZIP 文件、全部解压 ｜ 在终端中打开（文件夹）｜ 可视化查看占用（文件夹，插件）｜ 删除 ｜ 属性（对话框）｜ （登记的扩展命令） |
+| 空白处 | 新建 ▸ 文件夹 / 文本文档 ｜ 粘贴 ｜ 在终端中打开 ｜ 重复文件查找（插件）｜ 可视化查看占用（插件）｜ 刷新 ｜ 显示隐藏的项目 ｜ 属性 |
 | 标签页 | 复制标签页、关闭标签页、关闭其他标签页、关闭右侧标签页 |
 | 侧边栏位置 | 打开 ｜ 从快速访问取消固定 ｜ 属性 |
 | 主页磁贴 | 打开 ｜ 从快速访问取消固定 ｜ 属性 |
@@ -217,7 +236,7 @@ go build -o sunvale .
 
 两类用户配置，均在 `os.UserConfigDir()`（macOS：`~/Library/Application Support`）下：
 
-**`sunvale/state.json`** —— 快速访问固定项、最近使用的文件、回收站还原日志。由应用自动读写；旧版目录名 `winexplorer/` 会被自动迁移读取。
+**`sunvale/state.json`** —— 快速访问固定项、最近使用的文件、回收站还原日志、视图设置（`settings`，设置对话框持久化）与插件停用表（`plugins`，只记停用的 id）。由应用自动读写；旧版目录名 `winexplorer/` 会被自动迁移读取。
 
 **`winexplorer/extensions.json`** —— 扩展命令注册表（Shell 扩展协议）。文件不存在则无扩展；格式错误会在启动时忽略并在状态栏提示。
 
@@ -273,15 +292,19 @@ go build -o sunvale .
 | `dropops.go` | 拖拽：窗口内载荷、移动/复制落地、跨盘回退、外部文件拖入 |
 | `openwith.go` | 打开方式：扫描应用 Info.plist 的扩展名声明并以 `open -a` 启动 |
 | `extensions.go` | 扩展命令协议：读取 `extensions.json`、匹配、占位符展开与执行 |
+| `plugins.go` | 内置插件注册表：插件列表、启用状态（state.json 的 `plugins` 停用表）、各特性的启用门控 |
+| `hash.go` | 「文件哈希」插件：SHA-256 后台流式计算与缓存（路径+大小+修改时间，LRU） |
+| `dups.go` | 「重复文件查找」插件：后台受限扫描（大小+SHA-256 分组）、重复文件对话框与「删除多余项」 |
+| `usage.go` | 「可视化查看占用」插件：后台并发体积扫描（广度优先装配、自底向上汇总）、squarified 矩形树图与最大项列表对话框 |
 | `quicklook.go` | 空格快速预览模态（复用预览窗格解码结果） |
 | `preview.go` | 预览数据层：后台加载、代际号替换、图片/文本解码、`mdls`/`ffprobe`、Quick Look 缩略图 |
 | `preview_pane.go` | 预览窗格 UI：各类型预览体、属性列表、播放器控件、宽度拖拽 |
-| `settingsdialog.go` | 设置对话框（外观/查看/更新与自动更新集成） |
+| `settingsdialog.go` | 设置对话框（外观/查看/更新/插件与自动更新集成） |
 | `media.go` | 媒体：MyGo `audio` 播放器封装（句柄生命周期、播放节拍器）、`ffmpeg` 视频海报帧 |
 | `statestore.go` | 持久化状态：固定项、最近文件、回收站还原日志（JSON），旧目录名迁移 |
 | `statfs_unix.go` / `statfs_other.go` | 按平台读取卷容量 |
 | `birthtime_darwin.go` / `birthtime_other.go` | 按平台读取文件创建时间 |
-| `remote*.go` | 远程访问（OpenList 兼容）：服务生命周期/账号与 JWT（`remote.go`）、auth/public API（`remote_api.go`）、fs/list·get·search 与虚拟路径映射、下载签名（`remote_fs.go`）、fs 写操作与上传（`remote_manage.go`）、压缩与解压端点（`remote_archive.go`）、分享协议、`/@s` 访客流与 `/sd` 直链（`remote_share.go`）、`/api/sunvale/*` 管理端点（`remote_admin.go`）、`/d`/`/p` 流式下载（`remote_dl.go`）、内置网页（`remote_web.go` + `remote_web.html`）、管理界面（`remote_manage_web.go` + `remote_manage_web.html`） |
+| `remote*.go` | 远程访问（OpenList 兼容）：服务生命周期/账号与 JWT（`remote.go`）、auth/public API（`remote_api.go`）、fs/list·get·search 与虚拟路径映射、下载签名（`remote_fs.go`）、fs 写操作与上传（`remote_manage.go`）、压缩与解压端点（`remote_archive.go`）、右键 shell 端点：扩展命令列出/执行与开终端（`remote_ext.go`）、分享协议、`/@s` 访客流与 `/sd` 直链（`remote_share.go`）、`/api/sunvale/*` 管理端点（`remote_admin.go`）、`/d`/`/p` 流式下载（`remote_dl.go`）、内置网页（`remote_web.go` + `remote_web.html`）、管理界面（`remote_manage_web.go` + `remote_manage_web.html`） |
 
 ## 测试
 

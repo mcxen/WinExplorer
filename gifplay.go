@@ -42,7 +42,12 @@ var (
 
 // gifFor returns a playing player for path, starting one when none runs;
 // players for other paths are stopped, since one preview shows at a time.
+// The GIF plugin owns the animation: switched off, gifFor returns nil, and
+// the callers keep the decoded still, as before the plugin existed.
 func gifFor(path string) *ui.Bitmap {
+	if !pluginOn(pluginStore.Load(), "gif") {
+		return nil
+	}
 	gifMu.Lock()
 	defer gifMu.Unlock()
 	for p, pl := range gifPlay {

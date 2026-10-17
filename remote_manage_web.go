@@ -3,10 +3,20 @@ package main
 import (
 	_ "embed"
 	"net/http"
+	"strings"
 )
 
 //go:embed remote_manage_web.html
-var remoteManageHTML string
+var remoteManageHTMLRaw string
+
+// remoteManageHTML is the management page with the shared design tokens and
+// script helpers (webtokens.go) inlined over the /*__TOKENS__*/ and
+// /*__SHARED_JS__*/ placeholders, so the served document stays one
+// self-contained file.
+var remoteManageHTML = strings.NewReplacer(
+	"/*__TOKENS__*/", WebUITokensCSS,
+	"/*__SHARED_JS__*/", WebUISharedJS,
+).Replace(remoteManageHTMLRaw)
 
 // remoteHandleManage serves Sunvale's built-in management page on /@manage
 // and everything below it. The page is one self-contained document — no

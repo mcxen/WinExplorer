@@ -249,12 +249,20 @@ func (a *App) moreButton(c *ui.Context) {
 			a.togglePreview()
 		}
 		m.Separator()
-		if m.Item("远程访问").Checked(a.remoteConf().Enabled).Chosen() {
-			a.remoteToggle()
+		// The remote plugin being off keeps both items out of the menu:
+		// the settings page's 插件 switch is what brings them back.
+		if a.pluginEnabled("remote") {
+			if m.Item("远程访问").Checked(a.remoteConf().Enabled).Chosen() {
+				a.remoteToggle()
+			}
+			if m.Item("复制远程地址").Chosen() {
+				mygo.Clipboard.WriteText(a.remoteLANURL() + "\n账号 " + a.remoteConf().Username + "\n密码 " + a.remotePlainPassword())
+				a.statusMsg = "已复制远程地址"
+			}
 		}
-		if m.Item("复制远程地址").Chosen() {
-			mygo.Clipboard.WriteText(a.remoteLANURL() + "\n账号 " + a.remoteConf().Username + "\n密码 " + a.remotePlainPassword())
-			a.statusMsg = "已复制远程地址"
+		m.Separator()
+		if m.Item("设置").Chosen() {
+			a.settingsOpen = true
 		}
 	})
 }

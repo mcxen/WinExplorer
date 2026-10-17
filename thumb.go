@@ -13,9 +13,10 @@ import (
 
 // thumb.go is the file pane's media thumbnails: in the icon views a
 // picture or video shows its own frame, and a folder holding pictures or
-// videos shows a cover tiled from up to four of them — Explorer's folder
-// thumbnails. Decoding runs in the background at bounded concurrency, and
-// the results are cached, evicted least-recently-used.
+// videos shows up to four of them inside its own folder shape — Explorer's
+// folder thumbnails, where the pictures fill the folder's front panel but
+// the folder stays a folder. Decoding runs in the background at bounded
+// concurrency, and the results are cached, evicted least-recently-used.
 //
 // The size a thumbnail is decoded at follows the tile: a small tile asks
 // for a small picture, and 放大 past a step decodes it again, larger.
@@ -41,6 +42,16 @@ const (
 
 	// coverCells is the most media files one folder cover shows.
 	coverCells = 4
+
+	// folderPanel* place a media folder's pictures in its drawn folder:
+	// the front panel of icons.go's drawFolder, inset so the folder's own
+	// edge still frames them, with a corner radius a little tighter than
+	// the folder's.
+	folderPanelX, folderPanelY = 0.06, 0.28
+	folderPanelW, folderPanelH = 0.88, 0.58
+	folderPanelInset           = 0.022
+	folderPanelMinInset        = 2
+	folderBodyRadius           = 0.08
 )
 
 // imageExts are the extensions the file pane treats as pictures;
@@ -134,11 +145,18 @@ func mediaThumb(path string, box float32) *ui.Bitmap {
 	})
 }
 
-// folderCoverThumb returns the cover of a folder holding media: up to four
-// of its pictures and videos tiled into one square. nil means there is no
-// cover this frame — it is being made, or the folder holds no media.
+// folderCoverThumb returns the pictures a media folder shows, tiled into
+// the shape of its front panel: up to four of its pictures and videos.
+// nil means there is no cover this frame — it is being made, or the folder
+// holds no media.
 func folderCoverThumb(dir string, box float32) *ui.Bitmap {
 	side := thumbSide(box)
+	panel := folderCoverPanel(box)
+	// The cover is made in the panel's shape rather than square, so what
+	// gets composed is what shows: a square cover would have its sides
+	// cropped away by the panel.
+	w := side
+	h := max(2, int(float32(side)*panel.H/panel.W+0.5))
 	return cachedThumb("d:"+thumbCacheKey(dir), side, func() image.Image {
 		paths := folderMedia(dir, coverCells)
 		if len(paths) == 0 {
@@ -153,7 +171,7 @@ func folderCoverThumb(dir string, box float32) *ui.Bitmap {
 		if len(pics) == 0 {
 			return nil
 		}
-		return composeCover(pics, side)
+		return composeCover(pics, w, h)
 	})
 }
 
@@ -308,36 +326,36 @@ func folderMedia(dir string, max int) []string {
 	return out
 }
 
-// composeCover tiles pictures into one square, the way Explorer tiles a
+// composeCover tiles pictures into one rectangle, the way Explorer tiles a
 // folder's thumbnail: one fills it, two split it into halves, three put
 // one beside two stacked, four or more make a 2×2. Cells are a hair apart,
 // and land on a transparent background, so the tile's own colour shows in
 // the seams.
-func composeCover(pics []image.Image, side int) image.Image {
-	side = max(side, 2)
-	dst := image.NewRGBA(image.Rect(0, 0, side, side))
-	half := side / 2
+func composeCover(pics []image.Image, w, h int) image.Image {
+	w, h = max(w, 2), max(h, 2)
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	hw, hh := w/2, h/2
 	var cells []image.Rectangle
 	switch len(pics) {
 	case 1:
-		cells = []image.Rectangle{image.Rect(0, 0, side, side)}
+		cells = []image.Rectangle{image.Rect(0, 0, w, h)}
 	case 2:
 		cells = []image.Rectangle{
-			image.Rect(0, 0, half, side),
-			image.Rect(half, 0, side, side),
+			image.Rect(0, 0, hw, h),
+			image.Rect(hw, 0, w, h),
 		}
 	case 3:
 		cells = []image.Rectangle{
-			image.Rect(0, 0, half, side),
-			image.Rect(half, 0, side, half),
-			image.Rect(half, half, side, side),
+			image.Rect(0, 0, hw, h),
+			image.Rect(hw, 0, w, hh),
+			image.Rect(hw, hh, w, h),
 		}
 	default:
 		cells = []image.Rectangle{
-			image.Rect(0, 0, half, half),
-			image.Rect(half, 0, side, half),
-			image.Rect(0, half, half, side),
-			image.Rect(half, half, side, side),
+			image.Rect(0, 0, hw, hh),
+			image.Rect(hw, 0, w, hh),
+			image.Rect(0, hh, hw, h),
+			image.Rect(hw, hh, w, h),
 		}
 	}
 	for i, cell := range cells {
@@ -347,6 +365,36 @@ func composeCover(pics []image.Image, side int) image.Image {
 		drawCover(dst, cell.Inset(1), pics[i])
 	}
 	return dst
+}
+
+// folderCoverPanel is where a media folder's pictures sit inside its tile:
+// the folder's front panel, inset so the folder's own edge still frames
+// them and its tab stays clear. The numbers follow drawFolder's body, so a
+// folder with pictures is drawn as any other folder is.
+func folderCoverPanel(box float32) ui.Rect {
+	inset := folderCoverPanelInset(box)
+	return ui.Rect{
+		X: box*folderPanelX + inset,
+		Y: box*folderPanelY + inset,
+		W: box*folderPanelW - 2*inset,
+		H: box*folderPanelH - 2*inset,
+	}
+}
+
+// folderCoverPanelInset is the gap between the folder's edge and its
+// pictures. It is proportional, but never thinner than a couple of DIPs:
+// in the medium tiles a purely proportional gap rounds away to nothing and
+// the folder would read as a bare collage, which is the one thing it must
+// not look like.
+func folderCoverPanelInset(box float32) float32 {
+	return max(box*folderPanelInset, folderPanelMinInset)
+}
+
+// folderCoverPanelRadius rounds the pictures' corners a little tighter
+// than the folder body's, so they sit inside the body's own curve instead
+// of squaring off its corners.
+func folderCoverPanelRadius(box float32) float32 {
+	return max(box*folderBodyRadius-folderCoverPanelInset(box), 1)
 }
 
 // drawCover scales src into r, keeping its aspect ratio and cropping what

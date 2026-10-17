@@ -207,9 +207,9 @@ func (a *App) remoteStop() {
 
 // remoteMux routes the OpenList v3 API surface plus Sunvale's own
 // extensions. The /api/fs/*, /d/, /p/, /ping and / handlers live in
-// remote_fs.go, remote_dl.go and remote_web.go; the fs-write, share, /sd/,
-// /@manage and /api/sunvale/* handlers are registered below and live in
-// their own files, remote_admin.go among them.
+// remote_fs.go, remote_ext.go, remote_dl.go and remote_web.go; the
+// fs-write, share, /sd/, /@manage and /api/sunvale/* handlers are
+// registered below and live in their own files, remote_admin.go among them.
 func (a *App) remoteMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/auth/login", a.remoteHandleLogin)
@@ -233,6 +233,9 @@ func (a *App) remoteMux() *http.ServeMux {
 	mux.HandleFunc("/api/fs/put", a.remoteHandlePut)
 	mux.HandleFunc("/api/fs/archive/unzip", a.remoteHandleArchiveUnzip)
 	mux.HandleFunc("/api/fs/archive/zip", a.remoteHandleArchiveZip)
+	mux.HandleFunc("/api/fs/ext/list", a.remoteHandleExtList)
+	mux.HandleFunc("/api/fs/ext/run", a.remoteHandleExtRun)
+	mux.HandleFunc("/api/fs/terminal", a.remoteHandleTerminal)
 	mux.HandleFunc("/api/share/create", a.remoteHandleShareCreate)
 	mux.HandleFunc("/api/share/list", a.remoteHandleShareList)
 	mux.HandleFunc("/api/share/get", a.remoteHandleShareGet)

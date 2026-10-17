@@ -90,6 +90,8 @@ func (a *App) breadcrumbs() []Crumb {
 		return []Crumb{{Name: "回收站", Path: pathTrash}}
 	case pathGallery:
 		return []Crumb{{Name: "画廊", Path: pathGallery}}
+	case pathDisks:
+		return []Crumb{{Name: "磁盘健康", Path: pathDisks}}
 	}
 	known := knownFolderNames()
 	crumbs := []Crumb{{Name: "此电脑", Path: pathThisPC}}
@@ -232,7 +234,7 @@ func sameDevice(path string, id uint64) (same, ok bool) {
 // files can be created, pasted or moved into.
 func specialPath(path string) bool {
 	switch path {
-	case pathThisPC, pathHome, pathGallery, pathTrash:
+	case pathThisPC, pathHome, pathGallery, pathTrash, pathDisks:
 		return true
 	}
 	return false
@@ -248,6 +250,8 @@ func cleanNav(path string) string {
 		return pathTrash
 	case pathGallery, "画廊":
 		return pathGallery
+	case pathDisks, "磁盘健康":
+		return pathDisks
 	}
 	if path == "" {
 		return pathHome

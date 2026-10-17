@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -125,23 +126,24 @@ func TestComposeCover(t *testing.T) {
 		}
 		return img
 	}
-	const side = 64
+	// The panel is wider than it is tall, like the folder's front panel.
+	const side, tall = 60, 40
 	// One picture fills the cover, two split it into halves, three put one
 	// beside two stacked, four make a 2×2. The middle of every cell is
 	// painted in each layout.
 	cells := map[int][]image.Point{
-		1: {{32, 32}},
-		2: {{16, 32}, {48, 32}},
-		3: {{16, 32}, {48, 16}, {48, 48}},
-		4: {{16, 16}, {48, 16}, {16, 48}, {48, 48}},
+		1: {{30, 20}},
+		2: {{15, 20}, {45, 20}},
+		3: {{15, 20}, {45, 10}, {45, 30}},
+		4: {{15, 10}, {45, 10}, {15, 30}, {45, 30}},
 	}
 	for n := 1; n <= 4; n++ {
 		pics := make([]image.Image, n)
 		for i := range pics {
 			pics[i] = solid(color.RGBA{uint8(40 * (i + 1)), 0x80, 0x10, 255})
 		}
-		cover := composeCover(pics, side)
-		if b := cover.Bounds(); b.Dx() != side || b.Dy() != side {
+		cover := composeCover(pics, side, tall)
+		if b := cover.Bounds(); b.Dx() != side || b.Dy() != tall {
 			t.Fatalf("%d pictures: cover = %v", n, b)
 		}
 		for i, p := range cells[n] {
@@ -152,7 +154,7 @@ func TestComposeCover(t *testing.T) {
 	}
 	// A cover asks for at least two pixels a side, so the cells never
 	// collapse.
-	if b := composeCover([]image.Image{solid(color.RGBA{1, 2, 3, 255})}, 1).Bounds(); b.Dx() != 2 || b.Dy() != 2 {
+	if b := composeCover([]image.Image{solid(color.RGBA{1, 2, 3, 255})}, 1, 1).Bounds(); b.Dx() != 2 || b.Dy() != 2 {
 		t.Fatalf("tiny cover = %v", b)
 	}
 }
@@ -170,22 +172,22 @@ func TestComposeCoverLayout(t *testing.T) {
 			blue.Set(x, y, color.RGBA{0, 0, 255, 255})
 		}
 	}
-	const side = 64
+	const side, tall = 60, 40
 	// Two pictures split the cover into left and right halves.
-	cover := composeCover([]image.Image{red, blue}, side)
-	if r, _, _, _ := cover.At(16, 32).RGBA(); r < 0xf000 {
-		t.Fatalf("left half should be red, got %v", cover.At(16, 32))
+	cover := composeCover([]image.Image{red, blue}, side, tall)
+	if r, _, _, _ := cover.At(15, 20).RGBA(); r < 0xf000 {
+		t.Fatalf("left half should be red, got %v", cover.At(15, 20))
 	}
-	if _, _, b, _ := cover.At(48, 32).RGBA(); b < 0xf000 {
-		t.Fatalf("right half should be blue, got %v", cover.At(48, 32))
+	if _, _, b, _ := cover.At(45, 20).RGBA(); b < 0xf000 {
+		t.Fatalf("right half should be blue, got %v", cover.At(45, 20))
 	}
 	// Three pictures stack the last two on the right.
-	cover = composeCover([]image.Image{red, blue, red}, side)
-	if r, _, _, _ := cover.At(16, 16).RGBA(); r < 0xf000 {
-		t.Fatalf("left half should be red, got %v", cover.At(16, 16))
+	cover = composeCover([]image.Image{red, blue, red}, side, tall)
+	if r, _, _, _ := cover.At(15, 20).RGBA(); r < 0xf000 {
+		t.Fatalf("left half should be red, got %v", cover.At(15, 20))
 	}
-	if _, _, b, _ := cover.At(48, 16).RGBA(); b < 0xf000 {
-		t.Fatalf("top right should be blue, got %v", cover.At(48, 16))
+	if _, _, b, _ := cover.At(45, 10).RGBA(); b < 0xf000 {
+		t.Fatalf("top right should be blue, got %v", cover.At(45, 10))
 	}
 }
 
@@ -331,14 +333,67 @@ func TestFolderCoverThumbLifecycle(t *testing.T) {
 	}
 	for i := 0; i < 200; i++ {
 		if bm := folderCoverThumb(dir, 96); bm != nil {
-			if w, h := bm.Size(); w != 128 || h != 128 {
-				t.Fatalf("cover = %dx%d, want the 128 tier", w, h)
+			w, h := bm.Size()
+			if w != 128 {
+				t.Fatalf("cover = %d px wide, want the 128 tier", w)
+			}
+			// The cover is made in the shape of the folder's front panel,
+			// not square, so the panel crops nothing at display time.
+			panel := folderCoverPanel(96)
+			got, want := float64(w)/float64(h), float64(panel.W)/float64(panel.H)
+			if math.Abs(got-want) > 0.02 {
+				t.Fatalf("cover aspect = %.3f, want the panel's %.3f", got, want)
 			}
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("folder cover never landed")
+}
+
+// TestFolderCoverPanelMatchesFolder keeps the pictures inside the folder
+// that drawFolder draws: the panel must sit within the folder's body, so
+// the folder's tab and edges still frame it.
+func TestFolderCoverPanelMatchesFolder(t *testing.T) {
+	for _, box := range []float32{thumbMinBox, 96, 384} {
+		p := folderCoverPanel(box)
+		// drawFolder's body, from icons.go.
+		edge := box * folderPanelInset
+		body := ui.Rect{X: box * 0.06, Y: box * 0.28, W: box * 0.88, H: box * 0.58}
+		if p.X < body.X || p.Y < body.Y ||
+			p.X+p.W > body.X+body.W || p.Y+p.H > body.Y+body.H {
+			t.Fatalf("box %v: panel %v is not inside the folder body %v", box, p, body)
+		}
+		// It still fills most of it: the frame is an edge, not a band, so
+		// it takes a small share of the folder's shorter side even where
+		// the floor applies.
+		if share := folderCoverPanelInset(box) / min(body.W, body.H); share > 0.1 {
+			t.Fatalf("box %v: the frame takes %.0f%% of the folder's panel", box, share*100)
+		}
+		if p.W < body.W*0.85 || p.H < body.H*0.85 {
+			t.Fatalf("box %v: panel %v is much smaller than the body %v", box, p, body)
+		}
+		// The tab above the body stays clear of the pictures.
+		if p.Y < body.Y {
+			t.Fatalf("box %v: panel %v rides up over the folder's tab", box, p)
+		}
+		// The folder's own edge frames them, by a margin a tile can show:
+		// proportional where there is room, but never thinner than the
+		// floor, or the medium tiles would lose the folder entirely.
+		gap := p.X - body.X
+		if gap < folderPanelMinInset {
+			t.Fatalf("box %v: the folder's edge is only %v DIPs thick", box, gap)
+		}
+		if box > 128 && gap != edge {
+			t.Fatalf("box %v: large tiles take the proportional edge %v, got %v", box, edge, gap)
+		}
+		// The pictures' corners curve inside the body's, so they cannot
+		// square off the folder's corners. A hair of slack: these are
+		// float32 proportions.
+		if r := folderCoverPanelRadius(box); r > box*folderBodyRadius-gap+0.05 || r < 1 {
+			t.Fatalf("box %v: panel radius %v does not sit inside the body's", box, r)
+		}
+	}
 }
 
 func TestFolderCoverOfPlainFolder(t *testing.T) {

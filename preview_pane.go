@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -104,8 +105,11 @@ func (a *App) previewNote(c *ui.Context, msg string) {
 // but not play inline (video, PDF, unsupported audio), matching Explorer's
 // preview-pane open button.
 func (a *App) previewOpenButton(c *ui.Context, st *previewState) {
-	btn := components.Button(c, "打开", components.ButtonSecondary).
-		FillWidth().Tooltip("用系统应用打开")
+	btn := ui.ButtonBase(c).Height(30).Radius(4).
+		Background(colorAddress()).Border(1, colorDivider()).Label("打开").Tooltip("用系统应用打开")
+	btn.Children(func() {
+		ui.Text(c, "打开").FontSize(12).TextColor(colorText())
+	})
 	if btn.Clicked() {
 		if err := openWithOS(st.path); err != nil {
 			a.statusMsg = "无法打开：" + err.Error()
@@ -118,7 +122,7 @@ func (a *App) previewOpenButton(c *ui.Context, st *previewState) {
 // area, with a "约 N" hint when truncated.
 func (a *App) previewText(c *ui.Context, st *previewState) {
 	body := ui.Box(c).FillWidth().Shrink(0).Radius(4).
-		Background(colorAddress()).Border(1, ui.Hex("#D6D6D6")).Padding(8, 6).MinHeight(120)
+		Background(colorAddress()).Border(1, colorFieldBorder()).Padding(8, 6).MinHeight(120)
 	body.Children(func() {
 		value := st.text
 		ui.TextArea(c, &value).ReadOnly(true).FontSize(12).TextColor(colorText())
@@ -207,7 +211,8 @@ func (a *App) previewAudio(c *ui.Context, st *previewState) {
 }
 
 // previewProps lists the file properties the way Explorer's details pane
-// does: one row per attribute.
+// does: one row per attribute, with the hash plugin's SHA-256 row last
+// when it is on.
 func (a *App) previewProps(c *ui.Context, st *previewState) {
 	if len(st.meta) == 0 {
 		return
@@ -223,6 +228,49 @@ func (a *App) previewProps(c *ui.Context, st *previewState) {
 				ui.Text(c, r.Val).FontSize(12).TextColor(colorText()).
 					Grow(1).MinWidth(0).MaxLines(3)
 			})
+		}
+		a.hashMetaRow(c, st)
+	})
+}
+
+// hashMetaRow is the SHA-256 row the 文件哈希 plugin adds to the pane's
+// metadata section for the single selected file. Until the digest lands
+// the row shows 未计算, then 计算中…, then the hex sum, wrapped like the
+// other rows; a 复制 button beside it puts the full sum on the clipboard.
+// The plugin off renders nothing. Rendering here is what fires the
+// background request, which is a no-op once the facts are current.
+func (a *App) hashMetaRow(c *ui.Context, st *previewState) {
+	if !a.pluginEnabled(hashPluginID) {
+		return
+	}
+	e := a.singleSelected()
+	if e.Path != st.path {
+		return
+	}
+	a.requestHash(st.path)
+	a.hashMetaRowValue(c, st.path, 64)
+}
+
+// hashMetaRowValue is the SHA-256 row itself: the label at keyW DIPs, the
+// value hashRowValue shows, and the 复制 button when a digest is there.
+func (a *App) hashMetaRowValue(c *ui.Context, path string, keyW float32) {
+	val, ready := hashRowValue(path)
+	row := ui.Row(c).FillWidth().Gap(8)
+	row.Children(func() {
+		ui.Text(c, "SHA-256").FontSize(12).TextColor(colorMuted()).
+			Width(keyW).Shrink(0).SingleLine()
+		ui.Text(c, val).FontSize(12).TextColor(colorText()).
+			Grow(1).MinWidth(0).MaxLines(3)
+		if ready {
+			btn := ui.ButtonBase(c).Height(22).Shrink(0).Radius(4).
+				Background(colorAddress()).Border(1, colorDivider()).Label("复制")
+			btn.Children(func() {
+				ui.Text(c, "复制").FontSize(11).TextColor(colorText())
+			})
+			if btn.Clicked() {
+				mygo.Clipboard.WriteText(val)
+				a.statusMsg = "已复制哈希值"
+			}
 		}
 	})
 }

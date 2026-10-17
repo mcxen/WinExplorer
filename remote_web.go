@@ -3,10 +3,20 @@ package main
 import (
 	_ "embed"
 	"net/http"
+	"strings"
 )
 
 //go:embed remote_web.html
-var remoteWebHTML string
+var remoteWebHTMLRaw string
+
+// remoteWebHTML is the guest page with the shared design tokens and script
+// helpers (webtokens.go) inlined over the /*__TOKENS__*/ and
+// /*__SHARED_JS__*/ placeholders, so the served document stays one
+// self-contained file.
+var remoteWebHTML = strings.NewReplacer(
+	"/*__TOKENS__*/", WebUITokensCSS,
+	"/*__SHARED_JS__*/", WebUISharedJS,
+).Replace(remoteWebHTMLRaw)
 
 func (a *App) remoteHandleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

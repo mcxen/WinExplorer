@@ -90,6 +90,7 @@ func init() {
 	registerHashPlugin()
 	registerDupsPlugin()
 	registerUsagePlugin()
+	registerDiskPlugin()
 }
 
 // RegisterPlugin adds p to the registry. A duplicate ID is a programmer
@@ -227,4 +228,23 @@ func (a *App) pluginSet(id, key, val string) {
 		return
 	}
 	a.store.setPluginSetting(id, key, val)
+}
+
+// diskPluginID is the disk info plugin's id in the registry. The page
+// itself is dispatched from files.go (pathDisks) and its sidebar row from
+// sidebar.go; registering here gives it a switch in the 插件 section and the
+// enable/disable bookkeeping the other plugins share.
+const diskPluginID = "disks"
+
+// registerDiskPlugin registers the 磁盘健康 plugin. It carries no hooks of
+// its own — the page is a special location rather than a menu item or a
+// sidebar entry like the gallery's — so only its switch appears in the
+// settings dialog. Switched off, the page shows 插件已停用 and the sidebar
+// row goes with it (sidebar.go), matching the gallery plugin's behaviour.
+func registerDiskPlugin() {
+	RegisterPlugin(Plugin{
+		ID:   diskPluginID,
+		Name: "磁盘健康",
+		Desc: "查看磁盘信息、温度、读写速度与健康状态",
+	})
 }

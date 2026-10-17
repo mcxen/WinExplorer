@@ -92,8 +92,13 @@ func (a *App) navTrash(c *ui.Context) {
 	}, 24)
 }
 
-// navDisks is the 磁盘健康 row under the expanded 此电脑.
+// navDisks is the 磁盘健康 row under the expanded 此电脑. It is the disk
+// info plugin's sidebar place: switched off, the row does not appear, as the
+// gallery plugin's place does not.
 func (a *App) navDisks(c *ui.Context) {
+	if !a.pluginEnabled(diskPluginID) {
+		return
+	}
 	a.navItem(c, "nav-disks", "磁盘健康", "drive", pathDisks, a.cur().path == pathDisks, func() {
 		a.navigate(pathDisks)
 	}, 24)
@@ -113,6 +118,18 @@ func (a *App) navPlace(c *ui.Context, p Place, indent float32) {
 				if a.store.unpin(place.Path) {
 					a.reload()
 				}
+			}
+		}
+		m.Separator()
+		if m.Item("在终端中打开").Chosen() {
+			a.openInTerminal(place.Path)
+		}
+		// The plugins' folder actions — usage's treemap of this place —
+		// the same collectors the pane's menus read.
+		sel := []Entry{{Name: place.Name, Path: place.Path, IsDir: true}}
+		for _, it := range a.pluginMenuItems(sel) {
+			if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+				it.Run()
 			}
 		}
 		m.Separator()

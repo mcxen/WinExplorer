@@ -157,6 +157,24 @@ func (a *App) reload() {
 		}
 		entries = append(entries, e)
 	}
+	// Folder sizes come from the background engine (sizes.go): a cached
+	// tally shows at once, a folder whose ModTime has moved since its tally
+	// is queued again, and an unseen folder is queued for its first walk.
+	// The special pages above keep their own numbers.
+	for i := range entries {
+		e := &entries[i]
+		if !e.IsDir {
+			continue
+		}
+		if st, ok := lookupDirStat(e.Path); ok {
+			e.Size = st.Size
+			if !st.Mod.Equal(e.ModTime) {
+				enqueueDirStat(e.Path)
+			}
+		} else {
+			enqueueDirStat(e.Path)
+		}
+	}
 	t.entries = entries
 }
 

@@ -110,21 +110,21 @@ func sysProfilerDisks() []spSATA {
 
 // spSATA is one device in system_profiler's SATA output.
 type spSATA struct {
-	Name              string   `json:"_name"`
-	Model             string   `json:"Model"`
-	Serial            string   `json:"SerialNumber"`
-	SMART             bool     `json:"SMART"`
-	SMARTStatus       string   `json:"SMARTStatus"`
-	SMARTFatalError   bool     `json:"SMARTFatalError"`
-	Capacity          string   `json:"Size"`
-	BayName           []spBay  `json:"bay_name"`
-	DeviceDescription []spBay  `json:"device_description"`
+	Name              string  `json:"_name"`
+	Model             string  `json:"Model"`
+	Serial            string  `json:"SerialNumber"`
+	SMART             bool    `json:"SMART"`
+	SMARTStatus       string  `json:"SMARTStatus"`
+	SMARTFatalError   bool    `json:"SMARTFatalError"`
+	Capacity          string  `json:"Size"`
+	BayName           []spBay `json:"bay_name"`
+	DeviceDescription []spBay `json:"device_description"`
 }
 
 type spBay struct {
-	Name     string `json:"_name"`
-	Size     string `json:"Size"`
-	Media    string `json:"Media"`
+	Name  string `json:"_name"`
+	Size  string `json:"Size"`
+	Media string `json:"Media"`
 }
 
 // macSize parses system_profiler's "128.0 GB" capacity string into bytes.
@@ -219,7 +219,7 @@ func smartctlDisks(disks []DiskInfo) {
 			SmartStatus struct {
 				Passed bool `json:"passed"`
 			} `json:"smart_status"`
-			ModelName   string `json:"model_name"`
+			ModelName    string `json:"model_name"`
 			SerialNumber string `json:"serial_number"`
 			UserCapacity struct {
 				Bytes int64 `json:"bytes"`

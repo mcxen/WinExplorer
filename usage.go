@@ -39,18 +39,24 @@ const (
 var usageMaxNodes int64 = 120000
 
 var (
-	usageMu     sync.Mutex
-	usageOpen   = map[*App]*bool{}
-	usageDrills = map[*App]*usageNode{}
-	usagePicks  = map[*App]*usageNode{}
+	// usageDlg, usageDrillAt and usagePickAt are the dialog's per-window
+	// state (plugintask.go): the open flag, the drill position and the
+	// picked cell.
+	usageDlg     = appFlag{}
+	usageDrillAt = appVal[*usageNode]{}
+	usagePickAt  = appVal[*usageNode]{}
 
 	// usageResult is the finished scan the dialogs read, swapped in
 	// atomically; the last scan wins.
 	usageResult atomic.Pointer[usageScan]
 
-	usageScanMu  sync.Mutex
-	usageRunning bool
-	usagePending *usageRequest
+	// usageRunner serializes the treemap scans — one at a time, the
+	// newest request next — repainting every usageTick so the status
+	// line's live folder count moves.
+	usageRunner = &taskRunner[usageRequest]{
+		run:  runUsageScan,
+		tick: 400 * time.Millisecond,
+	}
 
 	// usageVisited is the folders the running scan has visited, for the
 	// status line's live count.
@@ -75,7 +81,7 @@ func registerUsagePlugin() {
 					},
 				}}
 			}
-			if len(sel) == 1 && sel[0].IsDir && !specialPath(a.cur().path) {
+			if len(sel) == 1 && sel[0].IsDir && !specialPath(sel[0].Path) {
 				return []PluginMenuItem{{
 					Label: "可视化查看占用",
 					Run: func() {
@@ -118,16 +124,9 @@ type usageScan struct {
 }
 
 // usageOpenFlag returns this window's dialog flag, allocating it on first
-// use.
+// use (plugintask.go's per-window appFlag).
 func (a *App) usageOpenFlag() *bool {
-	usageMu.Lock()
-	defer usageMu.Unlock()
-	if b, ok := usageOpen[a]; ok {
-		return b
-	}
-	b := new(bool)
-	usageOpen[a] = b
-	return b
+	return usageDlg.get(a)
 }
 
 // openUsage opens the dialog and kicks a scan of the folder.
@@ -139,8 +138,9 @@ func (a *App) openUsage(path string) {
 }
 
 // requestUsage starts the subtree scan in the background, unless the page
-// is a special one. One scan runs at a time; a request that arrives
-// mid-scan runs right after it.
+// is a special one or the plugin is off. The taskRunner serializes the
+// work — one scan at a time, a request that arrives mid-scan runs right
+// after it — and repaints on its tick.
 func (a *App) requestUsage(root string) {
 	if !a.pluginEnabled(usagePluginID) {
 		return
@@ -148,56 +148,22 @@ func (a *App) requestUsage(root string) {
 	if root == "" || specialPath(root) {
 		return
 	}
-	req := &usageRequest{root: root, hidden: a.showHidden}
-	usageScanMu.Lock()
-	if usageRunning {
-		usagePending = req
-		usageScanMu.Unlock()
-		return
-	}
-	usageRunning = true
-	usageScanMu.Unlock()
-	go runUsageScans(req)
+	usageRunner.submit(usageRequest{root: root, hidden: a.showHidden})
 }
 
-// runUsageScans runs one scan, then any that queued behind it. The scan
-// goroutine's ticking repaints the status line's live count; each result
-// is swapped in atomically.
-func runUsageScans(req *usageRequest) {
-	for {
-		usageVisited.Store(0)
-		done := make(chan *usageScan, 1)
-		go func() { done <- scanUsage(req.root, req.hidden) }()
-		tick := time.NewTicker(400 * time.Millisecond)
-		var res *usageScan
-	watch:
-		for {
-			select {
-			case res = <-done:
-				break watch
-			case <-tick.C:
-				repaint()
-			}
-		}
-		tick.Stop()
-		usageResult.Store(res)
-		repaint()
-		usageScanMu.Lock()
-		if usagePending == nil {
-			usageRunning = false
-			usageScanMu.Unlock()
-			return
-		}
-		req, usagePending = usagePending, nil
-		usageScanMu.Unlock()
-	}
+// runUsageScan is the taskRunner's task: one scan, its result swapped in
+// atomically and the window repainted. The runner owns serialization and
+// the progress repaint, so this is just the scan plus its publish.
+func runUsageScan(req usageRequest) {
+	usageVisited.Store(0)
+	res := scanUsage(req.root, req.hidden)
+	usageResult.Store(res)
+	repaint()
 }
 
 // usageRunningNow is whether a scan is running, for the status line.
 func usageRunningNow() bool {
-	usageScanMu.Lock()
-	defer usageScanMu.Unlock()
-	return usageRunning
+	return usageRunner.busy()
 }
 
 // scanUsage walks root's subtree and totals every folder's bytes. It is
@@ -303,33 +269,25 @@ func scanUsage(root string, hidden bool) *usageScan {
 }
 
 // usageSetHere sets this window's drill position, the node the treemap
-// shows; nil means the scan's root.
+// shows; nil means the scan's root (plugintask.go's per-window appVal).
 func (a *App) usageSetHere(n *usageNode) {
-	usageMu.Lock()
-	usageDrills[a] = n
-	usageMu.Unlock()
+	usageDrillAt.set(a, n)
 }
 
 // usageHereNode is this window's drill position, or nil.
 func (a *App) usageHereNode() *usageNode {
-	usageMu.Lock()
-	defer usageMu.Unlock()
-	return usageDrills[a]
+	return usageDrillAt.get(a)
 }
 
 // usageSetPick sets this window's picked cell, the one the info line
 // shows; nil clears it.
 func (a *App) usageSetPick(n *usageNode) {
-	usageMu.Lock()
-	usagePicks[a] = n
-	usageMu.Unlock()
+	usagePickAt.set(a, n)
 }
 
 // usagePickedNode is this window's picked cell, or nil.
 func (a *App) usagePickedNode() *usageNode {
-	usageMu.Lock()
-	defer usageMu.Unlock()
-	return usagePicks[a]
+	return usagePickAt.get(a)
 }
 
 // usageFind is the node at path in the tree, or nil: the drill controls

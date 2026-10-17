@@ -327,15 +327,28 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 		if e.VolTotal > 0 {
 			a.driveCapCell(c, e)
 		} else {
-			size := ""
-			if !e.IsDir {
-				size = formatBytes(e.Size)
-			}
-			a.detailText(c, size, colSizeW, true)
+			a.detailText(c, sizeColumnText(e), colSizeW, true)
 		}
 	})
 	a.bindItemInput(c, row, e)
 	a.attachRowMenu(row, e)
+}
+
+// sizeColumnText is the 大小 column's cell: a file's own bytes, and a
+// folder's tally from the background engine (sizes.go) — 0 B for a cached
+// empty folder, "…" while its walk is queued or running, and blank until
+// one is known.
+func sizeColumnText(e Entry) string {
+	if !e.IsDir {
+		return formatBytes(e.Size)
+	}
+	if st, ok := lookupDirStat(e.Path); ok {
+		return formatBytes(st.Size)
+	}
+	if dirStatInProgress(e.Path) {
+		return "…"
+	}
+	return ""
 }
 
 // searchLocation is the 位置 column: the folder the hit was found in,
@@ -860,10 +873,11 @@ func (a *App) clickEntry(path string, mods ui.Modifiers) {
 }
 
 // bindPaneMenu is the menu of the pane background: New (folder / text
-// document), paste, open in Terminal, refresh, hidden items and the
-// folder's properties. A row's own menu is the innermost one, so it takes
-// the click when the pointer is on a row. The pane also accepts files
-// dragged from other applications, moving them into the current folder.
+// document), paste, open in Terminal, refresh, refresh of the folder's
+// size statistics, hidden items and the folder's properties. A row's own
+// menu is the innermost one, so it takes the click when the pointer is on
+// a row. The pane also accepts files dragged from other applications,
+// moving them into the current folder.
 func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 	if a.cur().path != pathThisPC && a.cur().path != pathDisks {
 		if files := el.DroppedFiles(); len(files) > 0 {
@@ -901,6 +915,11 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 		if m.Item("刷新").Chosen() {
 			a.doRefresh()
 		}
+		// 刷新统计 drops the folder's cached sizes and walks its subtree
+		// again: only the size column moves — no reload, no new thumbnails.
+		if m.Item("刷新统计").Disabled(special).Chosen() {
+			refreshDirStats(a.cur().path)
+		}
 		if m.Item("显示隐藏的项目").Checked(a.showHidden).Chosen() {
 			a.toggleHidden()
 		}
@@ -915,7 +934,7 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 // selects it first, so the ops methods act on the row the menu opened on.
 // The items follow Windows 11's: Open, Cut/Copy/Paste, Copy as path,
 // Rename, Compress to ZIP, Extract all, Open in Terminal (folders),
-// Delete, Properties.
+// Refresh stats (folders), Delete, Properties.
 func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	if e.Path != "" && !a.isSelected(e.Path) {
 		a.selectOnly(e.Path)
@@ -981,6 +1000,11 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	m.Separator()
 	if m.Item("在终端中打开").Disabled(!oneDir).Chosen() {
 		a.openInTerminal(sel[0].Path)
+	}
+	// 刷新统计 rewalks the one selected folder's subtree for the size
+	// column, as the pane menu's item does for the current folder.
+	if m.Item("刷新统计").Disabled(!oneDir || onSpecial).Chosen() {
+		refreshDirStats(sel[0].Path)
 	}
 	// The plugins' row-menu items — usage's treemap of the selected folder.
 	for _, it := range a.pluginMenuItems(sel) {

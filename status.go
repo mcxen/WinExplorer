@@ -33,6 +33,9 @@ func (a *App) statusLeft() string {
 		return "正在扫描图片…"
 	}
 	if a.cur().path == pathDisks {
+		if !a.pluginEnabled(diskPluginID) {
+			return "磁盘信息插件已停用"
+		}
 		disks := readDiskHealth()
 		good := 0
 		for _, d := range disks {
@@ -50,7 +53,7 @@ func (a *App) statusLeft() string {
 	}
 	if n := len(selected); n > 0 {
 		text += fmt.Sprintf("，%d 个项目被选中", n)
-		if bytes := selectedFileBytes(selected); bytes > 0 {
+		if bytes := selectedBytes(selected); bytes > 0 {
 			text += " " + formatBytes(bytes)
 		}
 	}
@@ -60,12 +63,14 @@ func (a *App) statusLeft() string {
 	return text
 }
 
-// selectedFileBytes sums sizes of selected files only. Directories
-// contribute nothing; zero means there is nothing worth showing.
-func selectedFileBytes(entries []Entry) int64 {
+// selectedBytes sums the selection's sizes: files their own bytes, folders
+// the cached tally the size engine keeps in e.Size once a walk lands. A
+// folder whose size is not known yet counts nothing; zero means there is
+// nothing worth showing.
+func selectedBytes(entries []Entry) int64 {
 	var n int64
 	for _, e := range entries {
-		if e.IsDir || e.Size <= 0 {
+		if e.Size <= 0 {
 			continue
 		}
 		n += e.Size

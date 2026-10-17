@@ -65,10 +65,21 @@ func main() {
 		if app.remoteConf().Enabled && app.pluginEnabled(remotePluginID) {
 			go app.remoteStart()
 		}
+		// The tray (tray.go) is the minimize-to-tray rest stop and the
+		// quit the taskbar no longer shows; a desktop without a tray
+		// area keeps every other behavior, so the failure is only logged.
+		if _, err := setupTray(); err != nil {
+			log.Printf("托盘初始化失败：%v", err)
+		}
 	})
 	// remoteStop waits for the requests in flight, so it runs once the
 	// windows are gone and the event loop is about to stop, not per window.
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { app.remoteStop() })
+	// The size engine's cache lands on disk first: it is local and fast,
+	// while remoteStop waits on the network.
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		flushDirStats()
+		app.remoteStop()
+	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -96,6 +107,10 @@ func newAppWindow(app *App) *mygo.Window {
 		Content:   ui.View(app.view),
 	})
 	app.win = win
+	// Minimizing parks the window in the tray (tray.go) instead of the
+	// taskbar, so the process — and its background size statistics — keeps
+	// running out of sight.
+	win.OnMinimize(func() { minimizeToTray(win) })
 	return win
 }
 

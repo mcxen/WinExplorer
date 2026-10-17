@@ -10,13 +10,13 @@ import (
 
 // DiskInfo is one physical or logical drive's health snapshot.
 type DiskInfo struct {
-	Name        string  // logical name shown to the user: "C:", "disk0"
-	Path        string  // volume root the capacity is measured at, "" if none
+	Name        string // logical name shown to the user: "C:", "disk0"
+	Path        string // volume root the capacity is measured at, "" if none
 	Model       string
 	Serial      string
-	Interface   string // SATA / NVMe / USB / IDE
-	Media       string // 固态硬盘 / 机械硬盘
-	Size        int64  // bytes
+	Interface   string  // SATA / NVMe / USB / IDE
+	Media       string  // 固态硬盘 / 机械硬盘
+	Size        int64   // bytes
 	Temperature float64 // °C; -1 when the sensor is unavailable
 	Health      string  // 良好 / 警告 / 未知
 	HealthOK    bool
@@ -83,8 +83,13 @@ func (a *App) diskGlyph(c *ui.Context, px float32, col ui.Color) {
 // — The 磁盘健康 page —
 
 // disksView renders the disk health page: one card per disk with a capacity
-// bar, temperature gauge and health badge.
+// bar, temperature gauge and health badge. The disk info plugin owns the
+// page: switched off, the pane keeps a quiet note instead of the cards.
 func (a *App) disksView(c *ui.Context) {
+	if !a.pluginEnabled(diskPluginID) {
+		a.paneMessage(c, "插件已停用")
+		return
+	}
 	disks := readDiskHealth()
 	ui.Scroll(c).Grow(1).FillWidth().Padding(24).Gap(12).Children(func() {
 		ui.Text(c, "磁盘健康").FontSize(18).FontWeight(600).

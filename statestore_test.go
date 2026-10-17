@@ -101,7 +101,10 @@ func TestSettingsApplyToAllWindows(t *testing.T) {
 
 	dir := t.TempDir()
 	a, b := newStoreApp(t, dir), newStoreApp(t, dir)
-	st := &persistedState{}
+	// A store with no path is in memory (statestore.go); this test wants the
+	// write-through to reach the state file, so both windows share the one
+	// loadState reads and writes under the isolated HOME.
+	st := loadState()
 	a.store, b.store = st, st
 	registerApp(a)
 	registerApp(b)

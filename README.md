@@ -113,7 +113,7 @@ go build -o sunvale .
 以 `/`（命名为 Macintosh HD）加各 `/Volumes` 挂载点列出卷（含外接磁盘），按设备号去重；每个卷显示**容量使用条**（蓝色为已用比例）与「可用 X，共 Y」，详细信息视图有专门的宽列，图标视图在名称下方画条，悬停出百分比提示（`statfs`）。
 
 **设置**
-命令栏 `查看更多（…）> 设置` 或 `Ctrl/Cmd+,` 打开设置对话框，Windows 11 式左侧导航分五页：**外观**（跟随系统 / 浅色 / 深色）、**查看**（文件扩展名、隐藏的项目、项目复选框、紧凑视图、预览窗格、默认视图）、**扩展**（登记的右键命令，见下）、**插件**（六个内置插件的启用开关与其自有设置，见下方「插件」）、**更新**（当前版本、自动检查更新、自动下载并安装、检查更新、上次检查）。设置持久化在 `sunvale/state.json` 的 `settings` 字段，更改即时应用到所有打开的窗口。
+命令栏 `查看更多（…）> 设置` 或 `Ctrl/Cmd+,` 打开设置对话框，Windows 11 式左侧导航分五页：**外观**（跟随系统 / 浅色 / 深色）、**查看**（文件扩展名、隐藏的项目、项目复选框、紧凑视图、预览窗格、默认视图）、**扩展**（登记的右键命令，见下）、**插件**（六个内置插件的启用开关与其自有设置，见下方「插件」）、**更新**（当前版本、自动检查更新、自动下载并安装、检查更新、上次检查）。设置持久化在 `sunvale/state.json` 的 `settings` 字段，更改即时应用到所有打开的窗口。**外观**的选择同样持久化（`appearance`，缺省即跟随系统）：选定即重算配色并重绘所有窗口——`theme.go` 的 token 与 MyGo 自带控件不会各切一半；系统在运行中切换外观（macOS 的自动浅色深色）时也走同一条重绘路径。
 
 **最小化到托盘**
 窗口最小化时隐藏到系统托盘（不占任务栏），首次最小化弹一次系统通知提示。托盘左键单击或菜单「显示晴谷」恢复窗口（窗口已全部关闭则新开主窗口），托盘菜单还提供「退出晴谷」。
@@ -247,7 +247,7 @@ go build -o sunvale .
 
 三类用户数据，均在 `os.UserConfigDir()`（macOS：`~/Library/Application Support`）下：
 
-**`sunvale/state.json`** —— 快速访问固定项、最近使用的文件、回收站还原日志、视图设置（`settings`，设置对话框持久化）、插件停用表（`plugins`，只记停用的 id）与各插件的自有设置（`pluginSettings`，键值对）。由应用自动读写；旧版目录名 `winexplorer/` 会被自动迁移读取。
+**`sunvale/state.json`** —— 快速访问固定项、最近使用的文件、回收站还原日志、视图设置与**外观模式**（`settings.appearance`，`light`/`dark`，缺省即跟随系统）、插件停用表（`plugins`，只记停用的 id）与各插件的自有设置（`pluginSettings`，键值对）。由应用自动读写；旧版目录名 `winexplorer/` 会被自动迁移读取。只有经 `loadState` 读到的 store 会落盘，测试里在内存构造的 store 不碰这个文件。
 
 **`sunvale/sizes.json`** —— 文件夹大小统计的磁盘缓存（上限 4096 条、最旧先淘汰，防抖 5 秒落盘、退出时落盘），由应用自动读写。
 
@@ -287,7 +287,7 @@ go build -o sunvale .
 | `state.go` | `App` / `tabState` 状态模型、视图/排序/分组枚举与常量 |
 | `tabs.go` | 导航、历史、排序/视图/分组切换、标签增删与切换 |
 | `fs.go` | 目录读取、过滤/排序、面包屑、快速访问与卷列表、特殊路径 |
-| `theme.go` | Windows 11 亮/暗配色（`// COLOR TYPE: ui.Color`），`resolveTokens` 在 `App.WhenReady` 按真实外观解析 |
+| `theme.go` | Windows 11 亮/暗配色（`// COLOR TYPE: ui.Color`）：`resolveTokens` 在 `App.WhenReady` 按真实外观解析，`useAppearance` 在设置里改外观时重算并重绘所有窗口 |
 | `glass.go` | 材质与悬浮窗：`windowBG`（有材质时不绘 chrome 背景）、`floatDialog`（磨砂玻璃对话框） |
 | `icons.go` | 彩色文件/文件夹/盘符/位置图标（Painter 自绘）+ Onevra Lucide 单色图标封装 |
 | `chrome_tab.go` | 标题栏（标签条 + 窗口控制按钮）与命令栏 |
@@ -341,6 +341,7 @@ go test ./...
 - `glass_test.go` —— 材质与悬浮窗：逐个打开玻璃对话框并跑完入场动画（真实视图上的布局回归）。
 - `keynav_ui_test.go` —— 真实视图上的同一套按键：快捷键分发、移到的行滚入可视区（详情/列表/图标/分组图标）、搜索框持有焦点时独占按键。
 - `statestore_test.go` —— 旧目录名（`winexplorer`）状态迁移。
+- `theme_test.go` —— 外观模式：`light`/`dark`/缺省（跟随系统）三种取值与设置页分段控件的对应，未知取值回退跟随系统。
 - `ext_openwith_test.go` —— 扩展命令配置解析与匹配、占位符展开、`Info.plist` 扩展名解析、快速预览门控。
 - `remote_test.go` —— 远程访问协议回归：登录三态（错误/明文/StaticHash）、`/api/me` 三态、fs 列表/获取/搜索、签名下载（全量/Range/HEAD/过期签名/目录拒绝）、路径防逃逸，及真实端口 + curl 端到端冒烟。
 - `remote_manage_test.go` —— 管理界面一轮回归：fs 写操作（mkdir/rename/move/copy/remove 进回收站/dirs/put 上传，含中文与转义路径）、分享全链路（管理端 CRUD 与改名、`/@s` 免登录访客流、密码/过期/停用/超次、按 IP 去重计数、`/sd` 下载与 Range/HEAD）、`/api/sunvale/*`（状态、改密后旧登录失效、重置令牌、端口校验、开关幂等与真实启停）、`/@manage` 页面，及真实端口 + curl 全故事线冒烟（登录→上传→分享→访客下载→管理页→状态）。

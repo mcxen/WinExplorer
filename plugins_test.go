@@ -38,6 +38,9 @@ func TestPluginSetRoundTrip(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := newStoreApp(t, t.TempDir())
+	// The round trip needs a store that reaches state.json; a store with no
+	// path stays in memory, and the reload below would see nothing.
+	a.store = loadState()
 
 	a.store.setPlugin("dups", false)
 	if a.pluginEnabled("dups") {
@@ -233,6 +236,8 @@ func TestPluginSettingsRoundTrip(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := newStoreApp(t, t.TempDir())
+	// The writes below have to reach state.json for the reload to see them.
+	a.store = loadState()
 	if got := a.pluginGet("fake", "key"); got != "" {
 		t.Fatalf("pluginGet on unset = %q, want empty", got)
 	}

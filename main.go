@@ -49,7 +49,16 @@ func main() {
 	// The updater plugin's window is native UI, as this app's windows
 	// are: it needs no webview.
 	mygo.Use(native.Plugin)
-	app := newApp()
+	store := loadState()
+	// The 外观 mode the settings dialog last saved, before any window
+	// builds: a forced source applies at Run, so it decides the tokens
+	// WhenReady resolves for the first frame.
+	mygo.Theme.SetSource(appearanceSource(store.settings().Appearance))
+	// A system appearance change re-resolves the tokens and redraws: mygo
+	// repaints its own widgets, and this is what keeps the app's painted
+	// surfaces in step with them.
+	mygo.Theme.OnUpdated(repaintAppearance)
+	app := newAppWithStore(store)
 	registerApp(app)
 	// The archive associations in mygo.json open a folder for the
 	// archive: a new window shows it, ready to 全部解压.

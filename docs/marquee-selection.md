@@ -35,7 +35,8 @@
 
 - 相交判定采用 **「碰到即选」**（overlap），与 Finder 一致，而非资源管理器「完全包住才选」。
 - 拖动中框随指针实时更新，选择随之实时变化；松开即定型。
-- 一个拖动阈值（4 DIP，由 UI 工具包 `dragStart` 规定）区分「点击」与「拖动」。
+- 一个拖动阈值（4 DIP，`bandStart`，与 UI 工具包 `dragStart` 同值）区分「点击」与「拖动」。虚线框与选择都在越过阈值后才出现——两者同进同退。
+- **阈值必须自己判**：`Element.Dragged` 从按下的第一帧起就以位移 0 报「正在拖动」，只看它的 `ok` 会把一次空白单击当成一个「零面积框」，从而把现有选择清空（见 `marqueeState.moved`）。
 
 ---
 
@@ -91,7 +92,7 @@ type marqueeState struct {
 
 ---
 
-## 5. 手势状态机（`marquee.go:32` `bindMarquee`）
+## 5. 手势状态机（`marquee.go:51` `bindMarquee`）
 
 `bindMarquee` 被挂到**每一个可能的空白背景元素**上：文件区外层 `ui.Column`、`ui.List`、`ui.GridView`、`ui.Scroll`。这一设计依赖 UI 工具包的一条事实：
 
@@ -105,7 +106,7 @@ type marqueeState struct {
    空闲 ─────┤
              └─ 其余情况：无操作
 
-   进行中 ───┬─ el.Dragged() 有位移 → 更新 x1,y1；applyMarquee()（实时改选择）
+   进行中 ───┬─ el.Dragged() → 更新 x1,y1；越过 bandStart（moved()）才 applyMarquee()
              ├─ el.DragEnded() 或 el.Clicked() → on=false；清 base（选择定型）
              └─ 其余：无操作（非 press 目标的元素永远走到这里，静默）
 ```
@@ -114,20 +115,23 @@ type marqueeState struct {
 
 - **起点判定**：`wx, wy = el.Bounds().X + PointerPosition()`，再问 `pointOnItem(wx, wy)`。落在文件项上则不启动圈选——那次拖动是「拖拽移动文件」。
 - **坐标换算**：`PointerPosition()` 返回元素**局部**坐标，即使指针已移出元素框仍然有效（`over` 标志只表示是否还在框内，圈选忽略它）。加回 `el.Bounds()` 原点即得窗口坐标，因此框可以自由拖出列表边界。
+- **`Dragged()` 不等于「已拖动」**：工具包的 `Dragged` 只要求元素处于按下状态，第一帧就返回 `true`，位移为 0。因此状态机在更新 `x1,y1` 之后还要问 `moved()`：与起点相距不足 `bandStart`（4 DIP）就当作单击，既不改选择也不画框。
 - **结束条件用 `Clicked()` 兜底**：未达拖动阈值的纯单击不会产生 `DragEnded()`，但会触发 `Clicked()`，用它收尾即可复位手势，避免 `on` 悬空。
 - **`el.Clicked()` 的副作用**：它会置 `rt.consumed = true`，但空白单击本就是「无选择语义」，无碍。
 
 ---
 
-## 6. 命中测试与几何（`marquee.go:9`、`17`、`77`）
+## 6. 命中测试与几何（`marquee.go:9`、`21`、`26`、`33`、`102`）
 
 ```go
 func (m marqueeState) rect() ui.Rect      // 归一化两角为矩形（支持向左/向上拖）
+func (m marqueeState) moved() bool        // 是否已离开起点 bandStart，即「拖动」而非「点击」
 func rectOverlaps(a, b ui.Rect) bool      // 任意重叠即为真
 func (a *App) pointOnItem(x, y float32) bool // 起点是否落在某项上
 ```
 
 - `rect()` 对 `x0/x1`、`y0/y1` 取 min/max，使任意方向的拖动都得到规范矩形。
+- `moved()` 取两轴位移的绝对值与 `bandStart` 比较，任一轴越界即为拖动。
 - `rectOverlaps` 是标准的轴对齐矩形相交测试（严格不等号，边贴边不算相交）。
 - `pointOnItem` 遍历 `itemBounds`，用 `Rect.Contains` 判断起点是否在某一项内。
 
@@ -155,7 +159,7 @@ if t.itemBounds == nil {
 
 ---
 
-## 8. 选择合成（`marquee.go:89` `applyMarquee`）
+## 8. 选择合成（`marquee.go:114` `applyMarquee`）
 
 每帧由 `Dragged()` 触发，从当前框重建选择：
 
@@ -171,28 +175,32 @@ t.selected = next
 a.requestPreview()
 ```
 
-- **`selectionEqual` 短路**（`marquee.go:146`）：框没有新进/新出项时不改选择、不刷新预览，节省无谓重绘。
+- **`selectionEqual` 短路**（`marquee.go:171`）：框没有新进/新出项时不改选择、不刷新预览，节省无谓重绘。
 - **锚点维护**：`anchor`/`cursor` 是既有 Shift 范围选择与键盘移动的基准。替换模式下手势接管锚点，指向框内视图顺序的第一项；追加模式尽量保留原锚点。
-- **`copySelection`**（`marquee.go:160`）：`base` 必须深拷贝，否则会被 `applyMarquee` 的整体重写波及。
+- **`copySelection`**（`marquee.go:185`）：`base` 必须深拷贝，否则会被 `applyMarquee` 的整体重写波及。
 
 ---
 
-## 9. 渲染（`marquee.go:171` `marqueeOverlay`）
+## 9. 渲染（`marquee.go:196` `marqueeOverlay`）
 
 在文件区 `Column` 末尾挂一个绝对定位覆盖层，用 `DrawOver` 在**所有子元素之后**绘制，保证虚框压在最上层：
 
 ```go
 overlay := ui.Box(c).Absolute().Left(0).Top(0).Fill().PassThrough()
 overlay.DrawOver(func(p *ui.Painter, r ui.Rect) {
-	lx, ly, _ := overlay.WindowToLocal(band.X, band.Y)
-	box := ui.Rect{X: lx, Y: ly, W: band.W, H: band.H}
-	p.Fill(box, colorAccent().Alpha(0.12), 0)        // 半透明填充
-	p.StrokeDashed(box, colorAccent().Alpha(0.9), 0, 1) // 虚线边框
+	// 画布坐标 == 窗口坐标：band 原样绘制，且夹在文件区盒内
+	p.Clip(r, 0, func() {
+		p.Fill(band, colorAccent().Alpha(0.12), 0)          // 半透明填充
+		p.StrokeDashed(band, colorAccent().Alpha(0.9), 0, 1) // 虚线边框
+	})
 })
 ```
 
+- **直接用窗口坐标**：引擎 `place` 之后所有元素的 `x/y/w/h` 都是窗口坐标，`world` 只承载视觉变换（`Transform`），所以 `Paint`/`DrawOver` 的画布坐标就是窗口坐标，回调参数 `r` 也是窗口坐标。`band` 与 `itemBounds` 都在这一坐标系里，**原样绘制**即可。
+- **不要用 `WindowToLocal` 换算**：`WindowToLocal` 把窗口点变成「元素自身盒内」的点（`world⁻¹` 再减去 `st.x/st.y`），而画布并不在那个坐标系里；用它会把框再往左上偏移一个「文件区在窗口中的位置」——正是此前框位置不对的原因（框比实际拖动区偏左一个侧边栏宽、偏上一个工具栏高）。
+- **`p.Clip(r, 0, …)`**：`DrawOver` 不受元素自身 `Clip()` 影响（引擎在调用 `paintAfterFn` 之前已弹出自身裁剪），因此显式用 `Painter.Clip` 把框夹在文件区盒内：拖到边缘外时框止步于文件区，不会压到侧边栏和工具栏。
 - **`PassThrough()`**：覆盖层不接管任何指针事件，行/磁贴的点击、拖拽、右键菜单不受影响。
-- **`WindowToLocal`**：把窗口坐标的框换算成覆盖层局部坐标再绘制。
+- **只画「已是拖动」的框**：`marqueeOverlay` 与选择同用一个 `moved()` 判据，单击不留残框。
 - **配色**：复用主题令牌 `colorAccent()`，自动适配亮/暗外观。
 - **`filePane` 中的调用点**：`files.go:85`（常规视图）与 `files.go:68`（gallery 分支，因 gallery 提前 return）。
 
@@ -214,18 +222,21 @@ overlay.DrawOver(func(p *ui.Painter, r ui.Rect) {
 | `state.go:51` | `tabState.marquee` / `itemBounds` 字段 |
 | `state.go:61` | `marqueeState` 类型 |
 | `marquee.go:9` | `marqueeState.rect()` 归一化矩形 |
-| `marquee.go:17` | `rectOverlaps()` 相交测试 |
-| `marquee.go:32` | `bindMarquee()` 手势状态机 |
-| `marquee.go:77` | `pointOnItem()` 起点判定 |
-| `marquee.go:89` | `applyMarquee()` 选择合成 |
-| `marquee.go:146` | `selectionEqual()` 相等判断 |
-| `marquee.go:160` | `copySelection()` 快照深拷贝 |
-| `marquee.go:171` | `marqueeOverlay()` 虚框绘制 |
+| `marquee.go:21` | `bandStart` 拖动阈值 |
+| `marquee.go:26` | `marqueeState.moved()` 点击/拖动判定 |
+| `marquee.go:33` | `rectOverlaps()` 相交测试 |
+| `marquee.go:51` | `bindMarquee()` 手势状态机 |
+| `marquee.go:102` | `pointOnItem()` 起点判定 |
+| `marquee.go:114` | `applyMarquee()` 选择合成 |
+| `marquee.go:171` | `selectionEqual()` 相等判断 |
+| `marquee.go:185` | `copySelection()` 快照深拷贝 |
+| `marquee.go:196` | `marqueeOverlay()` 虚框绘制 |
 | `files.go:52` | 每帧重建 `itemBounds` |
 | `files.go:68` / `85` | 挂载覆盖层（gallery / 常规） |
 | `files.go:967` | 记录行矩形（`bindItemInput`） |
 | `files.go:1011` | 挂载 `bindMarquee`（`bindPaneMenu`） |
 | `gallery.go:333` | 记录画廊磁贴矩形 |
+| `marquee_test.go` | 圈选测试：命中与修饰键合成、两个视图里框与选区的位置、空白单击不改选择 |
 
 ---
 

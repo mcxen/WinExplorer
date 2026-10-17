@@ -9,6 +9,8 @@ func TestDiskWarnTemp(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := newStoreApp(t, t.TempDir())
+	// The settings have to reach state.json for the reload below to see them.
+	a.store = loadState()
 	if limit, on := a.diskWarnTemp(); !on || limit != 50 {
 		t.Fatalf("defaults: limit=%v on=%v, want 50 true", limit, on)
 	}

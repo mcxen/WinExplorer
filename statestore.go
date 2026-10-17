@@ -33,19 +33,27 @@ type persistedState struct {
 	// plugin id. A state file written before this field existed
 	// unmarshals to nil, and the setters initialize it lazily.
 	PluginSettings map[string]map[string]string `json:"pluginSettings"`
+
+	// path is the state file the store reads and writes, set by loadState
+	// and never serialized. A store built in memory — the tests' and the
+	// remote plugin's — has none and keeps its state in memory, instead
+	// of writing the user's file.
+	path string `json:"-"`
 }
 
-// appSettings is the view state the settings dialog edits: the 查看>显示
-// toggles, 紧凑视图, the preview pane, the current view mode (state.go's
-// ViewMode), and the details view's user-set column widths — zero keeps
-// the default width.
+// appSettings is the view state the settings dialog edits: the 外观 mode
+// (theme.go's appearanceLight/appearanceDark, "" for 跟随系统), the
+// 查看>显示 toggles, 紧凑视图, the preview pane, the current view mode
+// (state.go's ViewMode), and the details view's user-set column widths —
+// zero keeps the default width.
 type appSettings struct {
-	ShowHidden     bool `json:"showHidden"`
-	ShowExt        bool `json:"showExt"`
-	Compact        bool `json:"compact"`
-	ItemCheckboxes bool `json:"itemCheckboxes"`
-	PreviewOpen    bool `json:"previewOpen"`
-	Mode           int  `json:"mode"`
+	Appearance     string `json:"appearance,omitempty"`
+	ShowHidden     bool   `json:"showHidden"`
+	ShowExt        bool   `json:"showExt"`
+	Compact        bool   `json:"compact"`
+	ItemCheckboxes bool   `json:"itemCheckboxes"`
+	PreviewOpen    bool   `json:"previewOpen"`
+	Mode           int    `json:"mode"`
 
 	ColName float32 `json:"colName,omitempty"`
 	ColDate float32 `json:"colDate,omitempty"`
@@ -55,8 +63,8 @@ type appSettings struct {
 }
 
 // defaultSettings are the settings a fresh app starts with, mirroring
-// newAppWithStore in main.go: extensions shown, everything else off, and the
-// details view.
+// newAppWithStore in main.go: the system's appearance, extensions shown,
+// everything else off, and the details view.
 func defaultSettings() *appSettings {
 	return &appSettings{ShowExt: true, Mode: int(ViewDetails)}
 }
@@ -82,13 +90,16 @@ const (
 func loadState() *persistedState {
 	st := &persistedState{}
 	if dir, err := os.UserConfigDir(); err == nil {
+		st.path = filepath.Join(dir, stateDirName, "state.json")
 		for _, name := range []string{stateDirName, legacyStateDirName} {
 			data, err := os.ReadFile(filepath.Join(dir, name, "state.json"))
 			if err != nil {
 				continue
 			}
 			if err := json.Unmarshal(data, st); err != nil {
-				st = &persistedState{}
+				// A corrupt file is replaced, but the store still owns the
+				// path: the next change overwrites it.
+				st = &persistedState{path: st.path}
 				continue
 			}
 			if st.Settings == nil {
@@ -107,20 +118,20 @@ func loadState() *persistedState {
 
 // saveLocked writes the state back, with the mutex already held by the
 // caller. Errors are ignored: a lost pin is harmless. Saving into the new
-// directory is what completes the move away from the pre-rename one.
+// directory is what completes the move away from the pre-rename one. A store
+// with no path is one built in memory, and writes nothing.
 func (st *persistedState) saveLocked() {
-	dir, err := os.UserConfigDir()
-	if err != nil {
+	if st.path == "" {
 		return
 	}
-	if err := os.MkdirAll(filepath.Join(dir, stateDirName), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(st.path), 0o755); err != nil {
 		return
 	}
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(dir, stateDirName, "state.json"), data, 0o644)
+	_ = os.WriteFile(st.path, data, 0o644)
 }
 
 // defaultPins are the folders Explorer pins on a fresh profile.

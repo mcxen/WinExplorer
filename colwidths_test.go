@@ -47,6 +47,8 @@ func TestSaveColWidthsPersists(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := newStoreApp(t, t.TempDir())
+	// The widths have to reach state.json for the reload below to see them.
+	a.store = loadState()
 	a.colWidths = colWidths{name: 300, date: 200, size: 130}
 	a.saveColWidths()
 	s := loadState().settings()

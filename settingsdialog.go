@@ -123,8 +123,8 @@ func (a *App) settingsBody(c *ui.Context) {
 			// 恢复默认 puts the appearance and the view settings back;
 			// the updater keeps its own preferences.
 			uikitSecondaryButton(c, "恢复默认", func() {
-				mygo.Theme.SetSource(mygo.ThemeSystem)
 				a.applySettings(func(x *appSettings) { *x = *defaultSettings() })
+				useAppearance(a.store, mygo.ThemeSystem)
 			})
 			uikitPrimaryButton(c, "确定", func() {
 				a.settingsOpen = false
@@ -334,40 +334,33 @@ func settingsInfo(c *ui.Context, name, value string) {
 	})
 }
 
-// appearanceIndex maps mygo.Theme.Source to the segmented control's
-// index. Before App.Run the theme has nothing to read, and counts as
-// 跟随系统, as darkMode treats the pre-ready appearance.
-func appearanceIndex() int {
-	source := mygo.ThemeSystem
-	if mygo.App.IsReady() {
-		source = mygo.Theme.Source()
-	}
-	switch source {
-	case mygo.ThemeLight:
+// appearanceIndex maps the stored 外观 setting to the segmented control's
+// index: 跟随系统, 浅色, 深色. The store is the setting's home — it is what
+// useAppearance writes and what the app starts with — so the segments show
+// the choice whether or not the app is running yet.
+func appearanceIndex(setting string) int {
+	switch setting {
+	case appearanceLight:
 		return 1
-	case mygo.ThemeDark:
+	case appearanceDark:
 		return 2
 	}
 	return 0
 }
 
-// settingsAppearance is the 外观 page: the appearance seeded from
-// mygo.Theme each frame, so the segments follow what the app shows.
+// settingsAppearance is the 外观 page: the appearance seeded from the
+// stored setting each frame, so the segments follow what the app shows.
 func (a *App) settingsAppearance(c *ui.Context) {
 	settingsCard(c, func(first *bool) {
 		settingsCardRow(c, first, func() {
-			v := appearanceIndex()
+			v := appearanceIndex(a.store.settings().Appearance)
 			settingsRow(c, "外观模式", "选择应用的外观", func() {
 				seg := ui.Segmented(c, &v, "跟随系统", "浅色", "深色").Shrink(0)
 				if seg.Changed() {
-					switch v {
-					case 1:
-						mygo.Theme.SetSource(mygo.ThemeLight)
-					case 2:
-						mygo.Theme.SetSource(mygo.ThemeDark)
-					default:
-						mygo.Theme.SetSource(mygo.ThemeSystem)
-					}
+					source := []mygo.ThemeSource{
+						mygo.ThemeSystem, mygo.ThemeLight, mygo.ThemeDark,
+					}[v]
+					useAppearance(a.store, source)
 				}
 			})
 		})

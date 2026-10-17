@@ -30,7 +30,9 @@ import (
 // leak between tests.
 func newRemoteManageEnv(t *testing.T) *remoteTestEnv {
 	e := newRemoteTestEnv(t)
-	e.a.store = &persistedState{}
+	// The shares persist through state.json, which takes a store with a
+	// path: loadState is the one that reads and writes the isolated HOME.
+	e.a.store = loadState()
 	e.a.homePath = e.home
 	remoteShareAccessMu.Lock()
 	remoteShareAccess = map[string]time.Time{}

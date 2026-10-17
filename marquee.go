@@ -12,6 +12,22 @@ func (m marqueeState) rect() ui.Rect {
 	return ui.Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
 }
 
+// bandStart is how far the pointer leaves the point it went down at before
+// the gesture is a band rather than a click — the toolkit's own dragStart,
+// the distance that makes a press a drag. Element.Dragged reports the press
+// as a drag from its first frame, by zero, so without this a click on the
+// empty space would draw no box yet still run the band's empty selection
+// over the pane and wipe what was selected.
+const bandStart float32 = 4
+
+// moved reports whether the pointer has left the press's point by bandStart
+// in either axis: under that the press is still a click on the empty space,
+// which selects nothing.
+func (m marqueeState) moved() bool {
+	dx, dy := m.x1-m.x0, m.y1-m.y0
+	return max(dx, -dx) >= bandStart || max(dy, -dy) >= bandStart
+}
+
 // rectOverlaps reports whether a and b share any area, the test the band
 // runs on each item's box: a touch selects, as Finder's band does.
 func rectOverlaps(a, b ui.Rect) bool {
@@ -29,6 +45,9 @@ func rectOverlaps(a, b ui.Rect) bool {
 // press lands on one element alone: the engine's pressed target. Only that
 // element's Pressed, Dragged and DragEnded report true, so the rest return
 // before touching the gesture's state and never disturb it.
+//
+// A press the pointer never leaves is a click on the empty space, not a
+// band: nothing is drawn and nothing is selected (bandStart, moved).
 func (a *App) bindMarquee(c *ui.Context, el ui.Element) {
 	t := a.cur()
 	b := el.Bounds()
@@ -59,12 +78,18 @@ func (a *App) bindMarquee(c *ui.Context, el ui.Element) {
 		// about — it follows the pointer wherever it goes.
 		lx, ly, _ := el.PointerPosition()
 		t.marquee.x1, t.marquee.y1 = b.X+lx, b.Y+ly
+		// A press the pointer has not left yet is still a click, and its
+		// band would be a point: no selection change until it is one.
+		if !t.marquee.moved() {
+			return
+		}
 		a.applyMarquee()
 		return
 	}
 	// The drag let go: the selection it built stands, and the gesture ends.
 	// A press released under the drag threshold is no drag but a click, and
-	// Clicked ends the band the same way — an empty click selects nothing.
+	// Clicked ends the band the same way — a click on the empty space
+	// leaves the selection as it was.
 	if _, _, ok := el.DragEnded(); ok || el.Clicked() {
 		t.marquee.on = false
 		t.marquee.base = nil
@@ -170,21 +195,25 @@ func copySelection(sel map[string]bool) map[string]bool {
 // it never takes a pointer event from the rows under it.
 func (a *App) marqueeOverlay(c *ui.Context) {
 	t := a.cur()
-	if !t.marquee.on {
+	// The box shows exactly while the band does: a press the pointer has not
+	// left is a click, with nothing drawn and nothing selected.
+	if !t.marquee.on || !t.marquee.moved() {
 		return
 	}
 	band := t.marquee.rect()
-	if band.W < 2 && band.H < 2 {
-		return
-	}
+	// The painter draws in the window's coordinates, the same ones the band
+	// is kept in — so the band goes down as it is. It is not mapped through
+	// WindowToLocal: that turns a window point into one of the box's own, an
+	// offset the box already has, and would move the band up and left by the
+	// pane's place in the window.
 	overlay := ui.Box(c).Absolute().Left(0).Top(0).Fill().PassThrough()
 	overlay.DrawOver(func(p *ui.Painter, r ui.Rect) {
-		lx, ly, ok := overlay.WindowToLocal(band.X, band.Y)
-		if !ok {
-			return
-		}
-		box := ui.Rect{X: lx, Y: ly, W: band.W, H: band.H}
-		p.Fill(box, colorAccent().Alpha(0.12), 0)
-		p.StrokeDashed(box, colorAccent().Alpha(0.9), 0, 1)
+		// The band's corners may be dragged past the pane; the pane's box
+		// clips it, so it stops at the edge rather than running over the
+		// sidebar and the chrome.
+		p.Clip(r, 0, func() {
+			p.Fill(band, colorAccent().Alpha(0.12), 0)
+			p.StrokeDashed(band, colorAccent().Alpha(0.9), 0, 1)
+		})
 	})
 }

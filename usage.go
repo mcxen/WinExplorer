@@ -479,7 +479,7 @@ func (a *App) usageModal(c *ui.Context) {
 	if !*flag {
 		return
 	}
-	ui.Modal(c, flag, func() {
+	floatDialog(c, flag, false, func() {
 		a.usageBody(c, flag)
 	})
 }

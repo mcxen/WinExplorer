@@ -8,13 +8,15 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
 // settingsdialog.go is the 设置 dialog, Windows 11's Settings app in a
-// modal over the window: the appearance picker, the view toggles
-// Explorer's folder options keep, and the updater plugin's preferences.
-// Every change writes through at once, so there is nothing to save —
-// 确定 only closes the dialog.
+// modal: a left navigation pane picks the page — 外观, 查看, 扩展, 插件,
+// 更新 — and the right side shows that page's setting cards. Every change
+// writes through at once, so there is nothing to save — 确定 only closes
+// the dialog.
 
 // viewModeNames pairs the view modes with the labels Explorer's 查看 menu
 // uses, largest first.
@@ -61,12 +63,26 @@ func viewModeNamed(label string) (ViewMode, bool) {
 	return 0, false
 }
 
+// settingsPages is the dialog's navigation, in order: the nav item's icon
+// and label and the heading its page shows. 更新 stays last, as Windows
+// 11 keeps Windows 更新 at the foot of its settings nav.
+var settingsPages = []struct {
+	label string
+	icon  func() *ui.SVG
+}{
+	{"外观", lucide.Palette},
+	{"查看", lucide.LayoutList},
+	{"扩展", lucide.Puzzle},
+	{"插件", lucide.Blocks},
+	{"更新", lucide.RefreshCw},
+}
+
 // settingsModal shows the dialog while it is open. Called from view.
 func (a *App) settingsModal(c *ui.Context) {
 	if !a.settingsOpen {
 		return
 	}
-	ui.Modal(c, &a.settingsOpen, func() {
+	floatDialog(c, &a.settingsOpen, false, func() {
 		a.settingsBody(c)
 	})
 }
@@ -91,22 +107,16 @@ func (a *App) applySettings(fn func(s *appSettings)) {
 	}
 }
 
-// settingsBody builds the dialog: the title, the sections scrolling once
-// they no longer fit the window, and the buttons that stay at the bottom.
+// settingsBody builds the dialog: the title, a body row of the navigation
+// pane and the page it picks, and the buttons that stay at the bottom.
 func (a *App) settingsBody(c *ui.Context) {
-	ui.Column(c).Gap(0).MinWidth(440).Children(func() {
+	ui.Column(c).Gap(0).MinWidth(580).Children(func() {
 		ui.Text(c, "设置").FontSize(14).FontWeight(600).TextColor(colorText()).
-			Padding(14, 16, 8, 16)
-		ui.Scroll(c).FillWidth().MaxHeight(320).Padding(0, 16, 4, 16).Children(func() {
-			a.settingsAppearance(c)
-			settingsDivider(c)
-			a.settingsView(c)
-			settingsDivider(c)
-			a.settingsUpdates(c)
-			settingsDivider(c)
-			a.settingsPlugins(c)
-			settingsDivider(c)
-			a.settingsExtensions(c)
+			Padding(14, 16, 10, 16)
+		ui.Row(c).FillWidth().Height(330).Shrink(0).Children(func() {
+			a.settingsNav(c)
+			ui.Box(c).Width(1).FillHeight().Shrink(0).Background(colorDivider())
+			a.settingsPage(c)
 		})
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End).Padding(10, 16, 12, 16)
 		btns.Children(func() {
@@ -123,36 +133,173 @@ func (a *App) settingsBody(c *ui.Context) {
 	})
 }
 
-// settingsDivider is the hairline between sections.
-func settingsDivider(c *ui.Context) {
-	ui.Box(c).Height(1).FillWidth().Margin(6, 0).Background(colorDivider())
+// settingsNav is the dialog's left pane, the Windows 11 settings nav in
+// miniature: one icon-and-label row per page on the window chrome's
+// background, the chosen page selected as the main sidebar's rows select.
+func (a *App) settingsNav(c *ui.Context) {
+	pane := ui.Column(c).Width(160).FillHeight().Shrink(0).
+		Background(colorNav())
+	pane.Children(func() {
+		ui.Scroll(c).Grow(1).FillWidth().Padding(8, 8, 12, 8).Gap(2).Children(func() {
+			for i, p := range settingsPages {
+				a.settingsNavItem(c, i, p.label, p.icon)
+			}
+		})
+	})
 }
 
-// settingsSectionHead is a section's caption, 外观/查看/更新.
-func settingsSectionHead(c *ui.Context, title string) {
-	ui.Text(c, title).FontSize(13).FontWeight(600).TextColor(colorText()).
-		Padding(10, 0, 2, 0)
+// settingsNavItem is one page row: a 16px icon and a 12px label on a 34px
+// row, selected in the main sidebar's colors. A click switches the page.
+func (a *App) settingsNavItem(c *ui.Context, i int, label string, icon func() *ui.SVG) {
+	row := ui.ButtonBase(c.Key("set-nav-"+string(rune(i)))).FillWidth().Height(34).
+		Radius(4).Padding(0, 8).Gap(10).AlignItems(ui.Center).
+		Label(label)
+	switch {
+	case i == a.settingsTab:
+		row.Background(colorSelected())
+	case row.Hovered():
+		row.Background(colorHover())
+	}
+	row.Children(func() {
+		components.Icon(c, icon).Size(16, 16).TextColor(colorText())
+		ui.Text(c, label).FontSize(12).TextColor(colorText()).
+			SingleLine().Grow(1).MinWidth(0)
+	})
+	if row.Clicked() {
+		a.settingsTab = i
+	}
 }
 
-// settingsPlugins is the 插件 section: one switch per registered plugin,
-// in registration order, each reading its state fresh from the store like
-// the sections above, so a toggle shows at once. Switching a plugin off
-// stops what it is doing too — its OnDisable hook owns that. 恢复默认
-// leaves the plugins alone: they are not appearance or view settings.
+// settingsPage shows the active page: its title, then the page's cards in
+// a scroll. An out-of-range tab — a page count changed mid-session —
+// falls back to the first page.
+func (a *App) settingsPage(c *ui.Context) {
+	if a.settingsTab < 0 || a.settingsTab >= len(settingsPages) {
+		a.settingsTab = 0
+	}
+	page := settingsPages[a.settingsTab]
+	ui.Column(c).Grow(1).MinWidth(0).FillHeight().Children(func() {
+		ui.Text(c, page.label).FontSize(15).FontWeight(600).TextColor(colorText()).
+			Padding(4, 16, 10, 16)
+		ui.Scroll(c).FillWidth().Grow(1).Padding(0, 2, 16, 16).Children(func() {
+			switch a.settingsTab {
+			case 1:
+				a.settingsView(c)
+			case 2:
+				a.settingsExtensions(c)
+			case 3:
+				a.settingsPlugins(c)
+			case 4:
+				a.settingsUpdates(c)
+			default:
+				a.settingsAppearance(c)
+			}
+		})
+	})
+}
+
+// settingsCard groups rows in one Windows 11 settings card: a raised
+// rounded surface with a hairline border, hairlines between its rows. Rows
+// build through settingsCardRow so the first row draws no hairline; fn
+// receives the card's running first flag.
+func settingsCard(c *ui.Context, fn func(first *bool)) {
+	card := ui.Column(c).FillWidth().Radius(4).Background(colorAddress()).
+		Border(1, colorDivider()).Clip()
+	card.Children(func() {
+		first := true
+		fn(&first)
+	})
+}
+
+// settingsCardRow pads a card's row horizontally so its controls clear the
+// card's border, and draws the hairline above every row but the first.
+func settingsCardRow(c *ui.Context, first *bool, fn func()) {
+	if *first {
+		*first = false
+	} else {
+		ui.Box(c).Height(1).FillWidth().Background(colorDivider())
+	}
+	ui.Box(c).FillWidth().Padding(9, 12).Children(fn)
+}
+
+// settingsPlugins is the 插件 page: one card per registered plugin, in
+// registration order — the plugin's switch, then the settings rows it
+// declares beneath, so each plugin is one management block. Every row
+// reads its state fresh from the store like the pages above, so a change
+// made in another window shows here. Switching a plugin off stops what it
+// is doing too — its OnDisable hook owns that — and hides its settings
+// rows with it. 恢复默认 leaves the plugins alone: they are not
+// appearance or view settings.
 func (a *App) settingsPlugins(c *ui.Context) {
-	settingsSectionHead(c, "插件")
-	for _, p := range registeredPlugins() {
-		id := p.ID
-		settingsSwitch(c, p.Name, p.Desc,
-			func() bool { return a.pluginEnabled(id) },
-			func(on bool) { a.pluginSetEnabled(id, on) })
+	for i, p := range registeredPlugins() {
+		if i > 0 {
+			ui.Box(c).Height(12)
+		}
+		a.settingsPluginCard(c, p)
+	}
+}
+
+// settingsPluginCard is one plugin's card: its switch row, then the rows
+// it declared through the registry's settings interface (plugins.go's
+// PluginSetting) — the plugin manages itself through data, and the page
+// renders it with the same shapes every other settings row uses.
+func (a *App) settingsPluginCard(c *ui.Context, p *Plugin) {
+	id := p.ID
+	settingsCard(c, func(first *bool) {
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, p.Name, p.Desc,
+				func() bool { return a.pluginEnabled(id) },
+				func(on bool) { a.pluginSetEnabled(id, on) })
+		})
+		for _, s := range a.pluginSettings(p) {
+			settingsCardRow(c, first, func() {
+				pluginSettingRow(c, s)
+			})
+		}
+	})
+}
+
+// pluginSettingRow renders one declared row with the same shapes the
+// pages' own rows use. A switch fires Change with "on" or "off", a select
+// with the option picked, an action fires Run.
+func pluginSettingRow(c *ui.Context, s PluginSetting) {
+	switch s.Kind {
+	case PluginSettingSwitch:
+		settingsSwitch(c, s.Name, s.Desc,
+			func() bool { return s.On },
+			func(on bool) {
+				if s.Change == nil {
+					return
+				}
+				if on {
+					s.Change("on")
+				} else {
+					s.Change("off")
+				}
+			})
+	case PluginSettingSelect:
+		settingsRow(c, s.Name, s.Desc, func() {
+			cur := s.Value
+			sel := ui.Select(c, &cur, s.Options).Shrink(0)
+			if sel.Changed() && s.Change != nil {
+				s.Change(cur)
+			}
+		})
+	case PluginSettingInfo:
+		settingsInfo(c, s.Name, s.Value)
+	case PluginSettingAction:
+		settingsRow(c, s.Name, s.Desc, func() {
+			uikitSecondaryButton(c, s.Action, s.Run)
+		})
 	}
 }
 
 // settingsRow is one setting's row, Windows 11 Settings' shape: the name
-// and its one-line description on the left, the control on the right.
+// and its one-line description on the left, the control on the right. The
+// row carries no padding of its own; settingsCardRow pads card rows, and
+// the extension editor pads its single row.
 func settingsRow(c *ui.Context, name, desc string, control func()) {
-	row := ui.Row(c).FillWidth().Gap(16).Padding(8, 0).AlignItems(ui.Center)
+	row := ui.Row(c).FillWidth().Gap(16).AlignItems(ui.Center)
 	row.Children(func() {
 		text := ui.Column(c).Grow(1).MinWidth(0).Gap(2)
 		text.Children(func() {
@@ -167,8 +314,8 @@ func settingsRow(c *ui.Context, name, desc string, control func()) {
 // so a change made in another window shows here; set writes a change
 // through on the UI thread.
 func settingsSwitch(c *ui.Context, name, desc string, get func() bool, set func(bool)) {
-	v := get()
 	settingsRow(c, name, desc, func() {
+		v := get()
 		sw := ui.Switch(c, &v)
 		if sw.Changed() {
 			set(v)
@@ -179,7 +326,7 @@ func settingsSwitch(c *ui.Context, name, desc string, get func() bool, set func(
 // settingsInfo shows a value where a control would sit: 当前版本 and
 // 上次检查, muted as Windows 11's are.
 func settingsInfo(c *ui.Context, name, value string) {
-	row := ui.Row(c).FillWidth().Gap(16).Padding(8, 0).AlignItems(ui.Center)
+	row := ui.Row(c).FillWidth().Gap(16).AlignItems(ui.Center)
 	row.Children(func() {
 		ui.Text(c, name).FontSize(13).TextColor(colorText()).SingleLine().
 			Grow(1).MinWidth(0)
@@ -204,136 +351,180 @@ func appearanceIndex() int {
 	return 0
 }
 
-// settingsAppearance is the 外观 section: the appearance seeded from
+// settingsAppearance is the 外观 page: the appearance seeded from
 // mygo.Theme each frame, so the segments follow what the app shows.
 func (a *App) settingsAppearance(c *ui.Context) {
-	settingsSectionHead(c, "外观")
-	v := appearanceIndex()
-	settingsRow(c, "外观模式", "选择应用的外观", func() {
-		seg := ui.Segmented(c, &v, "跟随系统", "浅色", "深色").Shrink(0)
-		if seg.Changed() {
-			switch v {
-			case 1:
-				mygo.Theme.SetSource(mygo.ThemeLight)
-			case 2:
-				mygo.Theme.SetSource(mygo.ThemeDark)
-			default:
-				mygo.Theme.SetSource(mygo.ThemeSystem)
-			}
-		}
+	settingsCard(c, func(first *bool) {
+		settingsCardRow(c, first, func() {
+			v := appearanceIndex()
+			settingsRow(c, "外观模式", "选择应用的外观", func() {
+				seg := ui.Segmented(c, &v, "跟随系统", "浅色", "深色").Shrink(0)
+				if seg.Changed() {
+					switch v {
+					case 1:
+						mygo.Theme.SetSource(mygo.ThemeLight)
+					case 2:
+						mygo.Theme.SetSource(mygo.ThemeDark)
+					default:
+						mygo.Theme.SetSource(mygo.ThemeSystem)
+					}
+				}
+			})
+		})
 	})
 }
 
-// settingsView is the 查看 section: the toggles Explorer's folder options
-// keep, each writing through to every window, and the view new windows
-// open in.
+// settingsView is the 查看 page: the toggles Explorer's folder options
+// keep, and the view new windows open in. Two cards partition them:
+// 显示's three toggles, and the window's own layout settings.
 func (a *App) settingsView(c *ui.Context) {
-	settingsSectionHead(c, "查看")
-	settingsSwitch(c, "文件扩展名", "显示已知文件类型的扩展名",
-		func() bool { return a.store.settings().ShowExt },
-		func(v bool) { a.applySettings(func(x *appSettings) { x.ShowExt = v }) })
-	settingsSwitch(c, "隐藏的项目", "显示隐藏的文件与文件夹",
-		func() bool { return a.store.settings().ShowHidden },
-		func(v bool) { a.applySettings(func(x *appSettings) { x.ShowHidden = v }) })
-	settingsSwitch(c, "项目复选框", "选择项目时显示复选框",
-		func() bool { return a.store.settings().ItemCheckboxes },
-		func(v bool) { a.applySettings(func(x *appSettings) { x.ItemCheckboxes = v }) })
-	settingsSwitch(c, "紧凑视图", "减小列表与详细信息的行距",
-		func() bool { return a.store.settings().Compact },
-		func(v bool) { a.applySettings(func(x *appSettings) { x.Compact = v }) })
-	settingsSwitch(c, "预览窗格", "打开窗口时在右侧显示预览窗格",
-		func() bool { return a.store.settings().PreviewOpen },
-		func(v bool) { a.applySettings(func(x *appSettings) { x.PreviewOpen = v }) })
-	settingsRow(c, "默认视图", "新窗口使用的视图", func() {
-		cur := viewModeLabel(ViewMode(a.store.settings().Mode))
-		sel := ui.Select(c, &cur, viewModeLabels()).Shrink(0)
-		if sel.Changed() {
-			if mode, ok := viewModeNamed(cur); ok {
-				a.applySettings(func(x *appSettings) { x.Mode = int(mode) })
-			}
-		}
+	settingsCard(c, func(first *bool) {
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, "文件扩展名", "显示已知文件类型的扩展名",
+				func() bool { return a.store.settings().ShowExt },
+				func(v bool) { a.applySettings(func(x *appSettings) { x.ShowExt = v }) })
+		})
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, "隐藏的项目", "显示隐藏的文件与文件夹",
+				func() bool { return a.store.settings().ShowHidden },
+				func(v bool) { a.applySettings(func(x *appSettings) { x.ShowHidden = v }) })
+		})
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, "项目复选框", "选择项目时显示复选框",
+				func() bool { return a.store.settings().ItemCheckboxes },
+				func(v bool) { a.applySettings(func(x *appSettings) { x.ItemCheckboxes = v }) })
+		})
+	})
+	ui.Box(c).Height(12)
+	settingsCard(c, func(first *bool) {
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, "紧凑视图", "减小列表与详细信息的行距",
+				func() bool { return a.store.settings().Compact },
+				func(v bool) { a.applySettings(func(x *appSettings) { x.Compact = v }) })
+		})
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, "预览窗格", "打开窗口时在右侧显示预览窗格",
+				func() bool { return a.store.settings().PreviewOpen },
+				func(v bool) { a.applySettings(func(x *appSettings) { x.PreviewOpen = v }) })
+		})
+		settingsCardRow(c, first, func() {
+			cur := viewModeLabel(ViewMode(a.store.settings().Mode))
+			settingsRow(c, "默认视图", "新窗口使用的视图", func() {
+				sel := ui.Select(c, &cur, viewModeLabels()).Shrink(0)
+				if sel.Changed() {
+					if mode, ok := viewModeNamed(cur); ok {
+						a.applySettings(func(x *appSettings) { x.Mode = int(mode) })
+					}
+				}
+			})
+		})
 	})
 }
 
-// settingsUpdates is the 更新 section: the current version and the
-// updater plugin's preferences, when the build can update itself at all.
-// The updater calls run on the UI thread during the frame, as the
-// immediate mode reads them fresh each frame.
+// settingsUpdates is the 更新 page: the current version and the updater
+// plugin's preferences, when the build can update itself at all. The
+// updater calls run on the UI thread during the frame, as the immediate
+// mode reads them fresh each frame.
 func (a *App) settingsUpdates(c *ui.Context) {
-	settingsSectionHead(c, "更新")
 	version := mygo.App.Version()
 	if version == "" {
 		version = "晴谷"
 	}
-	settingsInfo(c, "当前版本", version)
-	if !mygo.Updater.Enabled() {
-		// Development builds cannot self-update: one muted line in place
-		// of the controls.
-		ui.Text(c, "此构建不支持自动更新").FontSize(12).TextColor(colorMuted()).
-			Padding(8, 0)
-		return
-	}
-	settingsSwitch(c, "自动检查更新", "定期在后台检查新版本",
-		updater.AutomaticChecks, updater.SetAutomaticChecks)
-	settingsSwitch(c, "自动下载并安装", "后台下载并安装更新，下次启动时生效",
-		updater.AutomaticDownloads, updater.SetAutomaticDownloads)
-	// 检查更新 opens the updater's own update window; calling it again
-	// while a check is under way brings that window to the front.
-	btnRow := ui.Row(c).FillWidth().Justify(ui.End).Padding(8, 0)
-	btnRow.Children(func() {
-		uikitPrimaryButton(c, "检查更新", func() {
-			updater.CheckForUpdates()
+	settingsCard(c, func(first *bool) {
+		settingsCardRow(c, first, func() {
+			settingsInfo(c, "当前版本", version)
+		})
+		if !mygo.Updater.Enabled() {
+			// Development builds cannot self-update: the card shows the
+			// version alone, with one muted line in place of the controls.
+			return
+		}
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, "自动检查更新", "定期在后台检查新版本",
+				updater.AutomaticChecks, updater.SetAutomaticChecks)
+		})
+		settingsCardRow(c, first, func() {
+			settingsSwitch(c, "自动下载并安装", "后台下载并安装更新，下次启动时生效",
+				updater.AutomaticDownloads, updater.SetAutomaticDownloads)
+		})
+		// 检查更新 opens the updater's own update window; calling it again
+		// while a check is under way brings that window to the front.
+		settingsCardRow(c, first, func() {
+			settingsRow(c, "检查更新", "立即检查新版本", func() {
+				uikitPrimaryButton(c, "检查更新", func() {
+					updater.CheckForUpdates()
+				})
+			})
+		})
+		settingsCardRow(c, first, func() {
+			if last := updater.LastCheck(); last.IsZero() {
+				settingsInfo(c, "上次检查", "从未")
+			} else {
+				settingsInfo(c, "上次检查", last.Local().Format("2006/01/02 15:04"))
+			}
 		})
 	})
-	if last := updater.LastCheck(); last.IsZero() {
-		settingsInfo(c, "上次检查", "从未")
-	} else {
-		settingsInfo(c, "上次检查", last.Local().Format("2006/01/02 15:04"))
+	if !mygo.Updater.Enabled() {
+		ui.Text(c, "此构建不支持自动更新").FontSize(12).TextColor(colorMuted()).
+			Padding(8, 4, 0, 4)
 	}
 }
 
-// settingsExtensions is the 扩展 section: the registered shell extensions,
+// settingsExtensions is the 扩展 page: the registered shell extensions,
 // each with its enable switch, an 编辑 and a 删除 button, and the entries
 // the registry could not keep, listed with their problem so a broken
 // extensions.json is fixable without guessing. Every change writes through
 // to extensions.json at once — the registry has no pending state.
 func (a *App) settingsExtensions(c *ui.Context) {
-	settingsSectionHead(c, "扩展")
 	if len(a.shellExts) == 0 && len(a.shellExtErrs) == 0 {
 		ui.Text(c, "还没有注册扩展，点下方按钮添加").FontSize(12).
-			TextColor(colorMuted()).Padding(4, 0)
+			TextColor(colorMuted()).Padding(4, 4, 8, 4)
 	}
 	for _, e := range a.shellExtErrs {
 		msg := e.Msg
 		if e.Name != "" {
 			msg = "扩展 “" + e.Name + "” 加载失败：" + msg
 		}
-		ui.Text(c, msg).FontSize(12).TextColor(ui.Hex("#C4361D")).Padding(2, 0)
+		ui.Text(c, msg).FontSize(12).TextColor(ui.Hex("#C4361D")).Padding(2, 4)
 	}
-	for i := range a.shellExts {
-		x := &a.shellExts[i]
-		row := ui.Row(c).FillWidth().Gap(10).Padding(6, 0).AlignItems(ui.Center)
-		row.Children(func() {
-			col := ui.Column(c).Grow(1).MinWidth(0).Gap(2)
-			col.Children(func() {
-				ui.Text(c, x.Name).FontSize(13).TextColor(colorText()).SingleLine()
-				ui.Text(c, strings.Join(x.Match, "，")+" · "+truncateRunes(x.Command, 36)).
-					FontSize(12).TextColor(colorMuted()).SingleLine()
+	settingsCard(c, func(first *bool) {
+		for i := range a.shellExts {
+			x := &a.shellExts[i]
+			settingsCardRow(c, first, func() {
+				row := ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center)
+				row.Children(func() {
+					col := ui.Column(c).Grow(1).MinWidth(0).Gap(2)
+					col.Children(func() {
+						ui.Text(c, x.Name).FontSize(13).TextColor(colorText()).SingleLine()
+						ui.Text(c, strings.Join(x.Match, "，")+" · "+truncateRunes(x.Command, 36)).
+							FontSize(12).TextColor(colorMuted()).SingleLine()
+					})
+					settingsSwitchInline(c, !x.Disabled, func(on bool) {
+						x.Disabled = !on
+						a.saveShellExts()
+					})
+					uikitSecondaryButton(c, "编辑", func() { a.extEditBegin(i) })
+					uikitSecondaryButton(c, "删除", func() {
+						a.shellExts = slices.Delete(a.shellExts, i, i+1)
+						a.saveShellExts()
+					})
+				})
 			})
-			settingsSwitchInline(c, !x.Disabled, func(on bool) {
-				x.Disabled = !on
-				a.saveShellExts()
+		}
+		settingsCardRow(c, first, func() {
+			add := ui.ButtonBase(c).FillWidth().Height(34).Radius(4).
+				Label("添加扩展").Tooltip("添加扩展")
+			if add.Hovered() {
+				add.Background(colorHover())
+			}
+			add.Children(func() {
+				components.Icon(c, lucide.Plus).Size(14, 14).TextColor(colorText())
+				ui.Text(c, "添加扩展").FontSize(13).TextColor(colorText())
 			})
-			uikitSecondaryButton(c, "编辑", func() { a.extEditBegin(i) })
-			uikitSecondaryButton(c, "删除", func() {
-				a.shellExts = slices.Delete(a.shellExts, i, i+1)
-				a.saveShellExts()
-			})
+			if add.Clicked() {
+				a.extEditBegin(-1)
+			}
 		})
-	}
-	btnRow := ui.Row(c).FillWidth().Justify(ui.Start).Padding(6, 0)
-	btnRow.Children(func() {
-		uikitSecondaryButton(c, "添加扩展", func() { a.extEditBegin(-1) })
 	})
 }
 
@@ -453,7 +644,7 @@ func (a *App) extEditModal(c *ui.Context) {
 	if !a.extEdit.open {
 		return
 	}
-	ui.Modal(c, &a.extEdit.open, func() {
+	floatDialog(c, &a.extEdit.open, false, func() {
 		a.extEditBody(c)
 	})
 }
@@ -481,9 +672,11 @@ func (a *App) extEditBody(c *ui.Context) {
 			FillWidth().Height(30).FontSize(13).
 			Placeholder(`code "{path}" · 占位符：{path} {dir} {name} {stem} {ext}`)
 
-		settingsSwitch(c, "在终端中运行", "在新的终端窗口中执行命令",
-			func() bool { return e.terminal },
-			func(v bool) { e.terminal = v })
+		ui.Box(c).FillWidth().Padding(6, 0).Children(func() {
+			settingsSwitch(c, "在终端中运行", "在新的终端窗口中执行命令",
+				func() bool { return e.terminal },
+				func(v bool) { e.terminal = v })
+		})
 
 		if !e.extEditValid() {
 			ui.Text(c, "名称、匹配规则和命令都填写后才能确定").

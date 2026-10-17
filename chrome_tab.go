@@ -14,9 +14,9 @@ import (
 // There is no rule under it — the command bar sits on the same mica, as in
 // Explorer.
 func (a *App) tabStrip(c *ui.Context) {
-	bar := ui.Row(c).Height(40).FillWidth().Shrink(0).
+	bar := windowBG(c, ui.Row(c).Height(40).FillWidth().Shrink(0).
 		AlignItems(ui.Center).Padding(0, 0, 0, 8).Gap(2).
-		Background(colorWindow()).DragWindow()
+		DragWindow())
 	bar.Children(func() {
 		for i := range a.tabs {
 			a.tabItem(c, i)
@@ -178,8 +178,8 @@ func (a *App) commandBar(c *ui.Context) {
 	hasSel := len(a.cur().selected) > 0
 	canPaste := a.canPaste()
 
-	ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
-		Padding(0, 6).Gap(2).Background(colorChrome()).
+	windowBG(c, ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
+		Padding(0, 6).Gap(2)).
 		FocusGroup(ui.Horizontal).Children(func() {
 		a.commandMenu(c, lucide.FolderPlus, "新建", "新建", func(m *ui.Menu) {
 			if m.Item("文件夹").Chosen() {

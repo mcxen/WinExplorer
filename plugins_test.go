@@ -146,6 +146,9 @@ func TestPluginHooksGatedByEnabled(t *testing.T) {
 		MetaRows: func(a *App, e Entry) []PluginMetaRow {
 			return []PluginMetaRow{{Key: "测试行", Val: "v"}}
 		},
+		Settings: func(a *App) []PluginSetting {
+			return []PluginSetting{{Kind: PluginSettingSwitch, Name: "测试设置"}}
+		},
 	})
 	hasLabel := func(items []PluginMenuItem, label string) bool {
 		return slices.ContainsFunc(items, func(it PluginMenuItem) bool { return it.Label == label })
@@ -163,6 +166,16 @@ func TestPluginHooksGatedByEnabled(t *testing.T) {
 	if !slices.ContainsFunc(a.pluginMetaRows(Entry{Path: "/x/a.txt"}), func(r PluginMetaRow) bool { return r.Key == "测试行" }) {
 		t.Fatal("fake plugin's meta row missing while enabled")
 	}
+	hooks := findPlugin("test-hooks")
+	if rows := a.pluginSettings(hooks); len(rows) != 1 || rows[0].Name != "测试设置" {
+		t.Fatalf("pluginSettings = %v, want the fake plugin's row", rows)
+	}
+	if rows := a.pluginSettings(findPlugin("gallery")); rows != nil {
+		t.Fatalf("gallery declares no settings, pluginSettings = %v", rows)
+	}
+	if rows := a.pluginSettings(nil); rows != nil {
+		t.Fatal("pluginSettings(nil) not nil")
+	}
 	// Switched off, every collector drops it — the built-in plugins'
 	// contributions are unaffected.
 	a.pluginSetEnabled("test-hooks", false)
@@ -171,6 +184,9 @@ func TestPluginHooksGatedByEnabled(t *testing.T) {
 		slices.ContainsFunc(a.pluginNavItems(), func(it PluginNavItem) bool { return it.Label == "测试导航" }) ||
 		slices.ContainsFunc(a.pluginMetaRows(Entry{Path: "/x/a.txt"}), func(r PluginMetaRow) bool { return r.Key == "测试行" }) {
 		t.Fatal("fake plugin still contributes while disabled")
+	}
+	if rows := a.pluginSettings(hooks); rows != nil {
+		t.Fatalf("pluginSettings still returns rows while disabled: %v", rows)
 	}
 	if !hasLabel(a.pluginMenuItems(nil), "可视化查看占用") {
 		t.Fatal("usage plugin's menu item missing while enabled")

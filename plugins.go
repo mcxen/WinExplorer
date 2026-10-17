@@ -9,11 +9,12 @@ import (
 // ship with the app but that the user can turn off, in the settings
 // dialog's 插件 section. Each feature registers itself with RegisterPlugin
 // — its hooks say where it appears: context menus, the 查看更多 menu, the
-// sidebar, the preview pane's metadata. The collectors below gather only
-// the enabled plugins' contributions, so a switched-off plugin stops
-// appearing or animating. The store records only the turned-off ids
-// (statestore.go), so a store that records nothing has every plugin on:
-// a fresh install behaves as today's app does.
+// sidebar, the preview pane's metadata, its own rows in the 插件 section.
+// The collectors below gather only the enabled plugins' contributions, so
+// a switched-off plugin stops appearing or animating. The store records
+// only the turned-off ids (statestore.go), so a store that records
+// nothing has every plugin on: a fresh install behaves as today's app
+// does.
 //
 // init registers the built-ins in the order the 插件 section lists them,
 // each registration living in the plugin's own file.
@@ -45,6 +46,11 @@ type Plugin struct {
 	// MetaRows contributes rows to the preview pane's and 属性 dialog's
 	// metadata sections for the single selected entry.
 	MetaRows func(a *App, e Entry) []PluginMetaRow
+	// Settings declares the plugin's own rows for the settings dialog's
+	// 插件 section, nested under its switch while it is on — the
+	// per-plugin preferences pluginGet/pluginSet persist. nil means the
+	// plugin has no settings of its own.
+	Settings func(a *App) []PluginSetting
 }
 
 // PluginMenuItem is one menu entry a plugin contributes. Disabled greys it
@@ -73,6 +79,40 @@ type PluginMetaRow struct {
 	Key  string
 	Val  string
 	Copy bool
+}
+
+// PluginSettingKind is which row shape one declared plugin setting uses.
+type PluginSettingKind int
+
+const (
+	PluginSettingSwitch PluginSettingKind = iota // a toggle
+	PluginSettingSelect                          // a dropdown
+	PluginSettingInfo                            // a read-only value line
+	PluginSettingAction                          // a button
+)
+
+// PluginSetting is one row a plugin declares for the settings dialog's
+// 插件 section. The plugin only declares data — the dialog renders every
+// row with the same shapes its own sections use, so the section keeps one
+// look whichever plugin the rows came from — and writes changes through
+// the hooks, pluginGet/pluginSet persisting them.
+type PluginSetting struct {
+	Kind PluginSettingKind
+	Name string
+	Desc string
+
+	// Switch: On is the toggle's state; Change receives "on" or "off".
+	// Select: Value is the current option, Options the choices; Change
+	// receives the option the user picked. Info: Value is the line shown
+	// beside the name.
+	On      bool
+	Value   string
+	Options []string
+	Change  func(val string)
+
+	// Action: Action is the button's label; Run fires on the click.
+	Action string
+	Run    func()
 }
 
 var (
@@ -212,6 +252,16 @@ func (a *App) pluginMetaRows(e Entry) []PluginMetaRow {
 	return out
 }
 
+// pluginSettings gathers one plugin's declared settings rows for the
+// settings dialog's 插件 section: nil when the plugin is off or declares
+// none, so a disabled plugin's settings hide along with its features.
+func (a *App) pluginSettings(p *Plugin) []PluginSetting {
+	if p == nil || p.Settings == nil || !a.pluginEnabled(p.ID) {
+		return nil
+	}
+	return p.Settings(a)
+}
+
 // pluginGet reads one per-plugin setting (statestore.go's PluginSettings):
 // the value the plugin stored for the key, empty when never set.
 func (a *App) pluginGet(id, key string) string {
@@ -228,23 +278,4 @@ func (a *App) pluginSet(id, key, val string) {
 		return
 	}
 	a.store.setPluginSetting(id, key, val)
-}
-
-// diskPluginID is the disk info plugin's id in the registry. The page
-// itself is dispatched from files.go (pathDisks) and its sidebar row from
-// sidebar.go; registering here gives it a switch in the 插件 section and the
-// enable/disable bookkeeping the other plugins share.
-const diskPluginID = "disks"
-
-// registerDiskPlugin registers the 磁盘健康 plugin. It carries no hooks of
-// its own — the page is a special location rather than a menu item or a
-// sidebar entry like the gallery's — so only its switch appears in the
-// settings dialog. Switched off, the page shows 插件已停用 and the sidebar
-// row goes with it (sidebar.go), matching the gallery plugin's behaviour.
-func registerDiskPlugin() {
-	RegisterPlugin(Plugin{
-		ID:   diskPluginID,
-		Name: "磁盘健康",
-		Desc: "查看磁盘信息、温度、读写速度与健康状态",
-	})
 }

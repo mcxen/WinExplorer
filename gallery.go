@@ -326,6 +326,11 @@ func (a *App) galleryView(c *ui.Context) {
 func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 	tile := ui.ButtonBase(c.Key(p.path)).Size(112, 112).Shrink(0).Radius(4).
 		Clip().Label(p.name)
+	t := a.cur()
+	if t.itemBounds == nil {
+		t.itemBounds = map[string]ui.Rect{}
+	}
+	t.itemBounds[p.path] = tile.Bounds()
 	switch {
 	case a.isSelected(p.path):
 		tile.Background(colorSelected())

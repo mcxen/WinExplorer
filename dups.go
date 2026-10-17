@@ -301,7 +301,7 @@ func (a *App) dupsModal(c *ui.Context) {
 	if !*flag {
 		return
 	}
-	ui.Modal(c, flag, func() {
+	floatDialog(c, flag, false, func() {
 		a.dupsBody(c, flag)
 	})
 }

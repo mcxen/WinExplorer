@@ -11,12 +11,14 @@ import (
 )
 
 const (
-	colDateW  float32 = 168
-	colTypeW  float32 = 120
-	colSizeW  float32 = 96
-	colDriveW float32 = 260
-	colLocW   float32 = 200
-	rowInset  float32 = 4
+	colDateW     float32 = 168
+	colTypeW     float32 = 120
+	colSizeW     float32 = 96
+	colDriveW    float32 = 260
+	colLocW      float32 = 200
+	colNameFlexW float32 = 220 // the 名称 column's share of the row width
+	colNameMin   float32 = 160 // the 名称 column's flex floor
+	rowInset     float32 = 4
 )
 
 // detailsRowH is 30, or 22 with 查看>紧凑视图 on, as Explorer's Compact
@@ -43,6 +45,15 @@ func (a *App) filePane(c *ui.Context) {
 	pane := ui.Column(c).Grow(1).FillHeight().MinWidth(0).
 		Background(colorContent())
 	pane.Children(func() {
+		// The band hit-tests the boxes the rows laid out in the frame before;
+		// clear the map so a view or folder change drops the boxes it no
+		// longer shows, then the rows below fill it afresh.
+		t := a.cur()
+		if t.itemBounds == nil {
+			t.itemBounds = map[string]ui.Rect{}
+		} else if !t.marquee.on {
+			clear(t.itemBounds)
+		}
 		if a.cur().loadErr != "" {
 			a.paneMessage(c, a.cur().loadErr)
 			return
@@ -53,6 +64,8 @@ func (a *App) filePane(c *ui.Context) {
 		}
 		if a.cur().path == pathGallery {
 			a.galleryView(c)
+			// The gallery's tiles select through the band as any view's do.
+			a.marqueeOverlay(c)
 			return
 		}
 		if a.cur().path == pathDisks {
@@ -68,6 +81,8 @@ func (a *App) filePane(c *ui.Context) {
 		default:
 			a.detailsView(c, entries)
 		}
+		// The rubber band draws above the rows, on a layer of its own.
+		a.marqueeOverlay(c)
 	})
 	a.bindPaneMenu(c, pane)
 	// The 重复文件查找 plugin's dialog renders over the window while open.
@@ -223,14 +238,20 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 		BorderWidth(0, 0, 1, 0).BorderColor(colorDivider())
 	searching := strings.TrimSpace(a.cur().query) != ""
 	head.Children(func() {
-		a.headerCell(c, "名称", SortName, 0, true)
-		a.headerCell(c, "修改日期", SortDate, colDateW, false)
+		a.headerCell(c, "名称", SortName, a.nameColW(), a.colWidths.name <= 0, &a.colWidths.name)
+		a.headerCell(c, "修改日期", SortDate, a.dateColW(), false, &a.colWidths.date)
 		if searching {
-			a.headerCell(c, "位置", SortType, colLocW, false)
+			a.headerCell(c, "位置", SortType, a.locColW(), false, &a.colWidths.loc)
 		} else {
-			a.headerCell(c, "类型", SortType, colTypeW, false)
+			a.headerCell(c, "类型", SortType, a.typColW(), false, &a.colWidths.typ)
 		}
-		a.headerCell(c, "大小", SortSize, a.sizeColW(), false)
+		// The 此电脑 page's 大小 slot is the drive capacity column, which
+		// keeps its fixed width — no grip there.
+		sizeSlot := &a.colWidths.size
+		if a.cur().path == pathThisPC {
+			sizeSlot = nil
+		}
+		a.headerCell(c, "大小", SortSize, a.sizeColW(), false, sizeSlot)
 	})
 
 	rows := a.groupedRows(entries)
@@ -261,12 +282,22 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 }
 
 func (a *App) detailsWidth() float32 {
-	extra := colTypeW
+	extra := a.typColW()
 	if strings.TrimSpace(a.cur().query) != "" {
-		extra = colLocW
+		extra = a.locColW()
 	}
-	return 220 + colDateW + extra + a.sizeColW() + rowInset*2
+	return a.nameColW() + a.dateColW() + extra + a.sizeColW() + rowInset*2
 }
+
+// nameColW is the 名称 column's width: the user's once dragged,
+// otherwise the flex default's footprint in the row width math.
+func (a *App) nameColW() float32 {
+	return colW(a.colWidths.name, colNameFlexW)
+}
+
+func (a *App) dateColW() float32 { return colW(a.colWidths.date, colDateW) }
+func (a *App) typColW() float32  { return colW(a.colWidths.typ, colTypeW) }
+func (a *App) locColW() float32  { return colW(a.colWidths.loc, colLocW) }
 
 // sizeColW is the 大小 column's width. The 此电脑 page's drive rows carry
 // "可用 X，共 Y", which the 96px file-size column cannot hold, so drives get
@@ -275,14 +306,37 @@ func (a *App) sizeColW() float32 {
 	if a.cur().path == pathThisPC {
 		return colDriveW
 	}
-	return colSizeW
+	return colW(a.colWidths.size, colSizeW)
 }
 
-func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool) {
+// colW is the user's width for a column, or its default when the column
+// was never dragged.
+func colW(w, def float32) float32 {
+	if w > 0 {
+		return w
+	}
+	return def
+}
+
+// saveColWidths persists the details view's column widths through the
+// settings store, as the settings dialog's toggles do.
+func (a *App) saveColWidths() {
+	w := a.colWidths
+	a.applySettings(func(s *appSettings) {
+		s.ColName, s.ColDate, s.ColType, s.ColLoc, s.ColSize =
+			w.name, w.date, w.typ, w.loc, w.size
+	})
+}
+
+// headerCell is one details column's header: the label with its sort
+// chevron, and — when slot is set — a drag handle on its right edge that
+// rewrites the column's width. flex cells grow with the pane; the rest
+// keep width.
+func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool, slot *float32) {
 	cell := ui.ButtonBase(c).Height(a.detailsRowH()).Padding(0, 8).Gap(4).
 		AlignItems(ui.Center).Margin(0, rowInset).Radius(4).Label(title)
 	if flex {
-		cell.Grow(1).Shrink(1).MinWidth(160)
+		cell.Grow(1).Shrink(1).MinWidth(colNameMin)
 	} else {
 		cell.Width(width).Shrink(0)
 		if key == SortSize {
@@ -305,6 +359,62 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 	if cell.Clicked() {
 		a.toggleSort(key)
 	}
+	if slot != nil {
+		a.colGrip(c, slot, width, colMinFor(key))
+	}
+}
+
+// colMinFor is the narrowest a column may be dragged to, its text and
+// header still readable.
+func colMinFor(key SortKey) float32 {
+	if key == SortName {
+		return colNameMin
+	}
+	return 64
+}
+
+// colGrip is a column's resize handle over the header cell's right edge:
+// dragging rewrites the column's width slot between its floor and a sane
+// ceiling, a double-click restores the default, and a drag's end persists
+// the widths. Dragged reports the pointer's movement since the last frame
+// while the grip is pressed, as the nav pane's handle does.
+func (a *App) colGrip(c *ui.Context, slot *float32, def, min float32) {
+	grip := ui.Box(c).Absolute().Right(-2).Top(0).Bottom(0).Width(5).
+		Cursor(ui.CursorResizeEW)
+	if dx, _, ok := grip.Dragged(); ok && dx != 0 {
+		w := *slot
+		if w <= 0 {
+			w = def
+		}
+		*slot = clampColW(w+dx, min, maxColW)
+	}
+	if _, _, ok := grip.DragEnded(); ok {
+		a.saveColWidths()
+	}
+	if grip.DoubleClicked() {
+		*slot = 0
+		a.saveColWidths()
+	}
+	grip.Draw(func(p *ui.Painter, r ui.Rect) {
+		if !grip.Hovered() && !grip.Dragging() {
+			return
+		}
+		p.Fill(ui.Rect{X: r.X + (r.W-1)/2, Y: r.Y + 4, W: 1, H: r.H - 8}, colorAccent(), 0)
+	})
+}
+
+// maxColW caps a dragged column, so no single column swallows the row.
+const maxColW float32 = 720
+
+// clampColW keeps w within min and max.
+func clampColW(w, min, max float32) float32 {
+	if w < min {
+		return min
+	}
+	if w > max {
+		return max
+	}
+	return w
 }
 
 func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
@@ -313,21 +423,28 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 		Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
 	row.Children(func() {
-		name := ui.Row(c).Grow(1).Shrink(1).MinWidth(160).Height(a.detailsRowH()).
-			Padding(0, 8).Gap(8).AlignItems(ui.Center)
+		name := ui.Row(c).Height(a.detailsRowH()).Padding(0, 8).Gap(8).
+			AlignItems(ui.Center)
+		if a.colWidths.name > 0 {
+			// The user fixed the 名称 column's width; the rest of the row
+			// stays blank past the columns, as Explorer's does.
+			name.Width(a.colWidths.name).Shrink(0)
+		} else {
+			name.Grow(1).Shrink(1).MinWidth(colNameMin)
+		}
 		name.Children(func() {
 			a.nameCell(c, e, 16, 12)
 		})
-		a.detailText(c, formatModTime(e.ModTime), colDateW, false)
+		a.detailText(c, formatModTime(e.ModTime), a.dateColW(), false)
 		if searching {
-			a.detailText(c, searchLocation(e), colLocW, false)
+			a.detailText(c, searchLocation(e), a.locColW(), false)
 		} else {
-			a.detailText(c, typeLabel(e), colTypeW, false)
+			a.detailText(c, typeLabel(e), a.typColW(), false)
 		}
 		if e.VolTotal > 0 {
 			a.driveCapCell(c, e)
 		} else {
-			a.detailText(c, sizeColumnText(e), colSizeW, true)
+			a.detailText(c, sizeColumnText(e), a.sizeColW(), true)
 		}
 	})
 	a.bindItemInput(c, row, e)
@@ -762,42 +879,8 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 		a.renameField(c, font)
 		return
 	}
-	// A live search marks the matched runs, Everything-style: the spans
-	// carry the hit background, the rest is the plain name. A query with
-	// no hit in this name (a path:-only match) falls through to plain text.
-	if q := a.activeSearchQuery(); len(q.terms) > 0 {
-		if spans := q.highlight(a.displayName(e)); len(spans) > 1 || (len(spans) == 1 && spans[0].hit) {
-			rich := ui.RichText(c, searchHitSpans(spans, font)...).
-				SingleLine().Grow(1).MinWidth(0)
-			_ = rich
-			return
-		}
-	}
 	ui.Text(c, a.displayName(e)).FontSize(font).TextColor(colorText()).
 		SingleLine().Grow(1).MinWidth(0)
-}
-
-// searchHitSpans converts the highlight runs into RichText spans: hit
-// runs carry the hit background, plain runs the ordinary text color. The
-// hit runs keep the text color: on the light theme the amber is pale
-// enough to carry dark text, and on the dark theme the amber is dark
-// enough for light text.
-func searchHitSpans(spans []highlightSpan, font float32) []ui.Span {
-	out := make([]ui.Span, 0, len(spans))
-	for _, s := range spans {
-		if s.text == "" {
-			continue
-		}
-		sp := ui.Span{Text: s.text, Size: font}
-		if s.hit {
-			sp.Background = colorHit()
-			sp.Color = colorText()
-		} else {
-			sp.Color = colorText()
-		}
-		out = append(out, sp)
-	}
-	return out
 }
 
 // renameField edits a.cur().renameBuf. Enter commits, Escape cancels, and both
@@ -877,6 +960,11 @@ func (a *App) paintSelect(el ui.Element, path string) {
 // else the row alone), and folder rows accept drops that move files into
 // them.
 func (a *App) bindItemInput(c *ui.Context, el ui.Element, e Entry) {
+	t := a.cur()
+	if t.itemBounds == nil {
+		t.itemBounds = map[string]ui.Rect{}
+	}
+	t.itemBounds[e.Path] = el.Bounds()
 	if el.Clicked() {
 		a.clickEntry(e.Path, el.ClickModifiers())
 	}
@@ -918,6 +1006,9 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 			a.doDropInto(c.Modifiers(), a.cur().path, files)
 		}
 	}
+	// A drag on the empty space the rows and tiles leave is a rubber band
+	// selecting what it crosses; the rows' own drags never reach here.
+	a.bindMarquee(c, el)
 	el.ContextMenu(func(m *ui.Menu) {
 		if a.cur().path == pathTrash {
 			a.trashPaneMenu(m)

@@ -38,7 +38,7 @@ func (a *App) quickLookModal(c *ui.Context) {
 		return
 	}
 	quickLookWasOpen = true
-	ui.Modal(c, &a.quickLook, func() {
+	floatDialog(c, &a.quickLook, true, func() {
 		a.quickLookBody(c)
 	})
 }

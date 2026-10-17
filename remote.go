@@ -62,6 +62,23 @@ func registerRemotePlugin() {
 			}
 		},
 		OnDisable: func(a *App) { a.remoteStop() },
+		Settings: func(a *App) []PluginSetting {
+			conf := a.remoteConf()
+			return []PluginSetting{
+				{Kind: PluginSettingInfo, Name: "账号", Value: conf.Username},
+				{Kind: PluginSettingInfo, Name: "端口", Value: strconv.Itoa(conf.Port)},
+				{
+					Kind:   PluginSettingAction,
+					Name:   "复制远程地址",
+					Desc:   "把地址、账号和密码复制到剪贴板",
+					Action: "复制",
+					Run: func() {
+						mygo.Clipboard.WriteText(a.remoteLANURL() + "\n账号 " + a.remoteConf().Username + "\n密码 " + a.remotePlainPassword())
+						a.statusMsg = "已复制远程地址"
+					},
+				},
+			}
+		},
 		MoreItems: func(a *App) []PluginMenuItem {
 			return []PluginMenuItem{
 				{

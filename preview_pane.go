@@ -14,11 +14,14 @@ import (
 // previewPane is the Windows 11 preview pane on the right: a header with
 // the file name, a body that shows the image / text / media, and a
 // properties section. Its left edge is a 1px divider and a drag handle
-// that resizes it, clamped to previewMinW–previewMaxW. When a directory or
-// nothing is selected it shows the Explorer empty-pane hint.
+// that resizes it, clamped to previewMinW–previewMaxW, and it sits a
+// hair off the window's right edge so the scrollbar never hugs the frame.
+// When a directory or nothing is selected it shows the Explorer
+// empty-pane hint.
 func (a *App) previewPane(c *ui.Context) {
 	st := a.preview.Load()
-	pane := ui.Column(c).Width(a.previewW).FillHeight().Shrink(0).
+	pane := ui.Column(c).Width(a.previewW-previewGapR).FillHeight().Shrink(0).
+		Margin(0, previewGapR, 0, 0).
 		Background(colorContent()).Clip()
 	pane.Children(func() {
 		a.previewResizeHandle(c)
@@ -265,9 +268,15 @@ func (a *App) pluginMetaRowValue(c *ui.Context, r PluginMetaRow, keyW float32) {
 }
 
 func (a *App) previewResizeHandle(c *ui.Context) {
+	// The 1px rule down the pane's left edge separates it from the file
+	// list, as Explorer's pane divider does.
 	ui.Box(c).Absolute().Top(0).Bottom(0).Left(0).Width(1).
 		Background(colorDivider())
-	grip := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-3).Width(7).
+	// The grip overlaps the pane's left edge and the file pane's right,
+	// and reaches into the right-hand gap: the gap is window background,
+	// not file-list rows, so widening the drag target there steals no
+	// clicks from the list.
+	grip := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-3).Right(-previewGapR).
 		Cursor(ui.CursorResizeEW)
 	if dx, _, ok := grip.Dragged(); ok && dx != 0 {
 		a.previewW = clampPreviewWidth(a.previewW - dx)

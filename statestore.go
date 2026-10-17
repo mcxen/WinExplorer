@@ -36,8 +36,9 @@ type persistedState struct {
 }
 
 // appSettings is the view state the settings dialog edits: the 查看>显示
-// toggles, 紧凑视图, the preview pane, and the current view mode (state.go's
-// ViewMode).
+// toggles, 紧凑视图, the preview pane, the current view mode (state.go's
+// ViewMode), and the details view's user-set column widths — zero keeps
+// the default width.
 type appSettings struct {
 	ShowHidden     bool `json:"showHidden"`
 	ShowExt        bool `json:"showExt"`
@@ -45,6 +46,12 @@ type appSettings struct {
 	ItemCheckboxes bool `json:"itemCheckboxes"`
 	PreviewOpen    bool `json:"previewOpen"`
 	Mode           int  `json:"mode"`
+
+	ColName float32 `json:"colName,omitempty"`
+	ColDate float32 `json:"colDate,omitempty"`
+	ColType float32 `json:"colType,omitempty"`
+	ColLoc  float32 `json:"colLoc,omitempty"`
+	ColSize float32 `json:"colSize,omitempty"`
 }
 
 // defaultSettings are the settings a fresh app starts with, mirroring

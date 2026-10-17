@@ -54,7 +54,7 @@ func (a *App) propertiesModal(c *ui.Context) {
 	if !a.propsOpen {
 		return
 	}
-	ui.Modal(c, &a.propsOpen, func() {
+	floatDialog(c, &a.propsOpen, false, func() {
 		a.propertiesBody(c)
 	})
 }

@@ -23,44 +23,65 @@ func pick(light, dark string) ui.Color {
 	return ui.Hex(light)
 }
 
-// Design tokens. Each resolves its pick pair once, on first use — the
-// appearance is constant once known, and ui.Color is a value type, so a
-// plain package var is safe. Add new tokens here instead of scattering new
-// pick pairs across the code.
+// Design tokens. resolveTokens fills them once the effective appearance is
+// known: at package init the app is not ready, so that pass resolves the
+// light pair as the fallback; mygo.App.WhenReady resolves them again with
+// the real appearance before the first window builds (see main.go), so a
+// dark system gets the dark tokens. ui.Color is a value type, so plain
+// package vars are safe once resolved. Add new tokens here instead of
+// scattering new pick pairs across the code.
 var (
-	tokWindow  = pick("#F3F3F3", "#202020") // window chrome background
-	tokChrome  = tokWindow                  // toolbar/tab strip background
-	tokNav     = tokWindow                  // sidebar background
-	tokContent = pick("#FFFFFF", "#272727") // file list background
-	tokSel     = pick("#CCE4F7", "#004C87") // selected item
-	tokText    = pick("#1A1A1A", "#F3F3F3") // primary foreground
-	tokMuted   = pick("#5C5C5C", "#A0A0A0") // secondary foreground
-	tokAccent  = pick("#0067C0", "#4CC2FF") // primary action
-	tokDivider = pick("#E5E5E5", "#383838") // hairlines, secondary borders
-	tokFolder  = pick("#F0C14D", "#E8B84A") // folder badge
-	tokStatus  = tokWindow                  // status bar background
-	tokAddress = pick("#FFFFFF", "#2D2D2D") // address bar, raised surfaces
+	tokWindow  ui.Color // window chrome background
+	tokChrome  ui.Color // toolbar/tab strip background
+	tokNav     ui.Color // sidebar background
+	tokContent ui.Color // file list background
+	tokSel     ui.Color // selected item
+	tokText    ui.Color // primary foreground
+	tokMuted   ui.Color // secondary foreground
+	tokAccent  ui.Color // primary action
+	tokDivider ui.Color // hairlines, secondary borders
+	tokFolder  ui.Color // folder badge
+	tokStatus  ui.Color // status bar background
+	tokAddress ui.Color // address bar, raised surfaces
 
 	// tokBtnText is the foreground on an accent-filled button: white reads
 	// well on the light accent but not on the dark one, so the dark theme
 	// uses near-black.
-	tokBtnText = pick("#FFFFFF", "#1A1A1A")
+	tokBtnText ui.Color
 
 	// tokFieldBorder is the border of editable fields (text areas), a touch
 	// darker than tokDivider in the light theme so inputs read as inputs.
-	tokFieldBorder = pick("#D6D6D6", "#383838")
-	// tokHit is the search hit highlight, Everything's yellow mark: strong
-	// on the light theme, a softer amber on the dark one where pure yellow
-	// outshines the text.
-	tokHit = pick("#FFE28A", "#8A6D00")
+	tokFieldBorder ui.Color
+
+	tokHover ui.Color
 )
 
-var tokHover = func() ui.Color {
+func init() { resolveTokens() }
+
+// resolveTokens fills the design tokens from the effective appearance.
+// Called at init (light fallback) and again when the app is ready, before
+// the first window builds, so the windows show the system appearance.
+func resolveTokens() {
+	tokWindow = pick("#F3F3F3", "#202020")
+	tokChrome = tokWindow
+	tokNav = tokWindow
+	tokContent = pick("#FFFFFF", "#272727")
+	tokSel = pick("#CCE4F7", "#004C87")
+	tokText = pick("#1A1A1A", "#F3F3F3")
+	tokMuted = pick("#5C5C5C", "#A0A0A0")
+	tokAccent = pick("#0067C0", "#4CC2FF")
+	tokDivider = pick("#E5E5E5", "#383838")
+	tokFolder = pick("#F0C14D", "#E8B84A")
+	tokStatus = tokWindow
+	tokAddress = pick("#FFFFFF", "#2D2D2D")
+	tokBtnText = pick("#FFFFFF", "#1A1A1A")
+	tokFieldBorder = pick("#D6D6D6", "#383838")
 	if darkMode() {
-		return ui.RGBA(255, 255, 255, 0.06)
+		tokHover = ui.RGBA(255, 255, 255, 0.06)
+	} else {
+		tokHover = ui.RGBA(0, 0, 0, 0.06)
 	}
-	return ui.RGBA(0, 0, 0, 0.06)
-}()
+}
 
 // colorBtnText is the foreground for labels sitting on an accent fill.
 func colorBtnText() ui.Color { return tokBtnText }
@@ -80,7 +101,6 @@ func colorMuted() ui.Color    { return tokMuted }
 func colorAccent() ui.Color   { return tokAccent }
 func colorDivider() ui.Color  { return tokDivider }
 func colorFolder() ui.Color   { return tokFolder }
-func colorHit() ui.Color      { return tokHit }
 func colorStatus() ui.Color   { return tokStatus }
 func colorAddress() ui.Color  { return tokAddress }
 

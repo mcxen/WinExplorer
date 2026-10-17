@@ -72,6 +72,9 @@ type mediaInfo struct {
 const (
 	previewMinW float32 = 220
 	previewMaxW float32 = 460
+	// previewGapR is the breathing room the pane keeps off the window's
+	// right edge, so its scrollbar and content never hug the frame.
+	previewGapR float32 = 6
 )
 
 // singleSelectedAny is singleSelected counting a folder too, for the

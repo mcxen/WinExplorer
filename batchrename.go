@@ -205,7 +205,7 @@ func (a *App) batchRenameModal(c *ui.Context) {
 	if !a.batch.open {
 		return
 	}
-	ui.Modal(c, &a.batch.open, func() {
+	floatDialog(c, &a.batch.open, false, func() {
 		a.batchRenameBody(c)
 	})
 }

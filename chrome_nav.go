@@ -11,7 +11,7 @@ import (
 // field. Height is 44, and a 1px rule under the row separates the chrome
 // from the content, as in Explorer.
 func (a *App) navRow(c *ui.Context) {
-	ui.Column(c).FillWidth().Shrink(0).Background(colorChrome()).Children(func() {
+	windowBG(c, ui.Column(c).FillWidth().Shrink(0)).Children(func() {
 		ui.Row(c).Height(44).FillWidth().Padding(6, 10).Gap(6).
 			AlignItems(ui.Center).Children(func() {
 			a.navIconButton(c, lucide.ArrowLeft, "后退", a.canBack(), a.back)
@@ -34,7 +34,7 @@ func (a *App) navIconButton(c *ui.Context, icon func() *ui.SVG, label string, en
 // addressField is the rounded bar. Breadcrumbs fill it until the user
 // clicks empty space or the edit affordance, which swaps in a path input.
 func (a *App) addressField(c *ui.Context) {
-	field := ui.Row(c).Grow(1).Height(32).MinWidth(0).Radius(4).
+	field := ui.Row(c).Grow(1).Height(32).MinWidth(0).Radius(6).
 		AlignItems(ui.Center).Background(colorAddress()).
 		Border(1, colorDivider()).Clip()
 	field.Children(func() {
@@ -169,7 +169,7 @@ func (a *App) refreshButton(c *ui.Context) {
 // string: SearchField hard-codes its own and ignores Placeholder.
 func (a *App) searchField(c *ui.Context) {
 	field := ui.Row(c.Key("folder-search")).Width(220).Height(32).Shrink(0).
-		Padding(0, 8).Gap(6).Radius(4).AlignItems(ui.Center).
+		Padding(0, 8).Gap(6).Radius(6).AlignItems(ui.Center).
 		Background(colorAddress()).Border(1, colorDivider()).
 		Label("搜索")
 	field.Children(func() {

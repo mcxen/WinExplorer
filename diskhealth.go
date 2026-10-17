@@ -8,6 +8,42 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// diskPluginID is the plugin's id in the registry (plugins.go).
+const diskPluginID = "disks"
+
+// registerDiskPlugin registers the 磁盘健康 plugin: the page files.go
+// dispatches for pathDisks and the sidebar row sidebar.go hides while the
+// plugin is off, plus the settings it declares for the 设置 dialog's 插件
+// page — the high-temperature warning the cards colour by, its threshold
+// kept through pluginGet/pluginSet like every plugin setting.
+func registerDiskPlugin() {
+	RegisterPlugin(Plugin{
+		ID:   diskPluginID,
+		Name: "磁盘健康",
+		Desc: "查看磁盘信息、温度、读写速度与健康状态",
+		Settings: func(a *App) []PluginSetting {
+			limit, on := a.diskWarnTemp()
+			return []PluginSetting{
+				{
+					Kind:   PluginSettingSwitch,
+					Name:   "高温警告",
+					Desc:   "温度超过阈值时在磁盘卡片上标记警告",
+					On:     on,
+					Change: func(v string) { a.pluginSet(diskPluginID, "tempWarn", v) },
+				},
+				{
+					Kind:    PluginSettingSelect,
+					Name:    "警告阈值",
+					Desc:    "触发高温警告的温度（°C）",
+					Options: []string{"40", "50", "60"},
+					Value:   fmt.Sprintf("%.0f", limit),
+					Change:  func(v string) { a.pluginSet(diskPluginID, "tempLimit", v) },
+				},
+			}
+		},
+	})
+}
+
 // DiskInfo is one physical or logical drive's health snapshot.
 type DiskInfo struct {
 	Name        string // logical name shown to the user: "C:", "disk0"
@@ -118,10 +154,10 @@ func (a *App) diskCard(c *ui.Context, d DiskInfo) {
 		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 			icon := ui.Box(c).Size(28, 28).Shrink(0).Radius(6)
 			icon.Draw(func(p *ui.Painter, r ui.Rect) {
-				p.Fill(r, diskIconColor(d), r.H/2)
+				p.Fill(r, a.diskIconColor(d), r.H/2)
 			})
 			icon.Children(func() {
-				a.diskGlyph(c, 16, diskIconColor(d))
+				a.diskGlyph(c, 16, a.diskIconColor(d))
 			})
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 				title := d.Name
@@ -151,9 +187,15 @@ func (a *App) diskCard(c *ui.Context, d DiskInfo) {
 					FontSize(11).TextColor(colorMuted()).Shrink(0)
 			})
 		}
-		// The three stat cells: temperature, speed, size.
+		// The three stat cells: temperature, speed, size. A hot disk's
+		// temperature cell turns amber and says 偏高.
+		tempText, tempCol := d.tempText(), colorAccent()
+		if a.diskHot(d) {
+			tempText += " 偏高"
+			tempCol = ui.Hex("#C77700")
+		}
 		ui.Row(c).FillWidth().Gap(8).Shrink(0).Children(func() {
-			a.diskStatCell(c, "温度", d.tempText(), colorAccent(), true)
+			a.diskStatCell(c, "温度", tempText, tempCol, true)
 			a.diskStatCell(c, "读写速度", d.speedText(), colorFolder(), true)
 			a.diskStatCell(c, "容量", formatBytes(d.Size), colorText(), false)
 		})
@@ -223,10 +265,38 @@ func drawDiskBar(p *ui.Painter, r ui.Rect, d DiskInfo) {
 	p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * float32(used), H: r.H}, col, r.H/2)
 }
 
-// diskIconColor is the card icon's fill, tinted by health: good disks get the
-// accent, a warning disk the amber.
-func diskIconColor(d DiskInfo) ui.Color {
-	if d.HealthOK {
+// diskWarnTemp is the high-temperature warning the plugin's settings keep:
+// the threshold a disk's temperature crosses to show 偏高, and whether the
+// warning is on at all. Defaults: on, 50 °C — a value the 插件 page never
+// offers falls back to them.
+func (a *App) diskWarnTemp() (limit float64, on bool) {
+	on = a.pluginGet(diskPluginID, "tempWarn") != "off"
+	limit = 50
+	switch a.pluginGet(diskPluginID, "tempLimit") {
+	case "40":
+		limit = 40
+	case "60":
+		limit = 60
+	}
+	return limit, on
+}
+
+// diskHot reports whether the disk's temperature crosses the warning
+// threshold: the 温度 cell and the card icon colour amber then. A disk
+// without a sensor is never hot.
+func (a *App) diskHot(d DiskInfo) bool {
+	if d.Temperature < 0 {
+		return false
+	}
+	limit, on := a.diskWarnTemp()
+	return on && d.Temperature >= limit
+}
+
+// diskIconColor is the card icon's fill, tinted by health: good disks get
+// the accent, a warning disk — or a hot one, once the high-temperature
+// warning says so — the amber.
+func (a *App) diskIconColor(d DiskInfo) ui.Color {
+	if d.HealthOK && !a.diskHot(d) {
 		return colorAccent()
 	}
 	return ui.Hex("#C77700")

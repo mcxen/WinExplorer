@@ -53,12 +53,6 @@ type tabState struct {
 
 	// search is this tab's query walk state (search.go).
 	search searchState
-	// hlCache is the parsed query the pane highlights with (search.go):
-	// parsing on every row of every frame would show.
-	hlCache struct {
-		query  string
-		parsed searchQuery
-	}
 }
 
 // marqueeState tracks a rubber-band drag: where it began and where the
@@ -102,6 +96,10 @@ type App struct {
 	previewOpen bool    // Windows preview pane toggle
 	previewW    float32 // pane width, 220–460
 
+	// colWidths are the details view's user-adjusted column widths
+	// (files.go); zero keeps the column's default.
+	colWidths colWidths
+
 	// statusMsg is shown by the status bar until the next navigation.
 	statusMsg string
 
@@ -129,6 +127,9 @@ type App struct {
 	batch batchRenameState
 	// settingsOpen is the 设置 dialog modal.
 	settingsOpen bool
+	// settingsTab is the dialog's active page (外观/查看/扩展/插件/更新,
+	// settingsdialog.go); each window remembers its own.
+	settingsTab int
 	// bootLogged reports the first-frame timing log has fired.
 	bootLogged bool
 	// shellExts are the registered context-menu commands (extensions.go);
@@ -227,6 +228,13 @@ func (a *App) allSelected() []string {
 	return out
 }
 
+// colWidths are the details view's user-adjusted column widths; zero
+// keeps the column's default (files.go's col*W constants), the name
+// column flexing with the pane as before.
+type colWidths struct {
+	name, date, typ, loc, size float32
+}
+
 // loadPersistedSettings copies the persisted settings into the app's
 // fields, so a new window starts the way the settings page left them.
 func (a *App) loadPersistedSettings() {
@@ -237,4 +245,8 @@ func (a *App) loadPersistedSettings() {
 	a.itemCheckboxes = s.ItemCheckboxes
 	a.previewOpen = s.PreviewOpen
 	a.mode = ViewMode(s.Mode)
+	a.colWidths = colWidths{
+		name: s.ColName, date: s.ColDate, typ: s.ColType,
+		loc: s.ColLoc, size: s.ColSize,
+	}
 }

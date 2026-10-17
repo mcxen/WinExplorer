@@ -13,8 +13,7 @@ const (
 // a.navWidth wide; a drag handle on its right edge resizes it, clamped to
 // 180–420.
 func (a *App) sidebar(c *ui.Context) {
-	pane := ui.Column(c).Width(a.navWidth).FillHeight().Shrink(0).
-		Background(colorNav()).Clip()
+	pane := windowBG(c, ui.Column(c).Width(a.navWidth).FillHeight().Shrink(0)).Clip()
 	pane.Children(func() {
 		ui.Scroll(c).Grow(1).FillWidth().Padding(8, 8, 12, 8).Gap(2).Children(func() {
 			a.navHome(c)
@@ -52,7 +51,7 @@ func (a *App) navHome(c *ui.Context) {
 // row itself, which navigates to pathThisPC.
 func (a *App) navThisPC(c *ui.Context) {
 	row := ui.ButtonBase(c.Key("nav-thispc")).FillWidth().Height(navRowH).
-		Radius(4).Padding(0, 6, 0, 8).Gap(6).AlignItems(ui.Center).
+		Radius(4).Padding(0, 2, 0, 2).Gap(0).AlignItems(ui.Center).
 		Label("此电脑")
 	switch {
 	case a.cur().path == pathThisPC:
@@ -73,7 +72,7 @@ func (a *App) navThisPC(c *ui.Context) {
 			a.navPCExpanded = !a.navPCExpanded
 			return
 		}
-		icon := ui.Box(c).Size(16, 16).Shrink(0)
+		icon := ui.Box(c).Size(16, 16).Shrink(0).Margin(0, 8, 0, 6)
 		icon.Children(func() {
 			a.placeIcon(c, "thispc", 16)
 		})

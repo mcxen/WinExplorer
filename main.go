@@ -57,6 +57,9 @@ func main() {
 		app.openArchiveWindow(path)
 	})
 	mygo.App.WhenReady(func() {
+		// The appearance is known now, before any window builds: re-resolve
+		// the design tokens so the windows show the system theme.
+		resolveTokens()
 		win := newAppWindow(app)
 		win.OnClosed(func() { unregisterApp(app) })
 		// The remote access plugin gates the server: the account may have
@@ -104,7 +107,12 @@ func newAppWindow(app *App) *mygo.Window {
 		MinWidth:  640,
 		MinHeight: 420,
 		Frameless: true,
-		Content:   ui.View(app.view),
+		// The Windows 11 Mica backdrop for a window with tabs in its
+		// title bar (an under-window material elsewhere): the chrome
+		// bands draw no background over it, and paint their tokens only
+		// where no material shows (see glass.go).
+		Vibrancy: mygo.VibrancyTabbed,
+		Content:  ui.View(app.view),
 	})
 	app.win = win
 	// Minimizing parks the window in the tray (tray.go) instead of the
@@ -183,7 +191,12 @@ func (a *App) view(c *ui.Context) {
 	}
 	a.handleKeys(c)
 	a.updateSearch()
-	ui.Column(c).Fill().Background(colorWindow()).Children(func() {
+	// The root paints the chrome color only where the window shows no
+	// material; with one, the bands that leave themselves clear let the
+	// Mica through, and the file pane's opaque content surface covers the
+	// rest.
+	root := windowBG(c, ui.Column(c).Fill())
+	root.Children(func() {
 		a.tabStrip(c)
 		a.commandBar(c)
 		a.navRow(c)

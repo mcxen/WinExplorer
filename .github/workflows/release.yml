@@ -105,12 +105,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Update-file globs may match nothing (no UPDATE_PRIVATE_KEY secret,
-          # or no earlier signed release to delta from): drop them rather than
-          # pass the literal patterns to gh as file names.
-          shopt -s nullglob
+          # Collect what this platform actually built. The update files
+          # (manifests, signed archives, deltas) are absent without the
+          # signing key, and gh refuses a name that matches nothing — so a
+          # path that is still on the command line after the loop is one that
+          # exists. `shopt -s nullglob` alone is not enough: it leaves a path
+          # without a wildcard (darwin's manifest) in place, and gh fails on
+          # that one even though the files next to it are there.
+          files=()
+          for f in ${{ matrix.assets }}; do
+            [ -e "$f" ] && files+=("$f")
+          done
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::${{ matrix.name }} built nothing to attach"
+            exit 1
+          fi
+          # Silently shipping installers with no manifest would look like a
+          # release whose updater works; say so instead.
+          if ! printf '%s\n' "${files[@]}" | grep -q 'update-.*\.json$'; then
+            echo "::warning::${{ matrix.name }}: no update-*.json attached — UPDATE_PRIVATE_KEY is not set, so the in-app updater will not see this release"
+          fi
           gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            ${{ matrix.assets }} --clobber
+            "${files[@]}" --clobber
 
   publish:
     name: Publish

@@ -61,6 +61,8 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"cbDel", "cbSort", "cbView", "cbMore", "cbUpload", "fileIn",
 		// 地址行
 		"addrbar", "navBack", "navFwd", "navUp", "navRefresh", "crumbs", "filterBox",
+		// 地址栏的编辑框与下拉（Windows 式）
+		"addrEditBtn", "addrWrap", "addrEdit", "addrDrop",
 		// 主体与状态栏
 		"fzone", "previewpane", "statusbar", "statusLeft", "statusMode",
 		// 导航树、上传进度与拖拽提示
@@ -78,6 +80,7 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"超大图标", "大图标", "中等图标", "小图标", "列表", "详细信息",
 		"紧凑视图", "显示隐藏的项目", "显示项目复选框", "预览窗格",
 		"压缩为 ZIP 文件", "全部解压", "解压到…", "复制为路径", "属性",
+		"历史记录", "补全建议", "清除历史记录", "输入路径",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the management page lost the %q command", want)
@@ -90,6 +93,8 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"/api/fs/'+op", "api/fs/remove", // move 与 copy 共用 batchOp 拼出的路径
 		"dragstart", "dragover", "dataTransfer",
 		"F2", "F5", "Backspace", "Alt+P", "sunvale_view", "sunvale_sort",
+		// 地址栏的历史与快捷键
+		"sunvale_addr_hist", "Ctrl+L", "Alt+D", "api/fs/dirs",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the management page lost %q", want)

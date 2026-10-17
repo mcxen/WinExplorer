@@ -995,7 +995,8 @@ async function loadDir(path,keepSel){
  // 换目录即退出全局搜索、失效扩展命令缓存
  if(globalSearch)exitGlobalSearch();
  extCacheKey=null;extCacheList=null;
- if(addrEditing())endAddrEdit();
+ // 换目录才收地址编辑框：刷新（keepSel）不该抢走正在输入的地址
+ if(!keepSel&&addrEditing())endAddrEdit();
  const changed=path!==curPath;
  curPath=path;
  if(!keepSel&&changed){

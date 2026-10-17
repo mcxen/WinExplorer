@@ -43,6 +43,26 @@ var (
 	dupsResult atomic.Pointer[dupsScan]
 )
 
+// registerDupsPlugin registers the 重复文件查找 plugin: the pane
+// background menu's scan item for the current folder.
+func registerDupsPlugin() {
+	RegisterPlugin(Plugin{
+		ID:   dupsPluginID,
+		Name: "重复文件查找",
+		Desc: "在当前文件夹查找重复文件",
+		MenuItems: func(a *App, sel []Entry) []PluginMenuItem {
+			if len(sel) != 0 {
+				return nil // the pane background's menu only
+			}
+			return []PluginMenuItem{{
+				Label:    "重复文件查找",
+				Disabled: specialPath(a.cur().path),
+				Run:      a.openDups,
+			}}
+		},
+	})
+}
+
 // dupsScanMu serializes scans; dupsPending remembers a request that
 // arrived while one was running, so 删除多余项's rescan never drops.
 var (

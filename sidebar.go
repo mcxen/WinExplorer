@@ -18,12 +18,11 @@ func (a *App) sidebar(c *ui.Context) {
 	pane.Children(func() {
 		ui.Scroll(c).Grow(1).FillWidth().Padding(8, 8, 12, 8).Gap(2).Children(func() {
 			a.navHome(c)
-			// The gallery plugin owns the 画廊 place: switched off, the
-			// pane does not list it, the page itself keeping a note.
-			if a.pluginEnabled("gallery") {
-				a.navItem(c, "nav-gallery", "画廊", "gallery", pathGallery, a.cur().path == pathGallery, func() {
-					a.navigate(pathGallery)
-				}, 0)
+			// The plugins' places — the gallery page is the gallery
+			// plugin's; switched off, the pane does not list it, the page
+			// itself keeping a note.
+			for _, it := range a.pluginNavItems() {
+				a.navItem(c, it.Key, it.Label, it.Kind, it.Path, a.cur().path == it.Path, it.Run, 0)
 			}
 			for _, p := range a.pinnedPlaces() {
 				a.navPlace(c, p, 0)

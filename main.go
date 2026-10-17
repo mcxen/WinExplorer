@@ -62,7 +62,7 @@ func main() {
 		// The remote access plugin gates the server: the account may have
 		// it enabled, but a switched-off plugin keeps the LAN closed for
 		// the run — the settings dialog's switch brings it back.
-		if app.remoteConf().Enabled && app.pluginEnabled("remote") {
+		if app.remoteConf().Enabled && app.pluginEnabled(remotePluginID) {
 			go app.remoteStart()
 		}
 	})
@@ -137,14 +137,14 @@ func newAppWithStore(store *persistedState) *App {
 		previewW:    320,
 		store:       store,
 	}
-	// The gif player checks the plugin registry from a preview's frame,
-	// where there is no App at hand, so the shared store goes where the
-	// package-level callers read it (plugins.go).
-	pluginStore.Store(store)
-	if exts, err := loadShellExtensions(); err != nil {
-		a.statusMsg = "扩展配置无效：" + err.Error()
-	} else {
-		a.shellExts = exts
+	// shellExts are the registered context-menu commands (extensions.go);
+	// the load's per-entry problems stay on the app, for the settings
+	// dialog's 扩展 section, instead of only flashing the status bar.
+	exts, extErrs, extErr := loadShellExtensions()
+	a.shellExts = exts
+	a.shellExtErrs = extErrs
+	if extErr != nil {
+		a.statusMsg = "扩展配置无效：" + extErr.Error()
 	}
 	// The view settings the settings dialog last saved apply from the
 	// first listing on, so they land before the first reload.
@@ -184,6 +184,7 @@ func (a *App) view(c *ui.Context) {
 	a.quickLookModal(c)
 	a.propertiesModal(c)
 	a.settingsModal(c)
+	a.extEditModal(c)
 	a.batchRenameModal(c)
 }
 

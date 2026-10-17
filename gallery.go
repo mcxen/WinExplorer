@@ -55,6 +55,31 @@ var (
 	galleryInFlight = map[string]bool{}
 )
 
+// galleryPluginID is the plugin's id in the registry (plugins.go).
+const galleryPluginID = "gallery"
+
+// registerGalleryPlugin registers the 画廊 plugin: the sidebar's gallery
+// place. Switched off, the pane does not list it; the page itself keeps a
+// note (galleryView's 插件已停用).
+func registerGalleryPlugin() {
+	RegisterPlugin(Plugin{
+		ID:   galleryPluginID,
+		Name: "画廊",
+		Desc: "侧边栏的图片画廊页",
+		NavItems: func(a *App) []PluginNavItem {
+			return []PluginNavItem{{
+				Key:   "nav-gallery",
+				Label: "画廊",
+				Kind:  "gallery",
+				Path:  pathGallery,
+				Run: func() {
+					a.navigate(pathGallery)
+				},
+			}}
+		},
+	})
+}
+
 // galleryExts are the extensions the gallery collects.
 var galleryExts = map[string]bool{
 	"png": true, "jpg": true, "jpeg": true, "gif": true, "webp": true,
@@ -251,7 +276,7 @@ func (a *App) galleryView(c *ui.Context) {
 		// The gallery plugin owns the page: switched off, the pane keeps
 		// a quiet note instead of the scan, reachable only through a
 		// back/forward history the hidden place left behind.
-		if !a.pluginEnabled("gallery") {
+		if !a.pluginEnabled(galleryPluginID) {
 			a.paneMessage(c, "插件已停用")
 			return
 		}

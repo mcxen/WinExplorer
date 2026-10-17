@@ -129,7 +129,7 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 	switch st.kind {
 	case previewImage:
 		if isGifPath(st.path) {
-			if bm := gifFor(st.path); bm != nil {
+			if bm := a.gifFor(st.path); bm != nil {
 				// Animated: the gif player keeps one bitmap it uploads
 				// frame by frame; stills fall through to the decode.
 				box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0)

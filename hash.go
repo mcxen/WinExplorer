@@ -19,6 +19,25 @@ import (
 // hashPluginID is the plugin's id in the registry (plugins.go).
 const hashPluginID = "hash"
 
+// registerHashPlugin registers the 文件哈希 plugin: the SHA-256 row the
+// preview pane and the 属性 dialog add for a single selected file.
+// Rendering the row is what fires the background request.
+func registerHashPlugin() {
+	RegisterPlugin(Plugin{
+		ID:   hashPluginID,
+		Name: "文件哈希",
+		Desc: "预览窗格显示文件的 SHA-256",
+		MetaRows: func(a *App, e Entry) []PluginMetaRow {
+			if e.IsDir || e.Path == "" {
+				return nil
+			}
+			a.requestHash(e.Path)
+			val, ready := hashRowValue(e.Path)
+			return []PluginMetaRow{{Key: "SHA-256", Val: val, Copy: ready}}
+		},
+	})
+}
+
 // hashMaxEntries bounds the digest cache; recomputing a dropped digest is
 // one file read, an unbounded map is not.
 const hashMaxEntries = 64

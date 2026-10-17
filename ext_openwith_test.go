@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,12 +23,15 @@ func TestShellExtensionsConfig(t *testing.T) {
 	  {"name": "在终端解压", "match": ["zip", "dir"], "command": "cd {dir}", "terminal": true}
 	]`), 0o644)
 
-	exts, err := loadShellExtensionsAt(dir)
+	exts, errs, err := loadShellExtensionsAt(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	if len(exts) != 3 {
 		t.Fatalf("kept %d: %+v", len(exts), exts)
+	}
+	if len(errs) != 2 {
+		t.Fatalf("load errors = %v, want the two malformed entries kept", errs)
 	}
 
 	wav := Entry{Name: "song.WAV", Path: "/x/song.WAV", Ext: "wav", IsDir: false}
@@ -75,8 +81,116 @@ func TestShellExtensionsConfig(t *testing.T) {
 	}
 
 	// A missing config file is empty, not an error.
-	if exts, err := loadShellExtensionsAt(filepath.Join(dir, "nope")); err != nil || len(exts) != 0 {
-		t.Fatalf("missing config: %v %v", exts, err)
+	if exts, errs, err := loadShellExtensionsAt(filepath.Join(dir, "nope")); err != nil || len(exts) != 0 || len(errs) != 0 {
+		t.Fatalf("missing config: %v %v %v", exts, errs, err)
+	}
+}
+
+// TestShellExtDisabledCompat checks the Disabled flag's backward
+// compatibility: extensions.json files written before the field existed
+// read as enabled, and enabled extensions still serialize without it.
+func TestShellExtDisabledCompat(t *testing.T) {
+	var x shellExt
+	if err := json.Unmarshal([]byte(
+		`{"name":"a","match":["*"],"command":"x"}`), &x); err != nil {
+		t.Fatal(err)
+	}
+	if x.Disabled {
+		t.Fatal("an extension without the disabled field must read as enabled")
+	}
+	data, err := json.Marshal(shellExt{Name: "a", Match: []string{"*"}, Command: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "disabled") {
+		t.Fatalf("enabled extension serialized with disabled: %s", data)
+	}
+	x.Disabled = true
+	data, err = json.Marshal(x)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"disabled":true`) {
+		t.Fatalf("disabled extension must serialize the flag: %s", data)
+	}
+}
+
+// TestSaveShellExtensionsRoundTrip writes a registry and reads it back:
+// the saved file keeps every field, disabled extensions included.
+func TestSaveShellExtensionsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	want := []shellExt{
+		{Name: "用 VSCode 打开", Match: []string{"*"}, Command: `code "{path}"`},
+		{Name: "转 MP3", Match: []string{"wav"}, Command: "ffmpeg -i {path} {stem}.mp3", Terminal: true},
+		{Name: "停用的", Match: []string{"dir"}, Command: "x", Disabled: true},
+	}
+	if err := saveShellExtensionsAt(dir, want); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	got, errs, err := loadShellExtensionsAt(dir)
+	if err != nil || len(errs) != 0 {
+		t.Fatalf("reload: %v %v", errs, err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("reloaded %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Name != want[i].Name || got[i].Command != want[i].Command ||
+			got[i].Terminal != want[i].Terminal || got[i].Disabled != want[i].Disabled ||
+			!slices.Equal(got[i].Match, want[i].Match) {
+			t.Fatalf("reloaded[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestShellExtLoadErrors covers the malformed cases: per-entry problems
+// ride back in the error list while the good entries stay, and a whole
+// file that is not JSON is an error.
+func TestShellExtLoadErrors(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "extensions.json"), []byte(`[
+	  {"name": "好条目", "match": ["txt"], "command": "x"},
+	  {"name": "", "match": ["txt"], "command": "x"},
+	  {"name": "无规则", "match": [], "command": "x"},
+	  {"name": "无命令", "match": ["txt"], "command": "  "}
+	]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exts, errs, err := loadShellExtensionsAt(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(exts) != 1 || exts[0].Name != "好条目" {
+		t.Fatalf("kept %+v", exts)
+	}
+	if len(errs) != 3 {
+		t.Fatalf("errs = %v, want 3", errs)
+	}
+	if errs[0].Msg == "" || errs[1].Name != "无规则" || errs[2].Name != "无命令" {
+		t.Fatalf("err details = %+v", errs)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "extensions.json"), []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := loadShellExtensionsAt(dir); err == nil {
+		t.Fatal("a malformed file must report an error")
+	}
+}
+
+// TestParseExtMatches checks the settings form's 匹配规则 field: token
+// splitting, lowercasing, leading dots, and junk skipped.
+func TestParseExtMatches(t *testing.T) {
+	got := parseExtMatches("*, File, .PNG；wav、dir")
+	want := []string{"*", "file", "png", "wav", "dir"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("parseExtMatches = %v, want %v", got, want)
+	}
+	if got := parseExtMatches("{path} /bad"); len(got) != 0 {
+		t.Fatalf("parseExtMatches accepted junk: %v", got)
+	}
+	if !validExtMatch("tar.gz") || validExtMatch("") || validExtMatch(`a\b`) {
+		t.Fatal("validExtMatch")
 	}
 }
 

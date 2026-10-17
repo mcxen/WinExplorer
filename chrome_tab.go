@@ -3,7 +3,6 @@ package main
 import (
 	"path/filepath"
 
-	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -249,15 +248,12 @@ func (a *App) moreButton(c *ui.Context) {
 			a.togglePreview()
 		}
 		m.Separator()
-		// The remote plugin being off keeps both items out of the menu:
-		// the settings page's 插件 switch is what brings them back.
-		if a.pluginEnabled("remote") {
-			if m.Item("远程访问").Checked(a.remoteConf().Enabled).Chosen() {
-				a.remoteToggle()
-			}
-			if m.Item("复制远程地址").Chosen() {
-				mygo.Clipboard.WriteText(a.remoteLANURL() + "\n账号 " + a.remoteConf().Username + "\n密码 " + a.remotePlainPassword())
-				a.statusMsg = "已复制远程地址"
+		// The plugins' overflow items — remote's 远程访问 and 复制远程地址.
+		// A plugin being off keeps its items out of the menu: the settings
+		// page's 插件 switch is what brings them back.
+		for _, it := range a.pluginMoreItems() {
+			if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+				it.Run()
 			}
 		}
 		m.Separator()

@@ -211,8 +211,8 @@ func (a *App) previewAudio(c *ui.Context, st *previewState) {
 }
 
 // previewProps lists the file properties the way Explorer's details pane
-// does: one row per attribute, with the hash plugin's SHA-256 row last
-// when it is on.
+// does: one row per attribute, with the plugins' metadata rows last — the
+// hash plugin's SHA-256 row when it is on.
 func (a *App) previewProps(c *ui.Context, st *previewState) {
 	if len(st.meta) == 0 {
 		return
@@ -229,47 +229,36 @@ func (a *App) previewProps(c *ui.Context, st *previewState) {
 					Grow(1).MinWidth(0).MaxLines(3)
 			})
 		}
-		a.hashMetaRow(c, st)
+		// The plugins' rows render for the single selected file the pane
+		// is showing; rendering here is what fires the hash plugin's
+		// background request, which is a no-op once the facts are current.
+		if e := a.singleSelected(); e.Path == st.path {
+			for _, r := range a.pluginMetaRows(e) {
+				a.pluginMetaRowValue(c, r, 64)
+			}
+		}
 	})
 }
 
-// hashMetaRow is the SHA-256 row the 文件哈希 plugin adds to the pane's
-// metadata section for the single selected file. Until the digest lands
-// the row shows 未计算, then 计算中…, then the hex sum, wrapped like the
-// other rows; a 复制 button beside it puts the full sum on the clipboard.
-// The plugin off renders nothing. Rendering here is what fires the
-// background request, which is a no-op once the facts are current.
-func (a *App) hashMetaRow(c *ui.Context, st *previewState) {
-	if !a.pluginEnabled(hashPluginID) {
-		return
-	}
-	e := a.singleSelected()
-	if e.Path != st.path {
-		return
-	}
-	a.requestHash(st.path)
-	a.hashMetaRowValue(c, st.path, 64)
-}
-
-// hashMetaRowValue is the SHA-256 row itself: the label at keyW DIPs, the
-// value hashRowValue shows, and the 复制 button when a digest is there.
-func (a *App) hashMetaRowValue(c *ui.Context, path string, keyW float32) {
-	val, ready := hashRowValue(path)
+// pluginMetaRowValue renders one plugin metadata row: the label at keyW
+// DIPs, the value, and a 复制 button beside it when the row says the value
+// is copyable.
+func (a *App) pluginMetaRowValue(c *ui.Context, r PluginMetaRow, keyW float32) {
 	row := ui.Row(c).FillWidth().Gap(8)
 	row.Children(func() {
-		ui.Text(c, "SHA-256").FontSize(12).TextColor(colorMuted()).
+		ui.Text(c, r.Key).FontSize(12).TextColor(colorMuted()).
 			Width(keyW).Shrink(0).SingleLine()
-		ui.Text(c, val).FontSize(12).TextColor(colorText()).
+		ui.Text(c, r.Val).FontSize(12).TextColor(colorText()).
 			Grow(1).MinWidth(0).MaxLines(3)
-		if ready {
+		if r.Copy {
 			btn := ui.ButtonBase(c).Height(22).Shrink(0).Radius(4).
 				Background(colorAddress()).Border(1, colorDivider()).Label("复制")
 			btn.Children(func() {
 				ui.Text(c, "复制").FontSize(11).TextColor(colorText())
 			})
 			if btn.Clicked() {
-				mygo.Clipboard.WriteText(val)
-				a.statusMsg = "已复制哈希值"
+				mygo.Clipboard.WriteText(r.Val)
+				a.statusMsg = "已复制 " + r.Key
 			}
 		}
 	})

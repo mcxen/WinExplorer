@@ -891,16 +891,10 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 		if m.Item("在终端中打开").Disabled(special).Chosen() {
 			a.openInTerminal(a.cur().path)
 		}
-		// The 重复文件查找 plugin's scan of this folder's subtree.
-		if a.pluginEnabled(dupsPluginID) {
-			if m.Item("重复文件查找").Disabled(special).Chosen() {
-				a.openDups()
-			}
-		}
-		// The 可视化查看占用 plugin's treemap of this folder.
-		if a.pluginEnabled(usagePluginID) {
-			if m.Item("可视化查看占用").Disabled(special).Chosen() {
-				a.openUsage(a.cur().path)
+		// The plugins' pane-background items — dups' scan, usage's treemap.
+		for _, it := range a.pluginMenuItems(nil) {
+			if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+				it.Run()
 			}
 		}
 		m.Separator()
@@ -988,10 +982,10 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	if m.Item("在终端中打开").Disabled(!oneDir).Chosen() {
 		a.openInTerminal(sel[0].Path)
 	}
-	// The 可视化查看占用 plugin's treemap of the selected folder.
-	if oneDir && !onSpecial && a.pluginEnabled(usagePluginID) {
-		if m.Item("可视化查看占用").Chosen() {
-			a.openUsage(sel[0].Path)
+	// The plugins' row-menu items — usage's treemap of the selected folder.
+	for _, it := range a.pluginMenuItems(sel) {
+		if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+			it.Run()
 		}
 	}
 	a.extMenuItems(m)

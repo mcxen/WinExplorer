@@ -29,6 +29,10 @@ type persistedState struct {
 	Shares   []remoteShare `json:"shares"`
 	Settings *appSettings  `json:"settings"`
 	Plugins  []string      `json:"plugins"`
+	// PluginSettings holds each plugin's own key-value preferences, by
+	// plugin id. A state file written before this field existed
+	// unmarshals to nil, and the setters initialize it lazily.
+	PluginSettings map[string]map[string]string `json:"pluginSettings"`
 }
 
 // appSettings is the view state the settings dialog edits: the 查看>显示
@@ -297,6 +301,34 @@ func (st *persistedState) setPlugin(id string, on bool) {
 		}
 		st.Plugins = append(st.Plugins, id)
 	}
+	st.saveLocked()
+}
+
+// pluginSetting returns the plugin's stored value for the key, empty when
+// the plugin never set it. A nil map (a state file from before the field
+// existed) reads as empty.
+func (st *persistedState) pluginSetting(id, key string) string {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.PluginSettings[id][key]
+}
+
+// setPluginSetting records the plugin's value for the key, lazily
+// allocating the maps an old state file left nil, and saves. Setting the
+// same value again skips the write, as setPlugin does.
+func (st *persistedState) setPluginSetting(id, key, val string) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.PluginSettings == nil {
+		st.PluginSettings = map[string]map[string]string{}
+	}
+	if st.PluginSettings[id] == nil {
+		st.PluginSettings[id] = map[string]string{}
+	}
+	if st.PluginSettings[id][key] == val {
+		return
+	}
+	st.PluginSettings[id][key] = val
 	st.saveLocked()
 }
 

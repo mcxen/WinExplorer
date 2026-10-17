@@ -101,10 +101,12 @@ func (a *App) propertiesBody(c *ui.Context) {
 					Grow(1).MinWidth(0).MaxLines(2)
 			})
 		}
-		// The hash plugin's SHA-256 row, for files.
-		if !e.IsDir && a.pluginEnabled(hashPluginID) {
-			a.requestHash(e.Path)
-			a.hashMetaRowValue(c, e.Path, 84)
+		// The plugins' metadata rows, for files — the hash plugin's
+		// SHA-256 row when it is on.
+		if !e.IsDir {
+			for _, r := range a.pluginMetaRows(e) {
+				a.pluginMetaRowValue(c, r, 84)
+			}
 		}
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End).Padding(0, 4, 0, 0)
 		btns.Children(func() {

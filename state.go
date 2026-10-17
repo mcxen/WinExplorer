@@ -108,8 +108,14 @@ type App struct {
 	settingsOpen bool
 	// bootLogged reports the first-frame timing log has fired.
 	bootLogged bool
-	// shellExts are the registered context-menu commands (extensions.go).
-	shellExts []shellExt
+	// shellExts are the registered context-menu commands (extensions.go);
+	// shellExtErrs are the entries the registry could not keep, shown in
+	// the settings dialog's 扩展 section until the user fixes the file.
+	shellExts    []shellExt
+	shellExtErrs []shellExtLoadError
+	// extEdit is the 扩展 editor dialog's state (settingsdialog.go): -1
+	// adds a new extension, otherwise it edits shellExts' index.
+	extEdit extEditState
 	// store is the persisted 快速访问 pins, 最近使用的文件 and 回收站
 	// restore log (statestore.go).
 	store *persistedState

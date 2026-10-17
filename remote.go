@@ -44,6 +44,43 @@ const remoteTokenTTL = 48 * time.Hour
 // configured one is taken: 5244, then 5245..5254.
 const remotePortCount = 10
 
+// remotePluginID is the plugin's id in the registry (plugins.go).
+const remotePluginID = "remote"
+
+// registerRemotePlugin registers the 远程访问 plugin: the 查看更多 menu's
+// remote items, and the LAN server the plugin switch owns — turning the
+// plugin off stops it at once, turning it back on brings it up when the
+// account still has remote access on.
+func registerRemotePlugin() {
+	RegisterPlugin(Plugin{
+		ID:   remotePluginID,
+		Name: "远程访问",
+		Desc: "把主文件夹通过局域网共享给手机",
+		OnEnable: func(a *App) {
+			if a.remoteConf().Enabled {
+				a.remoteStart()
+			}
+		},
+		OnDisable: func(a *App) { a.remoteStop() },
+		MoreItems: func(a *App) []PluginMenuItem {
+			return []PluginMenuItem{
+				{
+					Label:   "远程访问",
+					Checked: a.remoteConf().Enabled,
+					Run:     a.remoteToggle,
+				},
+				{
+					Label: "复制远程地址",
+					Run: func() {
+						mygo.Clipboard.WriteText(a.remoteLANURL() + "\n账号 " + a.remoteConf().Username + "\n密码 " + a.remotePlainPassword())
+						a.statusMsg = "已复制远程地址"
+					},
+				},
+			}
+		},
+	})
+}
+
 var (
 	// remotePassPlain is the plaintext behind PassHash, in memory only, so
 	// 复制远程地址 can show it. It is lost on restart, where the hash keeps

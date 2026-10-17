@@ -19,10 +19,23 @@ import (
 // preview closes or moves on.
 
 const (
-	gifMaxFrames   = 300  // play the first N frames
-	gifMaxSide     = 1024 // px; larger gifs scale down before playing
+	gifPluginID    = "gif" // the plugin's id in the registry (plugins.go)
+	gifMaxFrames   = 300   // play the first N frames
+	gifMaxSide     = 1024  // px; larger gifs scale down before playing
 	gifDefaultTick = 100 * time.Millisecond
 )
+
+// registerGifPlugin registers the GIF 自动播放 plugin. Its only switch
+// side effect is ending running animations; gifFor itself checks
+// pluginEnabled, so new previews keep the decoded still while off.
+func registerGifPlugin() {
+	RegisterPlugin(Plugin{
+		ID:   gifPluginID,
+		Name: "GIF 自动播放",
+		Desc: "预览窗格与图标视图播放 GIF 动画",
+		OnDisable: func(a *App) { stopGifPlay() },
+	})
+}
 
 type gifPlayer struct {
 	mu     sync.Mutex
@@ -44,8 +57,8 @@ var (
 // players for other paths are stopped, since one preview shows at a time.
 // The GIF plugin owns the animation: switched off, gifFor returns nil, and
 // the callers keep the decoded still, as before the plugin existed.
-func gifFor(path string) *ui.Bitmap {
-	if !pluginOn(pluginStore.Load(), "gif") {
+func (a *App) gifFor(path string) *ui.Bitmap {
+	if !a.pluginEnabled(gifPluginID) {
 		return nil
 	}
 	gifMu.Lock()

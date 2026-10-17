@@ -74,7 +74,7 @@ func remoteExtTarget(w http.ResponseWriter, vpath, name string) (Entry, []shellE
 		remoteErr(w, 500, "object not found")
 		return Entry{}, nil, false
 	}
-	exts, err := loadShellExtensions()
+	exts, _, err := loadShellExtensions()
 	if err != nil {
 		remoteErr(w, 500, err.Error())
 		return Entry{}, nil, false
@@ -108,6 +108,9 @@ func (a *App) remoteHandleExtList(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]remoteExtItem, 0, len(exts))
 	for _, x := range exts {
+		if x.Disabled {
+			continue
+		}
 		if x.matches(e) {
 			out = append(out, remoteExtItem{Name: x.Name, Terminal: x.Terminal})
 		}
@@ -147,7 +150,7 @@ func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 	}
 	var chosen *shellExt
 	for i := range exts {
-		if exts[i].Name == req.ExtName && exts[i].matches(e) {
+		if exts[i].Name == req.ExtName && !exts[i].Disabled && exts[i].matches(e) {
 			chosen = &exts[i]
 			break
 		}

@@ -57,6 +57,37 @@ var (
 	usageVisited atomic.Int64
 )
 
+// registerUsagePlugin registers the 可视化查看占用 plugin: both context
+// menus' treemap item — the current folder on the pane background, the
+// selected folder on a row.
+func registerUsagePlugin() {
+	RegisterPlugin(Plugin{
+		ID:   usagePluginID,
+		Name: "可视化查看占用",
+		Desc: "右键用矩形树图查看文件夹占用情况",
+		MenuItems: func(a *App, sel []Entry) []PluginMenuItem {
+			if len(sel) == 0 {
+				return []PluginMenuItem{{
+					Label:    "可视化查看占用",
+					Disabled: specialPath(a.cur().path),
+					Run: func() {
+						a.openUsage(a.cur().path)
+					},
+				}}
+			}
+			if len(sel) == 1 && sel[0].IsDir && !specialPath(a.cur().path) {
+				return []PluginMenuItem{{
+					Label: "可视化查看占用",
+					Run: func() {
+						a.openUsage(sel[0].Path)
+					},
+				}}
+			}
+			return nil
+		},
+	})
+}
+
 // usageRequest is one scan the scheduler owes: the folder and whether the
 // user shows hidden items at the time it was asked for.
 type usageRequest struct {

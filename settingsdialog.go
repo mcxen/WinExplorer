@@ -1,7 +1,9 @@
 package main
 
 import (
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater"
@@ -103,6 +105,8 @@ func (a *App) settingsBody(c *ui.Context) {
 			a.settingsUpdates(c)
 			settingsDivider(c)
 			a.settingsPlugins(c)
+			settingsDivider(c)
+			a.settingsExtensions(c)
 		})
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End).Padding(10, 16, 12, 16)
 		btns.Children(func() {
@@ -130,18 +134,18 @@ func settingsSectionHead(c *ui.Context, title string) {
 		Padding(10, 0, 2, 0)
 }
 
-// settingsPlugins is the 插件 section: one switch per built-in plugin, in
-// the registry's order, each reading its state fresh from the store like
+// settingsPlugins is the 插件 section: one switch per registered plugin,
+// in registration order, each reading its state fresh from the store like
 // the sections above, so a toggle shows at once. Switching a plugin off
-// stops what it is doing too — pluginSet owns that. 恢复默认 leaves the
-// plugins alone: they are not appearance or view settings.
+// stops what it is doing too — its OnDisable hook owns that. 恢复默认
+// leaves the plugins alone: they are not appearance or view settings.
 func (a *App) settingsPlugins(c *ui.Context) {
 	settingsSectionHead(c, "插件")
-	for _, p := range plugins {
+	for _, p := range registeredPlugins() {
 		id := p.ID
 		settingsSwitch(c, p.Name, p.Desc,
 			func() bool { return a.pluginEnabled(id) },
-			func(on bool) { a.pluginSet(id, on) })
+			func(on bool) { a.pluginSetEnabled(id, on) })
 	}
 }
 
@@ -286,4 +290,222 @@ func (a *App) settingsUpdates(c *ui.Context) {
 	} else {
 		settingsInfo(c, "上次检查", last.Local().Format("2006/01/02 15:04"))
 	}
+}
+
+// settingsExtensions is the 扩展 section: the registered shell extensions,
+// each with its enable switch, an 编辑 and a 删除 button, and the entries
+// the registry could not keep, listed with their problem so a broken
+// extensions.json is fixable without guessing. Every change writes through
+// to extensions.json at once — the registry has no pending state.
+func (a *App) settingsExtensions(c *ui.Context) {
+	settingsSectionHead(c, "扩展")
+	if len(a.shellExts) == 0 && len(a.shellExtErrs) == 0 {
+		ui.Text(c, "还没有注册扩展，点下方按钮添加").FontSize(12).
+			TextColor(colorMuted()).Padding(4, 0)
+	}
+	for _, e := range a.shellExtErrs {
+		msg := e.Msg
+		if e.Name != "" {
+			msg = "扩展 “" + e.Name + "” 加载失败：" + msg
+		}
+		ui.Text(c, msg).FontSize(12).TextColor(ui.Hex("#C4361D")).Padding(2, 0)
+	}
+	for i := range a.shellExts {
+		x := &a.shellExts[i]
+		row := ui.Row(c).FillWidth().Gap(10).Padding(6, 0).AlignItems(ui.Center)
+		row.Children(func() {
+			col := ui.Column(c).Grow(1).MinWidth(0).Gap(2)
+			col.Children(func() {
+				ui.Text(c, x.Name).FontSize(13).TextColor(colorText()).SingleLine()
+				ui.Text(c, strings.Join(x.Match, "，")+" · "+truncateRunes(x.Command, 36)).
+					FontSize(12).TextColor(colorMuted()).SingleLine()
+			})
+			settingsSwitchInline(c, !x.Disabled, func(on bool) {
+				x.Disabled = !on
+				a.saveShellExts()
+			})
+			uikitSecondaryButton(c, "编辑", func() { a.extEditBegin(i) })
+			uikitSecondaryButton(c, "删除", func() {
+				a.shellExts = slices.Delete(a.shellExts, i, i+1)
+				a.saveShellExts()
+			})
+		})
+	}
+	btnRow := ui.Row(c).FillWidth().Justify(ui.Start).Padding(6, 0)
+	btnRow.Children(func() {
+		uikitSecondaryButton(c, "添加扩展", func() { a.extEditBegin(-1) })
+	})
+}
+
+// settingsSwitchInline is a bare switch without the settings row around
+// it, for the compact extension rows.
+func settingsSwitchInline(c *ui.Context, on bool, set func(bool)) {
+	v := on
+	sw := ui.Switch(c, &v)
+	if sw.Changed() {
+		set(v)
+	}
+}
+
+// truncateRunes cuts s to n runes, adding an ellipsis when it cut.
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+// extEditState is the 扩展 editor dialog's inputs. index is -1 when the
+// dialog adds a new extension, otherwise the shellExts slot it edits.
+type extEditState struct {
+	open     bool
+	index    int
+	name     string
+	matchBuf string // 逗号分隔的匹配规则
+	command  string
+	terminal bool
+}
+
+// extEditBegin opens the editor: the extension's values for an edit, empty
+// fields for an add.
+func (a *App) extEditBegin(i int) {
+	e := &a.extEdit
+	if i >= 0 && i < len(a.shellExts) {
+		x := a.shellExts[i]
+		*e = extEditState{
+			open:     true,
+			index:    i,
+			name:     x.Name,
+			matchBuf: strings.Join(x.Match, ", "),
+			command:  x.Command,
+			terminal: x.Terminal,
+		}
+		return
+	}
+	*e = extEditState{open: true, index: -1}
+}
+
+// extDraft is the extension the form currently describes, valid or not.
+func (e *extEditState) extDraft() shellExt {
+	return shellExt{
+		Name:     strings.TrimSpace(e.name),
+		Match:    parseExtMatches(e.matchBuf),
+		Command:  strings.TrimSpace(e.command),
+		Terminal: e.terminal,
+	}
+}
+
+// extEditValid reports whether the form can commit: a name, at least one
+// usable match rule, and a command.
+func (e *extEditState) extEditValid() bool {
+	d := e.extDraft()
+	return d.Name != "" && len(d.Match) > 0 && d.Command != ""
+}
+
+// extEditCommit saves the form into the registry: replacing the slot it
+// edits, appending otherwise, then persisting.
+func (a *App) extEditCommit() {
+	e := &a.extEdit
+	if !e.extEditValid() {
+		return
+	}
+	d := e.extDraft()
+	if e.index >= 0 && e.index < len(a.shellExts) {
+		a.shellExts[e.index] = d
+	} else {
+		a.shellExts = append(a.shellExts, d)
+	}
+	e.open = false
+	a.saveShellExts()
+}
+
+// extEditTest runs the form's command once against the current selection —
+// the first selected entry, or the current folder when nothing is
+// selected — and reports the outcome on the status bar, as runShellExt
+// does.
+func (a *App) extEditTest() {
+	e := &a.extEdit
+	if !e.extEditValid() {
+		a.statusMsg = "扩展不完整，无法测试"
+		return
+	}
+	x := e.extDraft()
+	t := Entry{}
+	if sel := a.selectedEntries(); len(sel) > 0 {
+		t = sel[0]
+	} else {
+		p := a.cur().path
+		if specialPath(p) {
+			p = a.homePath
+		}
+		t = Entry{Name: filepath.Base(p), Path: p, IsDir: true}
+	}
+	if err := x.run(t); err != nil {
+		a.statusMsg = "扩展运行失败：" + x.Name + "（" + err.Error() + "）"
+		return
+	}
+	a.statusMsg = "已运行扩展：" + x.Name
+}
+
+// extEditModal shows the editor while it is open. Called from view.
+func (a *App) extEditModal(c *ui.Context) {
+	if !a.extEdit.open {
+		return
+	}
+	ui.Modal(c, &a.extEdit.open, func() {
+		a.extEditBody(c)
+	})
+}
+
+func (a *App) extEditBody(c *ui.Context) {
+	e := &a.extEdit
+	title := "添加扩展"
+	if e.index >= 0 {
+		title = "编辑扩展"
+	}
+	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).MinWidth(420).Children(func() {
+		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(colorText())
+
+		ui.Text(c, "名称").FontSize(12).TextColor(colorMuted())
+		ui.TextInputBase(c.Key("ext-name"), &e.name).
+			FillWidth().Height(30).FontSize(13).Placeholder("用 VSCode 打开")
+
+		ui.Text(c, "匹配规则").FontSize(12).TextColor(colorMuted())
+		ui.TextInputBase(c.Key("ext-match"), &e.matchBuf).
+			FillWidth().Height(30).FontSize(13).
+			Placeholder("* 全部 · file 文件 · dir 文件夹 · .ext 扩展名，多个用逗号分隔")
+
+		ui.Text(c, "命令").FontSize(12).TextColor(colorMuted())
+		ui.TextInputBase(c.Key("ext-cmd"), &e.command).
+			FillWidth().Height(30).FontSize(13).
+			Placeholder(`code "{path}" · 占位符：{path} {dir} {name} {stem} {ext}`)
+
+		settingsSwitch(c, "在终端中运行", "在新的终端窗口中执行命令",
+			func() bool { return e.terminal },
+			func(v bool) { e.terminal = v })
+
+		if !e.extEditValid() {
+			ui.Text(c, "名称、匹配规则和命令都填写后才能确定").
+				FontSize(12).TextColor(ui.Hex("#C4361D"))
+		}
+
+		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End)
+		btns.Children(func() {
+			uikitSecondaryButton(c, "取消", func() {
+				e.open = false
+			})
+			uikitSecondaryButton(c, "测试", func() {
+				a.extEditTest()
+			})
+			btn := ui.ButtonBase(c).Height(30).Radius(4).
+				Background(colorAccent()).Label("确定").Disabled(!e.extEditValid())
+			btn.Children(func() {
+				ui.Text(c, "确定").FontSize(12).TextColor(colorBtnText())
+			})
+			if btn.Clicked() {
+				a.extEditCommit()
+			}
+		})
+	})
 }

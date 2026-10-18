@@ -8,10 +8,20 @@ import (
 // right-aligned at its foot. The atoms below are the same buttons for the
 // irregular layouts; all colors come from theme.go's tokens.
 
+// The metrics every dialog button shares: horizontal padding, and a floor
+// width so a two-character 关闭 is not a stub. With both, the buttons of a row
+// come out one width — the widest label plus the padding — as Windows dialogs
+// size them; a button that hugs its own text reads as a label with a
+// background rather than a button, and a pair of them looks ragged.
+const (
+	btnPadX float32 = 14
+	btnMinW float32 = 80
+)
+
 // uikitSecondaryButton is the white-on-raised-surface button with a
 // hairline border: 取消, 打开, 恢复默认, and friends.
 func uikitSecondaryButton(c *ui.Context, label string, onClick func()) {
-	btn := ui.ButtonBase(c).Height(30).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
 		Background(colorAddress()).Border(1, colorDivider()).Label(label)
 	btn.Children(func() {
 		ui.Text(c, label).FontSize(12).TextColor(colorText())
@@ -25,7 +35,7 @@ func uikitSecondaryButton(c *ui.Context, label string, onClick func()) {
 // Its label uses colorBtnText — white on the light accent, near-black on
 // the dark one, where white reads poorly.
 func uikitPrimaryButton(c *ui.Context, label string, onClick func()) {
-	btn := ui.ButtonBase(c).Height(30).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
 		Background(colorAccent()).Label(label)
 	btn.Children(func() {
 		ui.Text(c, label).FontSize(12).TextColor(colorBtnText())

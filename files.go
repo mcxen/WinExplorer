@@ -89,6 +89,8 @@ func (a *App) filePane(c *ui.Context) {
 	a.dupsModal(c)
 	// The 可视化查看占用 plugin's treemap dialog renders the same way.
 	a.usageModal(c)
+	// The 清理 .DS_Store plugin's dialog renders the same way.
+	a.dsstoreModal(c)
 }
 
 // groupRow is one render row: either a group header band, or an entry.
@@ -233,8 +235,12 @@ func (a *App) groupHeaderRow(c *ui.Context, label string, count int) {
 // a table's does.
 func (a *App) detailsView(c *ui.Context, entries []Entry) {
 	width := a.detailsWidth()
+	// The header's cells carry the same geometry as the rows': the 4 DIP inset
+	// is the row's, not each cell's. Per-cell insets made every header column
+	// 8 DIP narrower than the one under it, so the headers — and the column
+	// grips at their right edges — drifted further left with each column.
 	head := ui.Row(c).Height(a.detailsRowH()).FillWidth().Shrink(0).Clip().
-		AlignItems(ui.Center).
+		AlignItems(ui.Center).Margin(0, rowInset).MinWidth(width).
 		BorderWidth(0, 0, 1, 0).BorderColor(colorDivider())
 	searching := strings.TrimSpace(a.cur().query) != ""
 	head.Children(func() {
@@ -334,7 +340,7 @@ func (a *App) saveColWidths() {
 // keep width.
 func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool, slot *float32) {
 	cell := ui.ButtonBase(c).Height(a.detailsRowH()).Padding(0, 8).Gap(4).
-		AlignItems(ui.Center).Margin(0, rowInset).Radius(4).Label(title)
+		AlignItems(ui.Center).Radius(4).Label(title)
 	if flex {
 		cell.Grow(1).Shrink(1).MinWidth(colNameMin)
 	} else {
@@ -418,9 +424,12 @@ func clampColW(w, min, max float32) float32 {
 }
 
 func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
+	// Justify Start: a button centers its content, and once the name column has
+	// a width of its own — dragged by the user — the slack would be split
+	// either side of the cells, shifting every data column right of its header.
 	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(a.detailsRowH()).
-		AlignItems(ui.Center).Margin(0, rowInset).MinWidth(a.detailsWidth()).
-		Radius(4).Label(e.Name)
+		AlignItems(ui.Center).Justify(ui.Start).Margin(0, rowInset).
+		MinWidth(a.detailsWidth()).Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
 	row.Children(func() {
 		name := ui.Row(c).Height(a.detailsRowH()).Padding(0, 8).Gap(8).
@@ -925,26 +934,16 @@ func searchHitSpans(spans []highlightSpan, font float32) []ui.Span {
 	return out
 }
 
-// renameField edits a.cur().renameBuf. Enter commits, Escape cancels, and both
-// are consumed so the window shortcut handler leaves them to the field.
+// renameField edits a.cur().renameBuf. components.Text binds the buffer
+// directly — every keystroke is in it — and Enter commits through Submitted.
+// Escape is not the editor's: the window's shortcut handler cancels the edit
+// (handleKeys), as it did when the field consumed the key itself.
 func (a *App) renameField(c *ui.Context, font float32) {
-	in := ui.TextInputBase(c.Key("rename"), &a.cur().renameBuf).
-		Grow(1).MinWidth(40).Height(font+10).FontSize(font).
-		Padding(0, 4).Radius(2).AutoFocus().
+	text := components.Text(c, a.cur().renameBuf, components.TextOptions{Editable: &a.cur().renameBuf})
+	text.Label("重命名").AutoFocus().
+		Height(font+10).FontSize(font).Padding(0, 4).Radius(2).
 		Background(colorAddress()).Border(1, colorAccent())
-	in.OnTextKey(func(k ui.TextKey) bool {
-		switch k.Key {
-		case ui.KeyEnter:
-			a.cur().renameBuf = k.Text()
-			a.commitRename()
-			return true
-		case ui.KeyEscape:
-			a.cancelRename()
-			return true
-		}
-		return false
-	})
-	if in.Submitted() {
+	if text.Submitted() {
 		a.commitRename()
 	}
 }

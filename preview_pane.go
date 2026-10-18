@@ -108,7 +108,7 @@ func (a *App) previewNote(c *ui.Context, msg string) {
 // but not play inline (video, PDF, unsupported audio), matching Explorer's
 // preview-pane open button.
 func (a *App) previewOpenButton(c *ui.Context, st *previewState) {
-	btn := ui.ButtonBase(c).Height(30).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
 		Background(colorAddress()).Border(1, colorDivider()).Label("打开").Tooltip("用系统应用打开")
 	btn.Children(func() {
 		ui.Text(c, "打开").FontSize(12).TextColor(colorText())
@@ -253,7 +253,7 @@ func (a *App) pluginMetaRowValue(c *ui.Context, r PluginMetaRow, keyW float32) {
 		ui.Text(c, r.Val).FontSize(12).TextColor(colorText()).
 			Grow(1).MinWidth(0).MaxLines(3)
 		if r.Copy {
-			btn := ui.ButtonBase(c).Height(22).Shrink(0).Radius(4).
+			btn := ui.ButtonBase(c).Height(22).Padding(0, 10).MinWidth(56).Shrink(0).Radius(4).
 				Background(colorAddress()).Border(1, colorDivider()).Label("复制")
 			btn.Children(func() {
 				ui.Text(c, "复制").FontSize(11).TextColor(colorText())
@@ -271,11 +271,12 @@ func (a *App) previewResizeHandle(c *ui.Context) {
 	// list, as Explorer's pane divider does.
 	ui.Box(c).Absolute().Top(0).Bottom(0).Left(0).Width(1).
 		Background(colorDivider())
-	// The grip overlaps the pane's left edge and the file pane's right,
-	// and reaches into the right-hand gap: the gap is window background,
-	// not file-list rows, so widening the drag target there steals no
-	// clicks from the list.
-	grip := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-3).Right(-previewGapR).
+	// The grip is a narrow strip centred on that edge — the divider the drag
+	// moves, as the navigation pane's handle is. It reaches 3 DIP into the
+	// file list and 3 into the pane, and goes no further: a wider target
+	// would take the preview's own clicks and scrolling, and would put the
+	// 1px line it draws (the middle of its box) wherever that width ends.
+	grip := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-3).Width(7).
 		Cursor(ui.CursorResizeEW)
 	if dx, _, ok := grip.Dragged(); ok && dx != 0 {
 		a.previewW = clampPreviewWidth(a.previewW - dx)

@@ -210,6 +210,20 @@ func (a *App) view(c *ui.Context) {
 	a.handleKeys(c)
 	a.updateSearch()
 	a.searchBoxFrame()
+	// A fresh statusMsg is an operation's outcome: show it as a toast as well,
+	// with a 撤销 button when the undo stack grew for it. MyGo's own toast face
+	// builds its viewport only while a toast shows — Onevra's components.Toasts
+	// keeps an empty one over the window that takes the clicks a dialog's
+	// backdrop dismissal needs, so it is not hosted here.
+	if a.statusMsg != "" && a.statusMsg != a.statusToasted {
+		a.statusToasted = a.statusMsg
+		if a.undoSeq != a.undoSeqToasted {
+			a.undoSeqToasted = a.undoSeq
+			c.ToastAction(a.statusMsg, "撤销", a.doUndo)
+		} else {
+			c.Toast(a.statusMsg)
+		}
+	}
 	// The frame theme carries the app's Windows 11 tokens to MyGo's widgets
 	// and the Onevra components, before anything under it builds.
 	c.SetTheme(appTheme(c))
@@ -273,7 +287,15 @@ func (a *App) handleKeys(c *ui.Context) {
 	// moved it: clear the request first, so a wheel scroll right after a
 	// move keeps the user's place.
 	a.cur().reveal = ""
-	if a.cur().renaming != "" || a.cur().editingPath {
+	if a.cur().renaming != "" {
+		// The inline rename's editor (components.Text) owns only its caret:
+		// Escape goes to the shortcuts, and cancels the edit.
+		if c.Shortcut(0, ui.KeyEscape) {
+			a.cancelRename()
+		}
+		return
+	}
+	if a.cur().editingPath {
 		return
 	}
 	// The quick preview's Space-close and ←/→ keys live inside the modal
@@ -320,6 +342,13 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.focusSearch = true
 	case c.Shortcut(ui.Ctrl, ui.KeyK), c.Shortcut(ui.Cmd, ui.KeyK):
 		a.openSearchBox()
+	case c.Shortcut(0, ui.KeyEscape):
+		// The inline rename's editor (components.Text) owns only its caret and
+		// lets Escape through to the shortcuts, so the window cancels the edit
+		// here. A modal or a focused field takes its Escape first.
+		if a.cur().renaming != "" {
+			a.cancelRename()
+		}
 	case c.Shortcut(ui.Alt, ui.KeyD), c.Shortcut(ui.Ctrl, ui.KeyL), c.Shortcut(0, ui.KeyF4):
 		a.beginPathEdit()
 	case c.Shortcut(0, ui.KeyF11):

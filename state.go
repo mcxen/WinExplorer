@@ -112,6 +112,13 @@ type App struct {
 
 	// statusMsg is shown by the status bar until the next navigation.
 	statusMsg string
+	// statusToasted is the message the window last toasted, so a message
+	// showing already is not toasted again while it stands; undoSeq counts
+	// undoable operations (pushUndo), and the seq a toast showed decides
+	// whether it carries a 撤销 button.
+	statusToasted  string
+	undoSeq        int
+	undoSeqToasted int
 
 	// win is the main window; the title bar's caption buttons call it.
 	win *mygo.Window

@@ -389,8 +389,12 @@ func (a *App) doDelete() {
 	a.clearSelection()
 	a.cur().renaming = ""
 	a.cur().renameBuf = ""
+	// The outcome of the whole command, after reload has reset the pane:
+	// moved items toast with a 撤销 button, failures say what they were.
 	if len(failed) > 0 {
 		a.statusMsg = "无法删除：" + strings.Join(failed, "、")
+	} else if len(moved) > 0 {
+		a.statusMsg = "已将 " + itoa(len(moved)) + " 个项目移到回收站"
 	}
 }
 

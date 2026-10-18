@@ -690,7 +690,7 @@ func (a *App) extEditBody(c *ui.Context) {
 			uikitSecondaryButton(c, "测试", func() {
 				a.extEditTest()
 			})
-			btn := ui.ButtonBase(c).Height(30).Radius(4).
+			btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
 				Background(colorAccent()).Label("确定").Disabled(!e.extEditValid())
 			btn.Children(func() {
 				ui.Text(c, "确定").FontSize(12).TextColor(colorBtnText())

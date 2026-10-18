@@ -7,7 +7,8 @@ import (
 )
 
 // statusBar is the 28 DIP strip under the file pane. Left: item counts,
-// and statusMsg when an operation has something to say. Right: the view
+// and statusMsg when an operation has something to say — view also shows a
+// fresh statusMsg as a toast. Right: the view
 // mode. A hairline along the top separates it from the body.
 func (a *App) statusBar(c *ui.Context) {
 	bar := windowBG(c, ui.Row(c).Height(28).FillWidth().Padding(0, 12).Gap(8).

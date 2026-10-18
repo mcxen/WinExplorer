@@ -276,7 +276,7 @@ func (a *App) batchRenameBody(c *ui.Context) {
 			uikitSecondaryButton(c, "取消", func() {
 				a.batch.open = false
 			})
-			btn := ui.ButtonBase(c).Height(30).Radius(4).
+			btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
 				Background(colorAccent()).Label("重命名").Disabled(a.batchHasClash())
 			btn.Children(func() {
 				ui.Text(c, "重命名").FontSize(12).TextColor(colorBtnText())

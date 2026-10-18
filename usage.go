@@ -717,9 +717,10 @@ func (a *App) usageButtons(c *ui.Context, res *usageScan, flag *bool) {
 
 // usageButton is a dialog button in the primary or secondary style,
 // reporting whether it was clicked. Height 28, one under uikitSecondaryButton,
-// for the space-tight scan dialog.
+// for the space-tight scan dialog — with that button's padding and floor width,
+// so 重新扫描 and 关闭 come out even.
 func usageButton(c *ui.Context, text string, primary bool) bool {
-	btn := ui.ButtonBase(c).Height(28).Shrink(0).Radius(4)
+	btn := ui.ButtonBase(c).Height(28).Padding(0, btnPadX).MinWidth(btnMinW).Shrink(0).Radius(4).Label(text)
 	if primary {
 		btn = btn.Background(colorAccent())
 	} else {

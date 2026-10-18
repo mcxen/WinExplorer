@@ -335,7 +335,7 @@ func (a *App) dupsGroup(c *ui.Context, n int, group []Entry) {
 				TextColor(colorText()).SingleLine()
 			ui.Text(c, fmt.Sprintf("%d 个文件 · %s", len(group), formatBytes(total))).
 				FontSize(11).TextColor(colorMuted()).Grow(1).MinWidth(0).SingleLine()
-			btn := ui.ButtonBase(c).Height(24).Shrink(0).Radius(4).
+			btn := ui.ButtonBase(c).Height(24).Padding(0, 12).MinWidth(72).Shrink(0).Radius(4).
 				Background(colorAddress()).Border(1, colorDivider()).Label("删除多余项")
 			btn.Children(func() {
 				ui.Text(c, "删除多余项").FontSize(11).TextColor(colorText())

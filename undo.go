@@ -26,6 +26,7 @@ func (a *App) pushUndo(op undoOp) {
 	if len(op.created) == 0 && len(op.moved) == 0 {
 		return
 	}
+	a.undoSeq++
 	a.undo = append(a.undo, op)
 	if len(a.undo) > maxUndoKeep {
 		a.undo = a.undo[len(a.undo)-maxUndoKeep:]

@@ -61,9 +61,13 @@ func (a *App) breadcrumbBar(c *ui.Context) {
 		ui.ScrollHorizontal(c).Grow(1).MinWidth(0).Height(32).Children(func() {
 			for i, crumb := range crumbs {
 				if i > 0 {
-					sep := ui.Box(c).Size(14, 32).Shrink(0)
+					// The arrow sits on the crumbs' line: a plain box lays its
+					// child out at the top, which left the chevrons riding
+					// high in the bar while the labels were centered.
+					sep := ui.Row(c).Size(14, 32).Shrink(0).
+						AlignItems(ui.Center).Justify(ui.Center)
 					sep.Children(func() {
-						components.Icon(c, lucide.ChevronRight).Size(12, 12).TextColor(colorMuted())
+						chevronIcon(c, false, 12)
 					})
 				}
 				path := crumb.Path

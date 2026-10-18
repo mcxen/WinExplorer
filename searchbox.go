@@ -476,6 +476,9 @@ func (a *App) searchBoxStatus(c *ui.Context) {
 		}
 	}
 	ui.Row(c).FillWidth().Height(24).Gap(8).AlignItems(ui.Center).Children(func() {
+		if b.busy {
+			components.Spinner(c, components.SpinnerRing)
+		}
 		ui.Text(c, text).FontSize(11).TextColor(colorMuted()).SingleLine().Grow(1).MinWidth(0)
 		if searchIndexOn() {
 			btn := ui.ButtonBase(c.Key("search-index-rebuild")).Height(18).Shrink(0).

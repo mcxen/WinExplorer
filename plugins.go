@@ -127,6 +127,7 @@ func init() {
 	registerRemotePlugin()
 	registerGalleryPlugin()
 	registerGifPlugin()
+	registerDSStorePlugin()
 	registerDupsPlugin()
 	registerUsagePlugin()
 	registerDiskPlugin()

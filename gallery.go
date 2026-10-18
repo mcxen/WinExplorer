@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	xdraw "golang.org/x/image/draw"
 )
 
 // gallery.go is Explorer's 画廊 (Gallery, Windows 11 23H2): the pictures
@@ -22,12 +21,13 @@ import (
 // opens, 空格 quick-previews, drag moves, exactly like any other item.
 
 const (
-	galleryThumbSide = 200  // px on the thumbnail's longest side
-	galleryMaxPhotos = 2000 // scan bound
-	galleryCap       = 400  // thumbnails kept in memory
-	galleryWorkers   = 4    // concurrent decodes
-	galleryCellSide  = 120  // a month grid's cell, the tile's 112 px inside
-	galleryScrollPad = 20   // the page scroll's padding, above and below
+	galleryThumbSide = 200      // px on the thumbnail's longest side
+	galleryMaxPhotos = 2000     // scan bound
+	galleryBudget    = 32 << 20 // bytes of thumbnails kept in memory
+	galleryMaxEntry  = 600      // entries, for pictures that fail to decode
+	galleryWorkers   = 4        // concurrent decodes
+	galleryCellSide  = 120      // a month grid's cell, the tile's 112 px inside
+	galleryScrollPad = 20       // the page scroll's padding, above and below
 )
 
 // galleryPhoto is one picture the gallery shows.
@@ -52,6 +52,7 @@ var (
 	galleryMu       sync.Mutex
 	galleryOrder    []string
 	galleryByPath   = map[string]*ui.Bitmap{}
+	galleryBytes    int
 	galleryInFlight = map[string]bool{}
 )
 
@@ -204,10 +205,18 @@ func loadGalleryThumb(path string) {
 	if err == nil && bm != nil {
 		galleryByPath[path] = bm
 		galleryOrder = append(galleryOrder, path)
-		for len(galleryOrder) > galleryCap {
+		galleryBytes += bitmapBytes(bm)
+		// The cache holds to a byte budget, not a picture count: thumbnails
+		// differ in size, and 400 of the largest would be tens of MB. The
+		// entry cap only bounds the map itself.
+		for len(galleryOrder) > 1 &&
+			(galleryBytes > galleryBudget || len(galleryOrder) > galleryMaxEntry) {
 			oldest := galleryOrder[0]
 			galleryOrder = galleryOrder[1:]
-			delete(galleryByPath, oldest)
+			if old, ok := galleryByPath[oldest]; ok {
+				galleryBytes -= bitmapBytes(old)
+				delete(galleryByPath, oldest)
+			}
 		}
 	}
 	galleryMu.Unlock()
@@ -239,33 +248,9 @@ func decodeScaled(path string, side int) (*ui.Bitmap, error) {
 }
 
 // decodeImageScaled is decodeScaled as the decoded picture, for callers
-// that compose several into one cover.
+// that compose several into one cover. imgsize.go owns the reduction.
 func decodeImageScaled(path string, side int) (image.Image, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		return nil, err
-	}
-	return scaleToFit(img, side), nil
-}
-
-// scaleToFit shrinks img to fit side px on its longest edge, or returns it
-// unchanged when it is no bigger.
-func scaleToFit(img image.Image, side int) image.Image {
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	scale := float64(side) / float64(max(w, h))
-	if scale >= 1 {
-		return img
-	}
-	tw, th := max(1, int(float64(w)*scale)), max(1, int(float64(h)*scale))
-	dst := image.NewRGBA(image.Rect(0, 0, tw, th))
-	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, b, xdraw.Over, nil)
-	return dst
+	return decodeFileScaled(path, side)
 }
 
 // galleryView renders the 画廊 page: month-sectioned grids of

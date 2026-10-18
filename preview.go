@@ -336,13 +336,19 @@ func hexDump(b []byte) string {
 // decodeImage reads an image file and returns a ui.Bitmap. MyGo's
 // DecodeBitmap covers PNG/JPEG/GIF/WebP/BMP (+ EXIF); for others (HEIC,
 // AVIF, TIFF, SVG) we shell out to Quick Look, which renders them to PNG.
+// previewImageSide is the longest edge a preview is decoded at. The pane
+// shows the picture at roughly its width and Quick Look enlarges to the
+// window; past this size the extra pixels cost memory without being
+// visible, and a 12-megapixel photo decoded whole is 48 MB of texture.
+const previewImageSide = 2048
+
 func decodeImage(path string) (*ui.Bitmap, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	if b, err := ui.DecodeBitmap(data); err == nil {
-		return b, nil
+	if img, err := decodeBytesScaled(data, previewImageSide); err == nil {
+		return ui.NewBitmap(img), nil
 	}
 	return quickLookThumb(path, 1024)
 }

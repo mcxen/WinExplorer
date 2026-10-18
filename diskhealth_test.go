@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"sunvale/diskhealth"
+)
 
 // TestDiskWarnTemp checks the high-temperature warning's settings: the
 // defaults (on, 50 °C), the stored overrides, the fall-back on values the
@@ -37,15 +41,15 @@ func TestDiskHot(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := newStoreApp(t, t.TempDir())
-	cold := DiskInfo{Name: "disk0", Temperature: 40}
-	hot := DiskInfo{Name: "disk0", Temperature: 60}
+	cold := diskhealth.Disk{Temperature: 40, TempKnown: true}
+	hot := diskhealth.Disk{Temperature: 60, TempKnown: true}
 	if a.diskHot(cold) {
 		t.Fatal("40 °C marked hot at the default threshold")
 	}
 	if !a.diskHot(hot) {
 		t.Fatal("60 °C not hot at the default threshold")
 	}
-	if a.diskHot(DiskInfo{Temperature: -1}) {
+	if a.diskHot(diskhealth.Disk{}) {
 		t.Fatal("sensorless disk marked hot")
 	}
 	a.pluginSet(diskPluginID, "tempWarn", "off")
@@ -67,14 +71,17 @@ func TestDiskSettingsDeclared(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := newStoreApp(t, t.TempDir())
 	rows := a.pluginSettings(findPlugin(diskPluginID))
-	if len(rows) != 2 {
-		t.Fatalf("disk plugin declares %d settings, want 2", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("disk plugin declares %d settings, want 3", len(rows))
 	}
 	if rows[0].Kind != PluginSettingSwitch || rows[0].Name != "高温警告" {
 		t.Fatalf("first row = %+v, want the 高温警告 switch", rows[0])
 	}
 	if rows[1].Kind != PluginSettingSelect || rows[1].Value != "50" {
 		t.Fatalf("second row = %+v, want the threshold select at 50", rows[1])
+	}
+	if rows[2].Kind != PluginSettingAction || rows[2].Name != "复制磁盘报告" {
+		t.Fatalf("third row = %+v, want the copy-report action", rows[2])
 	}
 	// The declared rows write through the hooks: flipping the switch and
 	// picking a threshold move the settings the cards read.

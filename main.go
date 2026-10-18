@@ -11,6 +11,8 @@ import (
 	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
+
+	"sunvale/diskhealth"
 )
 
 // bootStart is when the process started, for WINEXPLORER_TIMING=1.
@@ -203,6 +205,12 @@ func newAppWithStore(store *persistedState) *App {
 func (a *App) view(c *ui.Context) {
 	if !a.bootLogged {
 		a.bootLogged = true
+		// A background disk probe landing redraws the window, so the
+		// 磁盘健康 page does not stay on "正在读取…" until something else
+		// happens to repaint. Installed on first use; the package's
+		// callback is process-wide, which is right — every window shows
+		// the same disks.
+		diskhealth.SetOnUpdate(repaint)
 		if os.Getenv("WINEXPLORER_TIMING") != "" {
 			log.Printf("启动：%v 后第一帧", time.Since(bootStart))
 		}

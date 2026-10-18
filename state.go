@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/oneo-me/onevra/source/components/chart"
 	"sync/atomic"
 	"time"
 
@@ -157,6 +158,15 @@ type App struct {
 	settingsTab int
 	// bootLogged reports the first-frame timing log has fired.
 	bootLogged bool
+	// diskWatch stops the 磁盘健康 page's background probe, while that page
+	// is the one on screen. The poll keeps the throughput figures moving
+	// and is torn down on navigation, so no window probes disks it is not
+	// showing.
+	diskWatch func()
+	// diskCharts and diskVolumeCharts keep the per-disk chart interaction
+	// state (which point or slice is selected), one entry per disk id.
+	diskCharts       map[string]*chart.State
+	diskVolumeCharts map[string]*chart.State
 	// shellExts are the registered context-menu commands (extensions.go);
 	// shellExtErrs are the entries the registry could not keep, shown in
 	// the settings dialog's 扩展 section until the user fixes the file.

@@ -2,9 +2,11 @@ package main
 
 import (
 	"os"
+
 	"path/filepath"
 	"slices"
 	"strings"
+	"sunvale/diskhealth"
 )
 
 // navigate loads path in the active tab, resetting its transient state and
@@ -26,6 +28,11 @@ func (a *App) navigate(path string) {
 		}
 		t.history = append(t.history, t.path)
 		t.histIdx = len(t.history) - 1
+	}
+	// Leaving the 磁盘健康 page stops its background probe, so a window only
+	// polls disks while the page is on screen.
+	if t.path != pathDisks {
+		a.disksUnwatch()
 	}
 	a.reload()
 	a.requestPreview()
@@ -67,6 +74,9 @@ func (a *App) restoreHistory() {
 	t.renameBuf = ""
 	t.editingPath = false
 	t.pathDraft = ""
+	if t.path != pathDisks {
+		a.disksUnwatch()
+	}
 	a.reload()
 	a.requestPreview()
 }
@@ -125,7 +135,7 @@ func (a *App) reload() {
 		return
 	case pathDisks:
 		t.entries = nil // the disk page renders from its own probe
-		disksRefresh()
+		diskhealth.Refresh()
 		return
 	}
 	dir, err := os.ReadDir(t.path)
@@ -266,12 +276,18 @@ func (a *App) closeTab(i int) {
 	} else if a.activeTab > i {
 		a.activeTab--
 	}
+	if a.cur().path != pathDisks {
+		a.disksUnwatch()
+	}
 	a.requestPreview()
 }
 
 func (a *App) switchTo(i int) {
 	if i >= 0 && i < len(a.tabs) && i != a.activeTab {
 		a.activeTab = i
+		if a.cur().path != pathDisks {
+			a.disksUnwatch()
+		}
 		a.requestPreview()
 	}
 }

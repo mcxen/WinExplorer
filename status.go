@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/egoist/mygo/ui"
+
+	"sunvale/diskhealth"
 )
 
 // statusBar is the 28 DIP strip under the file pane. Left: item counts,
@@ -36,14 +38,23 @@ func (a *App) statusLeft() string {
 		if !a.pluginEnabled(diskPluginID) {
 			return "磁盘信息插件已停用"
 		}
-		disks := readDiskHealth()
-		good := 0
-		for _, d := range disks {
-			if d.HealthOK {
+		r := diskhealth.ReadAsync()
+		if len(r.Disks) == 0 {
+			return "磁盘健康页 · 正在读取…"
+		}
+		good, warn := 0, 0
+		for _, d := range r.Disks {
+			switch d.Health {
+			case diskhealth.HealthGood:
 				good++
+			case diskhealth.HealthWarning, diskhealth.HealthFailing:
+				warn++
 			}
 		}
-		return fmt.Sprintf("%d 个磁盘，%d 个健康  磁盘健康页", len(disks), good)
+		if warn > 0 {
+			return fmt.Sprintf("%d 块磁盘，%d 正常，%d 需注意  磁盘健康页", len(r.Disks), good, warn)
+		}
+		return fmt.Sprintf("%d 块磁盘，%d 正常  磁盘健康页", len(r.Disks), good)
 	}
 	text := fmt.Sprintf("%d 个项目", len(visible))
 	// The search line is Everything's shape: count, elapsed, truncated

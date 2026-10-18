@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,8 +9,8 @@ import (
 )
 
 // The tests here are logic-level: the duplicate grouping, the subtree
-// scan, the digest cache and the delete-extras trash path. No GUI is
-// started; background results are polled for with bounded waits.
+// scan and the delete-extras trash path. No GUI is started; background
+// results are polled for with bounded waits.
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -122,49 +120,6 @@ func TestDupsScan(t *testing.T) {
 	}
 	if !strings.HasSuffix(filepath.Dir(g[1].Path), "sub") {
 		t.Fatalf("subtree not scanned: %q", g[1].Path)
-	}
-}
-
-func TestHashCache(t *testing.T) {
-	dir, _ := os.MkdirTemp("", "we-hash")
-	defer os.RemoveAll(dir)
-	f := filepath.Join(dir, "文档.txt")
-	writeFile(t, f, "hello")
-	sum := sha256.Sum256([]byte("hello"))
-	want := hex.EncodeToString(sum[:])
-	a := newStoreApp(t, dir)
-
-	a.requestHash(f)
-	waitUntil(t, func() bool {
-		v, ready := hashRowValue(f)
-		return ready && v == want
-	})
-	if hashComputes.Load() != 1 {
-		t.Fatalf("computes = %d, want 1", hashComputes.Load())
-	}
-
-	// The same unchanged file is served from the cache, not recomputed.
-	a.requestHash(f)
-	a.requestHash(f)
-	if hashComputes.Load() != 1 {
-		t.Fatalf("recomputed for an unchanged file: %d", hashComputes.Load())
-	}
-	if v, ready := hashRowValue(f); !ready || v != want {
-		t.Fatalf("cached value = %q %v", v, ready)
-	}
-
-	// A file that changed on disk hashes again.
-	future := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(f, future, future); err != nil {
-		t.Fatal(err)
-	}
-	a.requestHash(f)
-	waitUntil(t, func() bool {
-		_, ready := hashRowValue(f)
-		return ready
-	})
-	if hashComputes.Load() != 2 {
-		t.Fatalf("computes = %d, want 2 after the modtime changed", hashComputes.Load())
 	}
 }
 

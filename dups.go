@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -463,4 +466,19 @@ func (a *App) dupsTrash(victims []Entry) (int, []string) {
 		a.pushUndo(undoOp{desc: "删除多余项", moved: moved})
 	}
 	return len(moved), failed
+}
+
+// fileSHA256 is the digest of a file's contents, streamed: what the scan
+// groups the files it kept by size with.
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

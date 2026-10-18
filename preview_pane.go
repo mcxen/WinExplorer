@@ -214,8 +214,7 @@ func (a *App) previewAudio(c *ui.Context, st *previewState) {
 }
 
 // previewProps lists the file properties the way Explorer's details pane
-// does: one row per attribute, with the plugins' metadata rows last — the
-// hash plugin's SHA-256 row when it is on.
+// does: one row per attribute, with the plugins' metadata rows last.
 func (a *App) previewProps(c *ui.Context, st *previewState) {
 	if len(st.meta) == 0 {
 		return

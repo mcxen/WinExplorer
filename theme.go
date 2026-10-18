@@ -73,6 +73,11 @@ var (
 	// darker than tokDivider in the light theme so inputs read as inputs.
 	tokFieldBorder ui.Color
 
+	// tokHit is the search hit highlight, Everything's yellow mark: strong on
+	// the light theme, a softer amber on the dark one where pure yellow
+	// outshines the text.
+	tokHit ui.Color
+
 	tokHover ui.Color
 )
 
@@ -96,6 +101,7 @@ func resolveTokens() {
 	tokAddress = pick("#FFFFFF", "#2D2D2D")
 	tokBtnText = pick("#FFFFFF", "#1A1A1A")
 	tokFieldBorder = pick("#D6D6D6", "#383838")
+	tokHit = pick("#FFE28A", "#8A6D00")
 	if darkMode() {
 		tokHover = ui.RGBA(255, 255, 255, 0.06)
 	} else {
@@ -121,6 +127,7 @@ func colorMuted() ui.Color    { return tokMuted }
 func colorAccent() ui.Color   { return tokAccent }
 func colorDivider() ui.Color  { return tokDivider }
 func colorFolder() ui.Color   { return tokFolder }
+func colorHit() ui.Color      { return tokHit }
 func colorStatus() ui.Color   { return tokStatus }
 func colorAddress() ui.Color  { return tokAddress }
 

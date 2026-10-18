@@ -93,6 +93,8 @@ func (a *App) canUp() bool {
 // transient status message on success.
 func (a *App) reload() {
 	t := a.cur()
+	// The folder's listing is being read again: the tree's copy of it is stale.
+	a.navChildrenDrop(t.path)
 	a.statusMsg = ""
 	t.loadErr = ""
 	switch t.path {
@@ -176,6 +178,10 @@ func (a *App) reload() {
 		}
 	}
 	t.entries = entries
+	// The listing the user is looking at is the freshest word on this folder:
+	// the search index folds it in, so a file created, renamed or deleted here
+	// is searchable from Ctrl+K at once (searchindex.go).
+	searchIndexNote(t.path, entries)
 }
 
 func (a *App) toggleSort(key SortKey) {

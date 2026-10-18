@@ -51,8 +51,18 @@ type tabState struct {
 	marquee    marqueeState
 	itemBounds map[string]ui.Rect
 
-	// search is this tab's query walk state (search.go).
-	search searchState
+	// search is this tab's query walk state (search.go), and queryScope what
+	// its query covers: this folder's subtree, or every mounted volume
+	// (Everything's 全部磁盘). The scope is the user's choice, so it outlives
+	// the walk it started.
+	search     searchState
+	queryScope searchScope
+	// hlCache is the parsed query the pane marks its hits with (search.go):
+	// parsing on every row of every frame would show.
+	hlCache struct {
+		query  string
+		parsed searchQuery
+	}
 }
 
 // marqueeState tracks a rubber-band drag: where it began and where the
@@ -113,6 +123,13 @@ type App struct {
 	// focusSearch is set by Ctrl+E/Ctrl+F and consumed by the search
 	// field, which takes the focus on the next frame.
 	focusSearch bool
+	// searchBox is the Ctrl+K palette's own search state (searchbox.go):
+	// one box per window, searching the machine rather than a tab's folder.
+	searchBox searchBoxState
+	// navTree is the navigation pane's folder tree (navtree.go): which folders
+	// are open, the children read for them, and where the current place sits in
+	// the pane's list.
+	navTree navTree
 	// fieldFocused is whether the search field held the keyboard focus in
 	// the frame before: a text field keeps the arrows to itself, as ↑/↓
 	// and the Page keys are not its own and would otherwise move the pane's

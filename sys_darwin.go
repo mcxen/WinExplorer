@@ -109,6 +109,13 @@ func sysAudioPlay(path string) (name string, args []string, dur time.Duration, o
 	return "afplay", []string{path}, d, true
 }
 
+// sysSearchPrune are the directories a 全局 search skips: the mount points the
+// volume roots walk themselves (/Volumes is listed as its own volumes, and the
+// data volume is firmlinked onto /), so walking them here would be plain
+// duplication. Everything's own hidden-folder rule drops .Spotlight-V100 and
+// the like.
+func sysSearchPrune() []string { return []string{"/Volumes", "/System/Volumes"} }
+
 // sysVolumes lists the root volume and the mounted ones.
 func sysVolumes() []Place {
 	root := "/"

@@ -71,6 +71,10 @@ func main() {
 		resolveTokens()
 		win := newAppWindow(app)
 		win.OnClosed(func() { unregisterApp(app) })
+		// The search index (searchindex.go) warms in the background: the
+		// Ctrl+K palette answers from the last walk's cache at once, while the
+		// volumes are walked again behind it.
+		go startSearchIndex()
 		// The remote access plugin gates the server: the account may have
 		// it enabled, but a switched-off plugin keeps the LAN closed for
 		// the run — the settings dialog's switch brings it back.
@@ -86,10 +90,11 @@ func main() {
 	})
 	// remoteStop waits for the requests in flight, so it runs once the
 	// windows are gone and the event loop is about to stop, not per window.
-	// The size engine's cache lands on disk first: it is local and fast,
-	// while remoteStop waits on the network.
+	// The size engine's cache and the search index land on disk first: they
+	// are local and fast, while remoteStop waits on the network.
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		flushDirStats()
+		flushSearchIndex()
 		app.remoteStop()
 	})
 	if err := mygo.App.Run(); err != nil {
@@ -164,6 +169,9 @@ func newAppWithStore(store *persistedState) *App {
 		showExt:     true,
 		grouping:    groupNone,
 		navWidth:    248,
+		// The 此电脑 tree shows from the start: it is what follows the tab
+		// around, and a window whose tree is collapsed shows no sync at all.
+		navPCExpanded: true,
 		homePath:    home,
 		previewOpen: false,
 		previewW:    320,
@@ -200,6 +208,7 @@ func (a *App) view(c *ui.Context) {
 	}
 	a.handleKeys(c)
 	a.updateSearch()
+	a.searchBoxFrame()
 	// The root paints the chrome color only where the window shows no
 	// material; with one, the bands that leave themselves clear let the
 	// Mica through, and the file pane's opaque content surface covers the
@@ -223,6 +232,7 @@ func (a *App) view(c *ui.Context) {
 	a.settingsModal(c)
 	a.extEditModal(c)
 	a.batchRenameModal(c)
+	a.searchBoxModal(c)
 }
 
 // handleKeys maps Explorer shortcuts. A focused text field consumes its
@@ -278,6 +288,8 @@ func (a *App) handleKeys(c *ui.Context) {
 	case c.Shortcut(ui.Cmd, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyE),
 		c.Shortcut(ui.Ctrl, ui.KeyF), c.Shortcut(ui.Cmd, ui.KeyF), c.Shortcut(0, ui.KeyF3):
 		a.focusSearch = true
+	case c.Shortcut(ui.Ctrl, ui.KeyK), c.Shortcut(ui.Cmd, ui.KeyK):
+		a.openSearchBox()
 	case c.Shortcut(ui.Alt, ui.KeyD), c.Shortcut(ui.Ctrl, ui.KeyL), c.Shortcut(0, ui.KeyF4):
 		a.beginPathEdit()
 	case c.Shortcut(0, ui.KeyF11):

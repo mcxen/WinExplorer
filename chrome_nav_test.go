@@ -2,6 +2,8 @@ package main
 
 import (
 	"image"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -31,14 +33,22 @@ func bandY(img *image.RGBA, x0, x1, top, bottom int) (minY, maxY int) {
 // out at the top, which left the chevrons riding high in the bar.
 func TestBreadcrumbSeparatorsSitOnTheCrumbLine(t *testing.T) {
 	a, tt, _ := keynavWindow(t, 1)
-	a.navigate("/Users/mcx/Desktop")
+	// The home folder's Desktop, not a literal path: the home folder is not
+	// /Users/mcx on a runner, and a literal one there loses the 主文件夹 crumb
+	// — the name then matches the sidebar's entry instead. Its last crumb is
+	// 桌面 while the tab's title is Desktop, so each name locates one label.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.navigate(filepath.Join(home, "Desktop"))
 	tt.Frame()
 
 	var crumbs []ui.Rect
-	for _, label := range []string{"此电脑", "Macintosh HD", "Users", "主文件夹", "桌面"} {
-		r, ok := tt.Find(label)
+	for _, crumb := range a.breadcrumbs() {
+		r, ok := tt.Find(crumb.Name)
 		if !ok || r.W == 0 {
-			t.Fatalf("the crumb %q is not in the window: %v", label, tt.Texts())
+			t.Fatalf("the crumb %q is not in the window: %v", crumb.Name, tt.Texts())
 		}
 		crumbs = append(crumbs, r)
 	}

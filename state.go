@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -169,6 +170,15 @@ type App struct {
 	store *persistedState
 	// undo is the Ctrl+Z stack of file operations (undo.go).
 	undo []undoOp
+	// dropTookOwnDrag is set when a target of this window took the drag
+	// under the pointer (dropops.go), so the native source's completion,
+	// which arrives in the same frame, does not reload over what
+	// doDropInto reported.
+	dropTookOwnDrag bool
+	// dragSuggested is the effect the current native drag suggests, from
+	// the keys held over it (transfer.Offer.Suggested): a native session
+	// takes the input, so this is how a copy drag is told from a move.
+	dragSuggested transfer.Operation
 
 	// preview holds the loaded preview for the selected file; replaced
 	// atomically once a background load finishes (see preview.go).

@@ -353,7 +353,7 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 		a.selectOnly(p.path)
 		a.doOpen()
 	}
-	tile.Drag(a.dragValueFor(p.path))
+	a.bindDragSource(tile, p.path)
 	tile.ContextMenu(func(m *ui.Menu) {
 		a.itemMenu(m, galleryEntry(p))
 	})

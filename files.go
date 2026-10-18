@@ -1014,7 +1014,7 @@ func (a *App) bindItemInput(c *ui.Context, el ui.Element, e Entry) {
 		a.doOpen()
 	}
 	if a.cur().path != pathThisPC && e.Path != "" && e.Path != pathThisPC {
-		el.Drag(a.dragValueFor(e.Path))
+		a.bindDragSource(el, e.Path)
 		if e.IsDir {
 			a.bindDropFolder(c, el, e.Path)
 		}
@@ -1039,13 +1039,16 @@ func (a *App) clickEntry(path string, mods ui.Modifiers) {
 // document), paste, open in Terminal, refresh, refresh of the folder's
 // size statistics, hidden items and the folder's properties. A row's own
 // menu is the innermost one, so it takes the click when the pointer is on
-// a row. The pane also accepts files dragged from other applications,
-// moving them into the current folder.
+// a row. The pane also accepts files dropped from other applications,
+// copying them into the current folder.
 func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 	if a.cur().path != pathThisPC && a.cur().path != pathDisks {
 		if files := el.DroppedFiles(); len(files) > 0 {
-			a.doDropInto(c.Modifiers(), a.cur().path, files)
+			a.doDropInto(dropModifiers(c.Modifiers()), a.cur().path, files)
 		}
+		a.bindNativeDrop(el, func(paths []string) {
+			a.doDropInto(dropModifiers(c.Modifiers()), a.cur().path, paths)
+		})
 	}
 	// A drag on the empty space the rows and tiles leave is a rubber band
 	// selecting what it crosses; the rows' own drags never reach here.

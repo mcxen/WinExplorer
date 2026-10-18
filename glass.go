@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
 )
 
 // glass.go is the app's Windows 11 material layer. The window is created
@@ -14,9 +15,11 @@ import (
 // otherwise. Where a material can never show (older Windows, Linux) the
 // tokens paint exactly as before.
 //
-// Transient surfaces get the app-drawn kind of material instead: dialogs
-// are frosted glass panels floating over a dimmed window, with a soft
-// shadow and a small rise-and-fade entrance.
+// Transient surfaces get the app-drawn kind of material instead: the
+// dialogs are Onevra's glass panels floating over a dimmed window — the
+// tint and the hairline come from the frame theme appTheme installs
+// (theme.go), so they follow 外观 — with MyGo's focus trapping and its
+// entrance and exit transitions.
 
 // windowBG gives e the chrome's token background where the window shows
 // no material, and leaves it clear — the material shows — where it does.
@@ -27,33 +30,28 @@ func windowBG(c *ui.Context, e ui.Element) ui.Element {
 	return e.Background(colorWindow())
 }
 
-// dialogRadius rounds the floating dialogs' glass panels, and
-// dialogMargin keeps them off the window's edges.
-const (
-	dialogRadius float32 = 12
-	dialogMargin float32 = 48
-)
-
-// floatDialog shows fn's content in a floating glass dialog while *open
-// is true: a dimmed backdrop, a frosted panel with a soft shadow, and a
-// short rise-and-fade entrance. clear is for panels whose body is media
-// (Quick Look), which floats on barely-toned glass instead of a frost.
-// fn builds the panel's content, as for ui.Modal. The panel is capped to
-// the window minus a margin, as ui.Modal's was, so a long dialog cannot
-// run off the edges; closing is immediate, as the overlay stops building.
-func floatDialog(c *ui.Context, open *bool, clear bool, fn func()) {
-	w, h := c.Size()
-	ui.DialogBase(c, open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(0, 0, 0, 0.35))
-		g := glass.Glass{}
+// floatDialog shows fn's content in a floating glass dialog while *open is
+// true, on components.Dialog: a dimmed backdrop, a frosted panel with the
+// soft shadow and the 12 DIP corners the frame theme builds, focus trapping
+// and restoration MyGo owns, Escape and backdrop dismissal, and a short
+// rise-and-fade entrance and exit. label is the dialog's accessible name.
+//
+// width is the room the body gets in DIPs. width may not be the panel's own:
+// components.Dialog pads the panel by Space(5) on every side, and MyGo does
+// not clamp a child to its parent's content box, so a body needing width
+// would otherwise hang out of the glass. floatDialog adds the padding back.
+//
+// clear is for panels whose body is media (Quick Look), which floats on
+// barely-toned glass instead of a frost.
+func floatDialog(c *ui.Context, open *bool, label string, width float32, clear bool, fn func()) {
+	// The panel's own padding, read from the theme so a changed Spacing keeps
+	// the glass fitted to the body.
+	pad := c.Theme().Space(5)
+	components.Dialog(c, open, components.DialogOptions{Label: label}, func(panel ui.Element) {
+		panel.Width(width + 2*pad)
 		if clear {
-			g.Style = glass.Clear
+			panel.Material(glass.Glass{Style: glass.Clear})
 		}
-		panel.Radius(dialogRadius).Padding(12, 14).Clip().
-			MaxWidth(w-dialogMargin).MaxHeight(h-dialogMargin).
-			Material(g).
-			Shadow(0, 24, 64, 0, ui.RGBA(0, 0, 0, 0.35)).
-			Transition(ui.ElementTransition{Enter: &ui.Motion{Y: 12, Opacity: 0}})
 		fn()
 	})
 }

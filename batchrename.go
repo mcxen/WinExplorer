@@ -205,13 +205,13 @@ func (a *App) batchRenameModal(c *ui.Context) {
 	if !a.batch.open {
 		return
 	}
-	floatDialog(c, &a.batch.open, false, func() {
+	floatDialog(c, &a.batch.open, "批量重命名", 420, false, func() {
 		a.batchRenameBody(c)
 	})
 }
 
 func (a *App) batchRenameBody(c *ui.Context) {
-	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).MinWidth(420).Children(func() {
+	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).Children(func() {
 		ui.Text(c, "批量重命名").FontSize(14).FontWeight(600).TextColor(colorText())
 
 		ui.Text(c, "模式").FontSize(12).TextColor(colorMuted())

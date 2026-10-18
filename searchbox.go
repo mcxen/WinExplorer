@@ -24,8 +24,9 @@ import (
 // with the mouse, and Escape closes the box.
 
 const (
-	// searchBoxWidth is the palette's width; the window clamps what is left of
-	// it when it is narrower (floatDialog's own MaxWidth).
+	// searchBoxWidth is the palette's width. It is a fixed request, as the
+	// other dialogs' widths are: a window narrower than it leaves the panel its
+	// insets and no more, and the rows keep their width rather than reflow.
 	searchBoxWidth float32 = 760
 	// searchBoxListMax is how tall the hits list grows before it scrolls, and
 	// searchBoxListMin what it keeps when the window is short.
@@ -337,7 +338,7 @@ func (a *App) searchBoxModal(c *ui.Context) {
 	if !b.open {
 		return
 	}
-	floatDialog(c, &b.open, true, func() {
+	floatDialog(c, &b.open, "快速搜索", searchBoxWidth, true, func() {
 		a.searchBoxBody(c)
 	})
 	if !b.open {

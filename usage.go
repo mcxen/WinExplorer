@@ -479,7 +479,7 @@ func (a *App) usageModal(c *ui.Context) {
 	if !*flag {
 		return
 	}
-	floatDialog(c, flag, false, func() {
+	floatDialog(c, flag, "可视化查看占用", 560, false, func() {
 		a.usageBody(c, flag)
 	})
 }
@@ -494,7 +494,7 @@ func (a *App) usageBody(c *ui.Context, flag *bool) {
 		here = res.tree
 		a.usageSetHere(here)
 	}
-	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).MinWidth(560).Children(func() {
+	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).Children(func() {
 		ui.Text(c, "可视化查看占用").FontSize(14).FontWeight(600).TextColor(colorText())
 		a.usageStatus(c, res)
 		a.usagePlaceRow(c, here, flag)

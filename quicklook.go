@@ -38,12 +38,21 @@ func (a *App) quickLookModal(c *ui.Context) {
 		return
 	}
 	quickLookWasOpen = true
-	floatDialog(c, &a.quickLook, true, func() {
+	floatDialog(c, &a.quickLook, "快速预览", quickLookWidth(c), true, func() {
 		a.quickLookBody(c)
 	})
 }
 
 var quickLookWasOpen bool
+
+// quickLookWidth is the room the preview body gets: the window less the two
+// 20 DIP insets components.Dialog keeps and the body's own 40 DIP of
+// padding, so the media it shows — capped at window−120 by quickLookContent —
+// fits inside the glass.
+func quickLookWidth(c *ui.Context) float32 {
+	w, _ := c.Size()
+	return max(w-80, 280)
+}
 
 // isGifPath reports whether the file is an animated-capable GIF.
 func isGifPath(path string) bool {

@@ -54,7 +54,7 @@ func (a *App) propertiesModal(c *ui.Context) {
 	if !a.propsOpen {
 		return
 	}
-	floatDialog(c, &a.propsOpen, false, func() {
+	floatDialog(c, &a.propsOpen, "属性", 360, false, func() {
 		a.propertiesBody(c)
 	})
 }
@@ -69,7 +69,7 @@ func (a *App) propertiesBody(c *ui.Context) {
 			meta, loading = f.meta, false
 		}
 	}
-	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).MinWidth(360).Children(func() {
+	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).Children(func() {
 		head := ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {})
 		head.Children(func() {
 			glyph := ui.Box(c).Size(40, 40).Shrink(0)

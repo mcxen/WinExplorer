@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
 )
 
 // bootStart is when the process started, for WINEXPLORER_TIMING=1.
@@ -159,23 +160,23 @@ func newAppWithStore(store *persistedState) *App {
 	}
 	a := &App{
 		// Explorer opens on the 主文件夹 (Home) page.
-		tabs:        []*tabState{newTab(pathHome)},
-		activeTab:   0,
-		sortKey:     SortName,
-		sortAsc:     true,
-		mode:        ViewDetails,
-		iconZoom:    1,
-		showHidden:  false,
-		showExt:     true,
-		grouping:    groupNone,
-		navWidth:    248,
+		tabs:       []*tabState{newTab(pathHome)},
+		activeTab:  0,
+		sortKey:    SortName,
+		sortAsc:    true,
+		mode:       ViewDetails,
+		iconZoom:   1,
+		showHidden: false,
+		showExt:    true,
+		grouping:   groupNone,
+		navWidth:   248,
 		// The 此电脑 tree shows from the start: it is what follows the tab
 		// around, and a window whose tree is collapsed shows no sync at all.
 		navPCExpanded: true,
-		homePath:    home,
-		previewOpen: false,
-		previewW:    320,
-		store:       store,
+		homePath:      home,
+		previewOpen:   false,
+		previewW:      320,
+		store:         store,
 	}
 	// shellExts are the registered context-menu commands (extensions.go);
 	// the load's per-entry problems stay on the app, for the settings
@@ -209,6 +210,9 @@ func (a *App) view(c *ui.Context) {
 	a.handleKeys(c)
 	a.updateSearch()
 	a.searchBoxFrame()
+	// The frame theme carries the app's Windows 11 tokens to MyGo's widgets
+	// and the Onevra components, before anything under it builds.
+	c.SetTheme(appTheme(c))
 	// The root paints the chrome color only where the window shows no
 	// material; with one, the bands that leave themselves clear let the
 	// Mica through, and the file pane's opaque content surface covers the
@@ -218,13 +222,7 @@ func (a *App) view(c *ui.Context) {
 		a.tabStrip(c)
 		a.commandBar(c)
 		a.navRow(c)
-		ui.Row(c).FillWidth().Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			a.sidebar(c)
-			a.filePane(c)
-			if a.previewOpen {
-				a.previewPane(c)
-			}
-		})
+		a.bodyRow(c)
 		a.statusBar(c)
 	})
 	a.quickLookModal(c)
@@ -233,6 +231,38 @@ func (a *App) view(c *ui.Context) {
 	a.extEditModal(c)
 	a.batchRenameModal(c)
 	a.searchBoxModal(c)
+}
+
+// bodyRow is the chrome's body: the navigation pane, then the file pane and
+// the preview pane beside it. components.Split owns the boundary between the
+// two — its one-DIP line, the drag handle over it, the keyboard resize (Tab to
+// the divider, the arrow keys to move it, Home and End for the ends) and the
+// splitter role — while the app keeps the pane's width, so it survives the
+// frame and stays where clampNavWidth holds it.
+func (a *App) bodyRow(c *ui.Context) {
+	// Split bounds the first pane by minima, not by a ceiling: the content's
+	// minimum is raised to what leaves the pane its own 420 DIP limit
+	// (navMaxWidth). The split spans the window, so its width is the window's,
+	// and the one DIP its divider takes comes off the room the panes share.
+	w, _ := c.Size()
+	secondMin := max(float32(navContentMin), w-1-navMaxWidth)
+	split := components.Split(c, &a.navWidth,
+		func() { a.sidebar(c) },
+		func() { a.contentPanes(c) },
+		components.SplitOptions{FirstMin: navMinWidth, SecondMin: secondMin})
+	a.navWidth = clampNavWidth(a.navWidth)
+	split.Grow(1).FillWidth()
+}
+
+// contentPanes is the room right of the navigation pane: the file pane, with
+// the preview pane beside it while Alt+P has it open.
+func (a *App) contentPanes(c *ui.Context) {
+	ui.Row(c).FillWidth().FillHeight().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+		a.filePane(c)
+		if a.previewOpen {
+			a.previewPane(c)
+		}
+	})
 }
 
 // handleKeys maps Explorer shortcuts. A focused text field consumes its

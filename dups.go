@@ -270,7 +270,7 @@ func (a *App) dupsModal(c *ui.Context) {
 	if !*flag {
 		return
 	}
-	floatDialog(c, flag, false, func() {
+	floatDialog(c, flag, "重复文件查找", 460, false, func() {
 		a.dupsBody(c, flag)
 	})
 }
@@ -279,7 +279,7 @@ func (a *App) dupsModal(c *ui.Context) {
 // with their 删除多余项 buttons, and 关闭.
 func (a *App) dupsBody(c *ui.Context, flag *bool) {
 	res := dupsResult.Load()
-	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).MinWidth(460).Children(func() {
+	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).Children(func() {
 		ui.Text(c, "重复文件查找").FontSize(14).FontWeight(600).TextColor(colorText())
 		a.dupsStatus(c, res)
 		if res != nil && len(res.groups) > 0 {

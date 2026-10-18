@@ -82,7 +82,7 @@ func (a *App) settingsModal(c *ui.Context) {
 	if !a.settingsOpen {
 		return
 	}
-	floatDialog(c, &a.settingsOpen, false, func() {
+	floatDialog(c, &a.settingsOpen, "设置", 580, false, func() {
 		a.settingsBody(c)
 	})
 }
@@ -110,7 +110,7 @@ func (a *App) applySettings(fn func(s *appSettings)) {
 // settingsBody builds the dialog: the title, a body row of the navigation
 // pane and the page it picks, and the buttons that stay at the bottom.
 func (a *App) settingsBody(c *ui.Context) {
-	ui.Column(c).Gap(0).MinWidth(580).Children(func() {
+	ui.Column(c).Gap(0).Children(func() {
 		ui.Text(c, "设置").FontSize(14).FontWeight(600).TextColor(colorText()).
 			Padding(14, 16, 10, 16)
 		ui.Row(c).FillWidth().Height(330).Shrink(0).Children(func() {
@@ -637,18 +637,24 @@ func (a *App) extEditModal(c *ui.Context) {
 	if !a.extEdit.open {
 		return
 	}
-	floatDialog(c, &a.extEdit.open, false, func() {
+	floatDialog(c, &a.extEdit.open, a.extEditTitle(), 420, false, func() {
 		a.extEditBody(c)
 	})
 }
 
+// extEditTitle names the extension editor's dialog: 编辑 when it edits an
+// entry, 添加 when it adds one.
+func (a *App) extEditTitle() string {
+	if a.extEdit.index >= 0 {
+		return "编辑扩展"
+	}
+	return "添加扩展"
+}
+
 func (a *App) extEditBody(c *ui.Context) {
 	e := &a.extEdit
-	title := "添加扩展"
-	if e.index >= 0 {
-		title = "编辑扩展"
-	}
-	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).MinWidth(420).Children(func() {
+	title := a.extEditTitle()
+	ui.Column(c).Gap(10).Padding(4, 2, 4, 2).Children(func() {
 		ui.Text(c, title).FontSize(14).FontWeight(600).TextColor(colorText())
 
 		ui.Text(c, "名称").FontSize(12).TextColor(colorMuted())

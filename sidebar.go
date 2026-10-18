@@ -5,7 +5,11 @@ import "github.com/egoist/mygo/ui"
 const (
 	navMinWidth float32 = 180
 	navMaxWidth float32 = 420
-	navRowH     float32 = 32
+	// navContentMin is the least room the file pane keeps beside the
+	// navigation pane: components.Split holds the content to it and shrinks
+	// the pane below navMinWidth rather than squeeze the listing out.
+	navContentMin float32 = 320
+	navRowH       float32 = 32
 	// navRowGap is the room a row leaves above and below itself, so the pane
 	// reads as a list of rows rather than one block, and navRowPad its left
 	// padding without the tree's indent.
@@ -50,14 +54,15 @@ type navRow struct {
 	hasKids bool
 }
 
-// sidebar is the Windows 11 navigation pane: 主文件夹, the plugins' pages, the
-// pinned places, then 此电脑 as a folder tree — its volumes, and the folders
-// under every one of them the user opens. The tree follows the tab: navigating
-// the pane opens the current folder's ancestors and scrolls its row into view
-// (navtree.go). The pane is a.navWidth wide; a drag handle on its right edge
-// resizes it, clamped to 180–420.
+// sidebar is the navigation pane: 主文件夹, the plugins' pages, the pinned
+// places, then 此电脑 as a folder tree — its volumes, and the folders under
+// every one of them the user opens. The tree follows the tab: navigating the
+// pane opens the current folder's ancestors and scrolls its row into view
+// (navtree.go). components.Split (main.go's bodyRow) gives the pane its width
+// and the divider on its right edge, which draws the hairline and resizes the
+// pane when dragged, so the pane itself only fills the room it is given.
 func (a *App) sidebar(c *ui.Context) {
-	pane := windowBG(c, ui.Column(c).Width(a.navWidth).FillHeight().Shrink(0)).Clip()
+	pane := windowBG(c, ui.Column(c).FillHeight().FillWidth().Shrink(0)).Clip()
 	pane.Children(func() {
 		// The tab may have moved since the last frame: open what it takes for
 		// the tree to show where it is, before the rows are gathered.
@@ -69,7 +74,6 @@ func (a *App) sidebar(c *ui.Context) {
 		// The current folder's row has its place in the list by now: show it if
 		// the list has it out of sight.
 		a.navTreeReveal()
-		a.navResizeHandle(c)
 	})
 }
 
@@ -301,25 +305,6 @@ func (a *App) navFolderMenu(row ui.Element, name, path string) {
 			a.selectOnly(path)
 			a.showProperties()
 		}
-	})
-}
-
-// navResizeHandle is the wider grip over the pane's right edge. Dragging
-// writes a.navWidth, clamped to 180–420. Element.Dragged reports the
-// pointer's movement since the last frame while the grip is pressed (see
-// input.md). The pane shows no static divider: the Explorer pane is
-// separated from the content by its background alone.
-func (a *App) navResizeHandle(c *ui.Context) {
-	grip := ui.Box(c).Absolute().Top(0).Bottom(0).Right(-3).Width(7).
-		Cursor(ui.CursorResizeEW)
-	if dx, _, ok := grip.Dragged(); ok && dx != 0 {
-		a.navWidth = clampNavWidth(a.navWidth + dx)
-	}
-	grip.Draw(func(p *ui.Painter, r ui.Rect) {
-		if !grip.Hovered() && !grip.Dragging() {
-			return
-		}
-		p.Fill(ui.Rect{X: r.X + (r.W-1)/2, Y: r.Y, W: 1, H: r.H}, colorAccent(), 0)
 	})
 }
 

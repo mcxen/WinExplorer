@@ -38,12 +38,14 @@ const (
 )
 
 var (
-	// dupsOpen is the dialog flag per window; ui.Modal wants a stable
-	// *bool to flip, so it lives in the map once allocated. Only the
-	// render path touches it, on the main thread.
-	dupsOpen = map[*App]*bool{}
+	// dupsDlg is the dialog flag per window (plugintask.go).
+	dupsDlg = appFlag{}
 	// dupsResult is the latest scan, swapped in atomically.
 	dupsResult atomic.Pointer[dupsScan]
+	// dupsRunner serializes the scans: one at a time, a request that
+	// arrives mid-scan replacing the queued one, so 删除多余项's rescan
+	// never runs a folder the dialog has already moved past.
+	dupsRunner = &taskRunner[dupsRequest]{run: runDupsScan}
 )
 
 // registerDupsPlugin registers the 重复文件查找 plugin: the pane
@@ -66,15 +68,7 @@ func registerDupsPlugin() {
 	})
 }
 
-// dupsScanMu serializes scans; dupsPending remembers a request that
-// arrived while one was running, so 删除多余项's rescan never drops.
-var (
-	dupsScanMu   sync.Mutex
-	dupsScanning bool
-	dupsPending  *dupsRequest
-)
-
-// dupsRequest is one scan the scheduler owes: the folder and whether the
+// dupsRequest is one scan the runner owes: the folder and whether the
 // user shows hidden items at the time it was asked for.
 type dupsRequest struct {
 	root   string
@@ -92,12 +86,7 @@ type dupsScan struct {
 // dupsOpenFlag returns this window's dialog flag, allocating it on first
 // use.
 func (a *App) dupsOpenFlag() *bool {
-	if b, ok := dupsOpen[a]; ok {
-		return b
-	}
-	b := new(bool)
-	dupsOpen[a] = b
-	return b
+	return dupsDlg.get(a)
 }
 
 // openDups opens the dialog and kicks a scan of the current folder.
@@ -107,8 +96,8 @@ func (a *App) openDups() {
 }
 
 // requestDups starts the subtree scan for the current folder in the
-// background, unless the page is a special one. One scan runs at a time;
-// a request that arrives mid-scan runs right after it.
+// background, unless the page is a special one. The runner serializes:
+// one scan at a time, the newest request next.
 func (a *App) requestDups() {
 	if !a.pluginEnabled(dupsPluginID) {
 		return
@@ -117,41 +106,18 @@ func (a *App) requestDups() {
 	if root == "" || specialPath(root) {
 		return
 	}
-	req := &dupsRequest{root: root, hidden: a.showHidden}
-	dupsScanMu.Lock()
-	if dupsScanning {
-		dupsPending = req
-		dupsScanMu.Unlock()
-		return
-	}
-	dupsScanning = true
-	dupsScanMu.Unlock()
-	go runDupsScans(req)
+	dupsRunner.submit(dupsRequest{root: root, hidden: a.showHidden})
 }
 
-// runDupsScans runs one scan, then any that queued behind it. Each result
-// is swapped in atomically and the window asked to repaint.
-func runDupsScans(req *dupsRequest) {
-	for {
-		res := scanDuplicates(req.root, req.hidden)
-		dupsResult.Store(res)
-		repaint()
-		dupsScanMu.Lock()
-		if dupsPending == nil {
-			dupsScanning = false
-			dupsScanMu.Unlock()
-			return
-		}
-		req, dupsPending = dupsPending, nil
-		dupsScanMu.Unlock()
-	}
+// runDupsScan is the runner's task: one scan, its result swapped in
+// atomically. The runner repaints once it returns.
+func runDupsScan(req dupsRequest) {
+	dupsResult.Store(scanDuplicates(req.root, req.hidden))
 }
 
 // dupsScanningNow is whether a scan is running, for the status line.
 func dupsScanningNow() bool {
-	dupsScanMu.Lock()
-	defer dupsScanMu.Unlock()
-	return dupsScanning
+	return dupsRunner.busy()
 }
 
 // scanDuplicates walks root's subtree and groups its files into duplicate

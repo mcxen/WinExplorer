@@ -24,10 +24,16 @@ func TestDiskPageRenders(t *testing.T) {
 	diskhealth.Read()
 	tt.Frame()
 
-	for _, text := range []string{"磁盘健康", "温度", "写入寿命", "检测项", "卷构成"} {
+	for _, text := range []string{"磁盘健康", "温度", "检测项", "卷构成"} {
 		if !tt.HasText(text) {
 			t.Fatalf("the page does not show %q: %v", text, tt.Texts())
 		}
+	}
+	// The wear check names itself by what the drive reports: 写入寿命 when it
+	// has the counter, 寿命 with 未报告 when it does not — which is every CI
+	// runner and most virtual disks.
+	if !tt.HasText("写入寿命") && !tt.HasText("寿命") {
+		t.Fatalf("the page shows no wear check: %v", tt.Texts())
 	}
 	// With disks present, the capacity line belongs on the card. A CI box
 	// with no readable drives shows the empty-state wording instead.

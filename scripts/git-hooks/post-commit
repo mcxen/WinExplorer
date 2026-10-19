@@ -1,0 +1,86 @@
+#!/bin/sh
+# post-commit: the two standing release rules for this repository.
+#
+#   - a commit changing more than 1000 lines is pushed to origin
+#   - a commit changing more than 3000 lines is released: the version in
+#     mygo.json is bumped, tagged, and pushed with its tag
+#
+# Only `git commit` on main triggers it; merges, rebases and the version
+# commit the release itself makes are left alone, and so is a repository
+# without the remote. Install with scripts/install-git-hooks.sh.
+
+set -eu
+
+# Lines a commit must touch to be pushed / released, additions plus
+# deletions as `git show --shortstat` counts them.
+PUSH_LINES=1000
+TAG_LINES=3000
+
+quiet() { "$@" >/dev/null 2>&1; }
+say() { printf 'sunvale: %s\n' "$*" >&2; }
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$top" || exit 0
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null) || exit 0
+[ "$branch" = "main" ] || exit 0
+
+git remote get-url origin >/dev/null 2>&1 || exit 0
+
+# A merge has no single parent; a commit made by this hook is marked in its
+# message. Neither is a candidate.
+[ "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 2 ] || exit 0
+git log -1 --format=%B | grep -q '^\[auto-release\]' && exit 0
+
+# The commit's line count: insertions plus deletions.
+stat=$(git show --shortstat --format= HEAD)
+lines=$(printf '%s\n' "$stat" | sed -n 's/.* \([0-9][0-9]*\) insertion.*/\1/p')
+dels=$(printf '%s\n' "$stat" | sed -n 's/.* \([0-9][0-9]*\) deletion.*/\1/p')
+lines=${lines:-0}
+dels=${dels:-0}
+total=$((lines + dels))
+
+# Pushing is a local write to origin; a failure must not fail the commit that
+# already exists, so every network or tag step reports and carries on.
+if [ "$total" -gt "$PUSH_LINES" ]; then
+	if quiet git push origin "$branch"; then
+		say "pushed $branch ($total lines)"
+	else
+		say "push failed for $branch ($total lines) — push it yourself when the network is back"
+	fi
+fi
+
+[ "$total" -gt "$TAG_LINES" ] || exit 0
+
+# 3000 lines: a release. The version comes from mygo.json, which the release
+# workflow checks against the tag; the bump keeps the two in step.
+json=mygo.json
+[ -f "$json" ] || { say "no $json, not releasing"; exit 0; }
+current=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' "$json" | head -1)
+[ -n "$current" ] || { say "no version in $json, not releasing"; exit 0; }
+
+next=$(printf '%s\n' "$current" | awk -F. '{ printf "%s.%s.%s\n", $1, $2, $3 + 1 }')
+tag="v$next"
+if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+	say "tag $tag already exists, not releasing"
+	exit 0
+fi
+
+# The version bump is its own commit so the tag points at what shipped, not
+# at the change that triggered it.
+sed -i.bak "s/\"version\"\([[:space:]]*:[[:space:]]*\)\"$current\"/\"version\"\1\"$next\"/" "$json" && rm -f "$json.bak"
+git add "$json"
+git commit --no-verify -m "[auto-release] $tag" >/dev/null || { say "version commit failed"; exit 0; }
+
+if quiet git tag -a "$tag" -m "$tag"; then
+	say "tagged $tag (from $current, $total lines)"
+else
+	say "tagging $tag failed"
+	exit 0
+fi
+
+if quiet git push origin "$branch" && quiet git push origin "$tag"; then
+	say "released $tag"
+else
+	say "pushing $tag failed — push the branch and the tag yourself"
+fi

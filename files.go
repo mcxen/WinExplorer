@@ -591,6 +591,12 @@ func (a *App) listRow(c *ui.Context, e Entry) {
 // iconView lays tiles in a grid. Extra large, large and medium put the
 // label under the icon; small icons put it beside, in a shorter tile.
 func (a *App) iconView(c *ui.Context, entries []Entry) {
+	// The folder's mount decides each tile's eagerness, once for the view:
+	// probing it per tile would be thousands of lookups a frame.
+	a.cur().networkDir = isNetworkPath(a.cur().path)
+	// Whether the first tiles warm up is the folder's answer and the
+	// setting's, read once for the view rather than per tile.
+	a.cur().networkWarm = a.cur().networkDir && a.store.settings().networkWarmup()
 	box := a.iconBoxSize(a.mode)
 	minW, height := a.iconTileSize(a.mode, box)
 	if a.grouping != groupNone && !specialPath(a.cur().path) {
@@ -598,13 +604,19 @@ func (a *App) iconView(c *ui.Context, entries []Entry) {
 		scroll.Children(func() {
 			rows := a.groupedRows(entries)
 			var group []Entry
+			warm := 0 // tiles decoded so far across the groups
 			emit := func() {
 				if len(group) == 0 {
 					return
 				}
+				// The folder's first tileWarmup tiles decode even when groups
+				// split the listing: each group's tiles count on from the
+				// last, rather than warming up again from zero.
+				base := warm
+				warm += len(group)
 				grid := ui.GridView(c, nil, len(group), minW, height, func(i int) {
 					if i >= 0 && i < len(group) {
-						a.iconTile(c, group[i], box)
+						a.iconTile(c, group[i], box, base+i)
 					}
 				}).FillWidth().Shrink(0)
 				grid.Children(func() {})
@@ -637,7 +649,7 @@ func (a *App) iconView(c *ui.Context, entries []Entry) {
 		if i < 0 || i >= len(entries) {
 			return
 		}
-		a.iconTile(c, entries[i], box)
+		a.iconTile(c, entries[i], box, i)
 	}).Grow(1).FillWidth().MinHeight(0).Padding(iconGridPad)
 	grid.Children(func() {
 		if len(entries) == 0 {
@@ -729,10 +741,17 @@ func tileFont(box float32) float32 {
 	return min(max(f, 12), 18)
 }
 
+// tileWarmup is how many tiles of a network folder decode their pictures
+// before anyone asks: the first rows fill in as on a local folder, and the
+// rest wait for the pointer or the selection. The cap is what keeps opening
+// a share from downloading the whole folder's media.
+const tileWarmup = 12
+
 // iconTile is one grid cell. ButtonBase is a row, so a small icon sits
 // beside its name. Larger sizes put a column in the button: the icon, then
-// the name under it.
-func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
+// the name under it. i is the tile's place in the listing, which decides
+// whether a network tile warms up its picture or waits to be looked at.
+func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 	tile := ui.ButtonBase(c.Key(e.Path)).Fill().Radius(4).Label(e.Name)
 	if e.VolTotal > 0 {
 		tile.Tooltip(driveCapacity(e) + "（" + drivePercent(e) + " 可用）")
@@ -741,6 +760,11 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 		tile.Padding(4, 6).Gap(8).AlignItems(ui.Center).Justify(ui.Start)
 	}
 	a.paintSelect(tile, e.Path)
+	// A network tile decodes its picture for the first rows of the folder and
+	// for a tile under the pointer or in the selection; the rest keep the
+	// drawn glyph until someone looks, so opening a share does not download
+	// the whole folder's media at once.
+	eager := !a.cur().networkDir || (a.cur().networkWarm && i < tileWarmup) || tile.Hovered() || a.isSelected(e.Path)
 	tile.Children(func() {
 		if a.mode == ViewSmallIcons {
 			a.nameCell(c, e, box, 12)
@@ -751,7 +775,7 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 		body.Children(func() {
 			glyph := ui.Box(c).Size(box, box).Shrink(0)
 			glyph.Children(func() {
-				a.tileGlyph(c, e, box)
+				a.tileGlyph(c, e, box, eager)
 			})
 			if a.cur().renaming == e.Name {
 				a.renameField(c, font)
@@ -781,9 +805,10 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32) {
 // a folder holding media keeps its folder shape with the pictures inside
 // it, and everything else is the drawn file or folder glyph. The drawn
 // glyphs stay under thumbMinBox, where 16 px of picture says less than the
-// file-type colour.
-func (a *App) tileGlyph(c *ui.Context, e Entry, box float32) {
-	if box >= thumbMinBox {
+// file-type colour. eager false leaves the picture undecoded — the network
+// tile's rule — and the drawn glyph stands in until the tile is looked at.
+func (a *App) tileGlyph(c *ui.Context, e Entry, box float32, eager bool) {
+	if box >= thumbMinBox && eager {
 		if e.IsDir {
 			if a.folderCoverEligible(e) {
 				if bm := folderCoverThumb(e.Path, box); bm != nil {

@@ -1,11 +1,7 @@
 package main
 
 import (
-	"os"
-
-	"path/filepath"
 	"slices"
-	"strings"
 	"sunvale/diskhealth"
 )
 
@@ -34,6 +30,7 @@ func (a *App) navigate(path string) {
 	if t.path != pathDisks {
 		a.disksUnwatch()
 	}
+	a.store.pushVisit(t.path)
 	a.reload()
 	a.requestPreview()
 }
@@ -138,56 +135,42 @@ func (a *App) reload() {
 		diskhealth.Refresh()
 		return
 	}
-	dir, err := os.ReadDir(t.path)
+	entries, err := entryLister(t.path).List(t.path)
 	if err != nil {
 		t.entries = nil
 		t.loadErr = err.Error()
 		return
 	}
-	entries := make([]Entry, 0, len(dir))
-	for _, d := range dir {
-		path := filepath.Join(t.path, d.Name())
-		info, err := os.Lstat(path)
-		if err != nil {
-			continue
-		}
-		isDir := info.IsDir()
-		if !isDir && info.Mode()&os.ModeSymlink != 0 {
-			if st, err := os.Stat(path); err == nil && st.IsDir() {
-				isDir = true
-			}
-		}
-		e := Entry{
-			Name:    d.Name(),
-			Path:    path,
-			IsDir:   isDir,
-			ModTime: info.ModTime(),
-		}
-		if !isDir {
-			e.Size = info.Size()
-			e.Ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(d.Name()), "."))
-		}
-		entries = append(entries, e)
-	}
-	// Folder sizes come from the background engine (sizes.go): a cached
-	// tally shows at once, a folder whose ModTime has moved since its tally
-	// is queued again, and an unseen folder is queued for its first walk.
-	// The special pages above keep their own numbers.
+	a.decorateEntries(entries)
+	t.entries = entries
+}
+
+// decorateEntries fills in what the lister does not: a folder's size from
+// the background engine (sizes.go), and the search index's copy of the
+// listing. A network folder is queued for a size walk only when the cached
+// tally is there and stale — the first look at a share does not start a
+// walk over its subtree, which on a far filesystem costs far more than the
+// number is worth; 刷新统计 asks for one explicitly.
+func (a *App) decorateEntries(entries []Entry) {
+	t := a.cur()
+	network := isNetworkPath(t.path)
 	for i := range entries {
 		e := &entries[i]
 		if !e.IsDir {
 			continue
 		}
-		if st, ok := lookupDirStat(e.Path); ok {
+		st, ok := lookupDirStat(e.Path)
+		if ok {
 			e.Size = st.Size
 			if !st.Mod.Equal(e.ModTime) {
 				enqueueDirStat(e.Path)
 			}
-		} else {
+			continue
+		}
+		if !network {
 			enqueueDirStat(e.Path)
 		}
 	}
-	t.entries = entries
 	// The listing the user is looking at is the freshest word on this folder:
 	// the search index folds it in, so a file created, renamed or deleted here
 	// is searchable from Ctrl+K at once (searchindex.go).

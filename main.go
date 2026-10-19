@@ -61,7 +61,20 @@ func main() {
 	// repaints its own widgets, and this is what keeps the app's painted
 	// surfaces in step with them.
 	mygo.Theme.OnUpdated(repaintAppearance)
-	app := newAppWithStore(store)
+	// 恢复上次会话 (session.go): the windows the last run had, each with its
+	// tabs and its box, unless the setting is off. The first one is built
+	// here and shown in WhenReady; the rest follow it once the first window
+	// exists, so a second-start failure cannot leave no window at all.
+	session := store.session()
+	restore := session != nil && store.settings().restoreSession()
+	var app *App
+	var rest []windowSession
+	if restore {
+		app = newSessionApp(store, session.Windows[0], 0)
+		rest = session.Windows[1:]
+	} else {
+		app = newAppWithStore(store)
+	}
 	registerApp(app)
 	// The archive associations in mygo.json open a folder for the
 	// archive: a new window shows it, ready to 全部解压.
@@ -73,7 +86,24 @@ func main() {
 		// the design tokens so the windows show the system theme.
 		resolveTokens()
 		win := newAppWindow(app)
-		win.OnClosed(func() { unregisterApp(app) })
+		win.OnClosed(func() {
+			app.saveWindowSession()
+			unregisterApp(app)
+		})
+		// The rest of the restored windows, made after the first is up. The
+		// focused one comes to the front; the others stay behind it.
+		for i, ws := range rest {
+			other := newSessionApp(store, ws, i+1)
+			registerApp(other)
+			ow := newAppWindow(other)
+			ow.OnClosed(func() {
+				other.saveWindowSession()
+				unregisterApp(other)
+			})
+			if session.Active == i+1 {
+				ow.Focus()
+			}
+		}
 		// The search index (searchindex.go) warms in the background: the
 		// Ctrl+K palette answers from the last walk's cache at once, while the
 		// volumes are walked again behind it.
@@ -96,6 +126,10 @@ func main() {
 	// The size engine's cache and the search index land on disk first: they
 	// are local and fast, while remoteStop waits on the network.
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		// 恢复上次会话: the tabs and boxes of the windows still open, before
+		// anything closes. A window's own close already saved its record, so
+		// this is the final word for the running ones.
+		captureSession(store)
 		flushDirStats()
 		flushSearchIndex()
 		app.remoteStop()
@@ -117,7 +151,7 @@ func (a *App) openArchiveWindow(path string) {
 // newAppWindow opens the window an App drives. Ctrl+N opens another one
 // over its own App, so each window has its own tabs, undo and clipboard.
 func newAppWindow(app *App) *mygo.Window {
-	win := mygo.NewWindow(mygo.WindowOptions{
+	opts := mygo.WindowOptions{
 		Title:     "晴谷",
 		Width:     1100,
 		Height:    720,
@@ -130,7 +164,13 @@ func newAppWindow(app *App) *mygo.Window {
 		// where no material shows (see glass.go).
 		Vibrancy: mygo.VibrancyTabbed,
 		Content:  ui.View(app.view),
-	})
+	}
+	// A restored window opens where it was closed; a fresh one is centered at
+	// the default size (session.go).
+	if g := app.geom; g != nil {
+		opts.X, opts.Y, opts.Width, opts.Height = g.x, g.y, g.w, g.h
+	}
+	win := mygo.NewWindow(opts)
 	app.win = win
 	// Minimizing parks the window in the tray (tray.go) instead of the
 	// taskbar, so the process — and its background size statistics — keeps
@@ -147,7 +187,10 @@ func (a *App) openNewWindow(path string) {
 	}
 	registerApp(app)
 	win := newAppWindow(app)
-	win.OnClosed(func() { unregisterApp(app) })
+	win.OnClosed(func() {
+		app.saveWindowSession()
+		unregisterApp(app)
+	})
 }
 
 func newApp() *App { return newAppWithStore(loadState()) }
@@ -179,6 +222,8 @@ func newAppWithStore(store *persistedState) *App {
 		previewOpen:   false,
 		previewW:      320,
 		store:         store,
+		// A window opened fresh has no saved record yet (session.go).
+		sessionSlot: -1,
 	}
 	// shellExts are the registered context-menu commands (extensions.go);
 	// the load's per-entry problems stay on the app, for the settings

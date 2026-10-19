@@ -53,6 +53,14 @@ type tabState struct {
 	marquee    marqueeState
 	itemBounds map[string]ui.Rect
 
+	// networkDir says the folder lives on a network mount, measured once
+	// per icon view: the tiles read it to decide whether to decode their
+	// pictures now or wait until they are looked at. networkWarm is that
+	// and the 设置 switch together: the first tiles warm up only when both
+	// allow it.
+	networkDir  bool
+	networkWarm bool
+
 	// search is this tab's query walk state (search.go), and queryScope what
 	// its query covers: this folder's subtree, or every mounted volume
 	// (Everything's 全部磁盘). The scope is the user's choice, so it outlives
@@ -124,6 +132,13 @@ type App struct {
 
 	// win is the main window; the title bar's caption buttons call it.
 	win *mygo.Window
+	// geom is the saved box a restored window opens in (session.go);
+	// nil for a window opened fresh, which is centered at the default size.
+	geom *windowGeom
+	// sessionSlot is the restored session record this window came from, or
+	// -1 for a window opened fresh; saveWindowSession updates that record as
+	// the window closes (session.go).
+	sessionSlot int
 	// homePath is the user's home directory, the 主文件夹 nav place.
 	homePath string
 	// navPCExpanded is the 此电脑 tree node's expanded state.

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // persistedState is everything Sunvale keeps between runs, at
@@ -24,6 +25,8 @@ type persistedState struct {
 
 	Pinned   []string      `json:"pinned"`
 	Recent   []string      `json:"recent"`
+	Visited  []visitRecord `json:"visited,omitempty"`
+	Session  *sessionState `json:"session,omitempty"`
 	TrashLog []trashRecord `json:"trash"`
 	Remote   *remoteConfig `json:"remote"`
 	Shares   []remoteShare `json:"shares"`
@@ -39,6 +42,11 @@ type persistedState struct {
 	// remote plugin's — has none and keeps its state in memory, instead
 	// of writing the user's file.
 	path string `json:"-"`
+
+	// sessionCleared marks a 清除会话记录 in this run: the quit's capture
+	// then leaves the session empty, so what was cleared does not come back
+	// on the next launch.
+	sessionCleared bool
 }
 
 // appSettings is the view state the settings dialog edits: the 外观 mode
@@ -54,6 +62,17 @@ type appSettings struct {
 	ItemCheckboxes bool   `json:"itemCheckboxes"`
 	PreviewOpen    bool   `json:"previewOpen"`
 	Mode           int    `json:"mode"`
+	// RestoreSession puts the last run's windows and tabs back on launch
+	// (session.go). It defaults to on, so it is the one setting stored as
+	// its negation: turned off writes the field.
+	NoRestoreSession bool `json:"noRestoreSession,omitempty"`
+
+	// NoNetworkWarmup stops a network folder's first tiles from decoding
+	// their pictures before the pointer reaches them (files.go's
+	// tileWarmup). Off by default: the first screenful warms up, the rest of
+	// a share waits to be looked at. These are stored as negations so an
+	// older state file — which has neither field — reads as the new default.
+	NoNetworkWarmup bool `json:"noNetworkWarmup,omitempty"`
 
 	ColName float32 `json:"colName,omitempty"`
 	ColDate float32 `json:"colDate,omitempty"`
@@ -61,6 +80,14 @@ type appSettings struct {
 	ColLoc  float32 `json:"colLoc,omitempty"`
 	ColSize float32 `json:"colSize,omitempty"`
 }
+
+// restoreSession reports whether a launch puts the last run's windows and
+// tabs back.
+func (s appSettings) restoreSession() bool { return !s.NoRestoreSession }
+
+// networkWarmup reports whether a network folder's first tiles decode their
+// pictures before the pointer reaches them.
+func (s appSettings) networkWarmup() bool { return !s.NoNetworkWarmup }
 
 // defaultSettings are the settings a fresh app starts with, mirroring
 // newAppWithStore in main.go: the system's appearance, extensions shown,
@@ -73,6 +100,95 @@ func defaultSettings() *appSettings {
 type trashRecord struct {
 	Original  string `json:"original"`
 	TrashName string `json:"trash"`
+}
+
+// visitRecord is one folder the user has been in, for the sidebar's 最近位置.
+// At is unix milliseconds and orders the list, newest first; the record is
+// what survives a restart when the tab's own in-memory history does not.
+type visitRecord struct {
+	Path string `json:"path"`
+	At   int64  `json:"at"`
+}
+
+// maxVisited is how many folders 最近位置 remembers.
+const maxVisited = 40
+
+// sessionState is what the next launch puts back on screen: one record per
+// window, in the order they were open, and the window the user was in. It
+// is written when the app quits, and each window's close refreshes its own
+// record meanwhile, so a crash keeps the last steady state rather than
+// losing it.
+type sessionState struct {
+	Windows []windowSession `json:"windows,omitempty"`
+	// Active is the index of the focused window, before the one-shot tab
+	// and window restoration moved to another one.
+	Active int `json:"active,omitempty"`
+}
+
+// windowSession is one window: where it sat, how big it was, and the tabs
+// it showed. Tabs holds each tab's folder, in tab order, and Active the tab
+// in front. A window whose saved folder is gone opens on 主文件夹.
+type windowSession struct {
+	X      int      `json:"x,omitempty"`
+	Y      int      `json:"y,omitempty"`
+	W      int      `json:"w,omitempty"`
+	H      int      `json:"h,omitempty"`
+	Tabs   []string `json:"tabs,omitempty"`
+	Active int      `json:"active,omitempty"`
+}
+
+// session returns a copy of the saved session, nil when none is.
+func (st *persistedState) session() *sessionState {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.Session == nil {
+		return nil
+	}
+	out := *st.Session
+	out.Windows = append([]windowSession(nil), st.Session.Windows...)
+	for i := range out.Windows {
+		out.Windows[i].Tabs = append([]string(nil), out.Windows[i].Tabs...)
+	}
+	return &out
+}
+
+// setSession records what the next launch restores. An empty session — no
+// window worth remembering — clears the record, so a plain quit with every
+// window closed leaves nothing behind.
+func (st *persistedState) setSession(s *sessionState) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if s == nil || len(s.Windows) == 0 {
+		if st.Session == nil {
+			return
+		}
+		st.Session = nil
+		st.saveLocked()
+		return
+	}
+	// A live session replaces whatever 清除会话记录 left behind.
+	st.sessionCleared = false
+	st.Session = s
+	st.saveLocked()
+}
+
+// clearSession forgets the saved session and keeps it forgotten until the
+// next launch: the quit's capture leaves the record alone while the flag
+// stands, so 清除会话记录 means nothing comes back when the app closes.
+func (st *persistedState) clearSession() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.Session = nil
+	st.sessionCleared = true
+	st.saveLocked()
+}
+
+// sessionClearedNow reports whether 清除会话记录 was used since this run
+// started.
+func (st *persistedState) sessionClearedNow() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.sessionCleared
 }
 
 const (
@@ -212,6 +328,54 @@ func (st *persistedState) recentList() []string {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return append([]string(nil), st.Recent...)
+}
+
+// pushVisit records that the user opened folder dir, newest first,
+// deduplicated and capped at maxVisited. Special pages (::{home} and the
+// rest) are not folders and are skipped. As pushRecent, a change already at
+// the head only bumps its time, without a rewrite.
+func (st *persistedState) pushVisit(dir string) {
+	if dir == "" || strings.HasPrefix(dir, "::{") {
+		return
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	now := time.Now().UnixMilli()
+	st.Visited = slices.DeleteFunc(st.Visited, func(v visitRecord) bool {
+		return v.Path == dir
+	})
+	st.Visited = slices.Insert(st.Visited, 0, visitRecord{Path: dir, At: now})
+	if len(st.Visited) > maxVisited {
+		st.Visited = st.Visited[:maxVisited]
+	}
+	st.saveLocked()
+}
+
+// visitList returns the visited folders, newest first, up to n when n > 0.
+func (st *persistedState) visitList(n int) []string {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	end := len(st.Visited)
+	if n > 0 && n < end {
+		end = n
+	}
+	out := make([]string, 0, end)
+	for _, v := range st.Visited[:end] {
+		out = append(out, v.Path)
+	}
+	return out
+}
+
+// forgetVisit drops a folder from 最近位置, for one that no longer exists.
+func (st *persistedState) forgetVisit(dir string) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	kept := slices.DeleteFunc(st.Visited, func(v visitRecord) bool { return v.Path == dir })
+	if len(kept) == len(st.Visited) {
+		return
+	}
+	st.Visited = kept
+	st.saveLocked()
 }
 
 // logTrash and restoreFromTrash keep the 回收站 page's 还原 working: the

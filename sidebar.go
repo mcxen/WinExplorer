@@ -1,6 +1,13 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/egoist/mygo/ui"
+)
 
 const (
 	navMinWidth float32 = 180
@@ -77,9 +84,103 @@ func (a *App) sidebar(c *ui.Context) {
 	})
 }
 
+// recentPlacesLimit is how many 最近位置 the sidebar shows: enough to get
+// back somewhere from this session, few enough not to push 此电脑 down.
+const recentPlacesLimit = 8
+
+// dirExistsTTL is how long a 最近位置 existence check is trusted. The pane
+// asks every frame, and an os.Stat on the UI thread per row per frame is a
+// stall on a network share whose server went away; a stale "yes" costs one
+// failed listing, a stale "no" one frame of a missing row.
+const dirExistsTTL = 30 * time.Second
+
+var (
+	dirExistsMu   sync.Mutex
+	dirExistsSeen = map[string]dirExistsEntry{}
+)
+
+type dirExistsEntry struct {
+	ok bool
+	at time.Time
+}
+
+// dirExists reports whether dir is a folder, caching the answer for
+// dirExistsTTL.
+func dirExists(dir string) bool {
+	dirExistsMu.Lock()
+	if e, ok := dirExistsSeen[dir]; ok && time.Since(e.at) < dirExistsTTL {
+		dirExistsMu.Unlock()
+		return e.ok
+	}
+	dirExistsMu.Unlock()
+	info, err := os.Stat(dir)
+	ok := err == nil && info.IsDir()
+	dirExistsMu.Lock()
+	dirExistsSeen[dir] = dirExistsEntry{ok: ok, at: time.Now()}
+	dirExistsMu.Unlock()
+	return ok
+}
+
+// recentPlaceRows are the sidebar's 最近位置 rows: the folders the user was
+// in lately, newest first, minus the ones the pane already shows as rows —
+// a pinned place, the folder the tab is in, and any folder the tree has
+// expanded — capped at recentPlacesLimit. A row duplicating one above it
+// reads as a glitch, and a click on it would land on the wrong line. A
+// folder that no longer exists is dropped from the store as it is found,
+// so the list heals itself instead of offering rows that fail on click.
+func (a *App) recentPlaceRows() []navRow {
+	shown := map[string]bool{a.cur().path: true}
+	for _, p := range a.pinnedPlaces() {
+		shown[p.Path] = true
+	}
+	a.navTreeShown(shown)
+	var rows []navRow
+	for _, dir := range a.store.visitList(maxVisited) {
+		if len(rows) >= recentPlacesLimit {
+			break
+		}
+		if shown[dir] {
+			continue
+		}
+		if !dirExists(dir) {
+			a.store.forgetVisit(dir)
+			continue
+		}
+		rows = append(rows, navRow{
+			kind: navRowPlace, key: "nav-recent-" + dir,
+			label: filepath.Base(dir), icon: "folder", path: dir,
+		})
+	}
+	return rows
+}
+
+// navTreeShown adds the folders the tree draws to shown: the volumes' tree
+// rows, the folders they show and, only when expanded, their children. A
+// collapsed folder's children are not drawn, so they belong in 最近位置.
+func (a *App) navTreeShown(shown map[string]bool) {
+	if !a.navPCExpanded {
+		return
+	}
+	for _, p := range a.thisPCPlaces() {
+		a.navTreeShownAt(shown, p.Path)
+	}
+}
+
+// navTreeShownAt walks one tree branch: the folder is drawn, and its
+// children only when it is open.
+func (a *App) navTreeShownAt(shown map[string]bool, path string) {
+	shown[path] = true
+	if !a.navTree.open[path] {
+		return
+	}
+	for _, kid := range a.navChildren(path) {
+		a.navTreeShownAt(shown, kid.Path)
+	}
+}
+
 // navRows gathers the pane's rows: 主文件夹, the plugins' pages, the pinned
-// places, then 此电脑 with its volumes and the folders under them the user
-// opened. The current location's row is noted for the reveal.
+// places, 最近位置, then 此电脑 with its volumes and the folders under them
+// the user opened. The current location's row is noted for the reveal.
 func (a *App) navRows() []navRow {
 	rows := []navRow{{kind: navRowHome, key: "nav-home", label: "主文件夹", icon: "home", path: pathHome}}
 	for _, it := range a.pluginNavItems() {
@@ -88,6 +189,7 @@ func (a *App) navRows() []navRow {
 	for _, p := range a.pinnedPlaces() {
 		rows = append(rows, navRow{kind: navRowPlace, key: "nav-" + p.Path, label: p.Name, icon: p.Kind, path: p.Path})
 	}
+	rows = append(rows, a.recentPlaceRows()...)
 	rows = append(rows, navRow{
 		kind: navRowThisPC, key: "nav-thispc", label: "此电脑", icon: "thispc",
 		path: pathThisPC, open: a.navPCExpanded,

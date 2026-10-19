@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -247,20 +246,11 @@ func contentGroups(bucket []Entry, hash func(path string) (string, error)) [][]E
 // digestAll fills sums with the digest of each entry's file, "" where
 // hash fails. Four digests run at once, as thumb's decodes do.
 func digestAll(bucket []Entry, hash func(path string) (string, error), sums []string) {
-	sem := make(chan struct{}, dupsWorkers)
-	var wg sync.WaitGroup
-	for i, e := range bucket {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int, path string) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			if sum, err := hash(path); err == nil {
-				sums[i] = sum
-			}
-		}(i, e.Path)
-	}
-	wg.Wait()
+	parallelFor(len(bucket), dupsWorkers, func(i int) {
+		if sum, err := hash(bucket[i].Path); err == nil {
+			sums[i] = sum
+		}
+	})
 }
 
 // dupsModal shows the dialog while it is open. Called from view (files.go's

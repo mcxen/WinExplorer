@@ -73,6 +73,7 @@ var settingsPages = []struct {
 }{
 	{"外观", lucide.Palette},
 	{"查看", lucide.LayoutList},
+	{"托盘", lucide.HardDrive},
 	{"扩展", lucide.Puzzle},
 	{"插件", lucide.Blocks},
 	{"更新", lucide.RefreshCw},
@@ -188,10 +189,12 @@ func (a *App) settingsPage(c *ui.Context) {
 			case 1:
 				a.settingsView(c)
 			case 2:
-				a.settingsExtensions(c)
+				a.settingsTray(c)
 			case 3:
-				a.settingsPlugins(c)
+				a.settingsExtensions(c)
 			case 4:
+				a.settingsPlugins(c)
+			case 5:
 				a.settingsUpdates(c)
 			default:
 				a.settingsAppearance(c)
@@ -457,6 +460,50 @@ func (a *App) settingsStartup(c *ui.Context) {
 					a.statusMsg = "已清除会话记录"
 				})
 			})
+		})
+	})
+}
+
+// settingsTray is the 托盘 page: what the tray menu shows — the disk
+// readout's two halves, each a switch that flips the same stored setting
+// the menu's own checkbox items flip, so the two stay in step whichever
+// one the user flips first.
+func (a *App) settingsTray(c *ui.Context) {
+	// trayRefresh applies the menu's side of a switch the page just
+	// flipped: the probe starts or stops to match, and the menu swaps at
+	// once rather than at the next probe landing — which never comes when
+	// both switches just turned on over a stopped probe.
+	trayRefresh := func() {
+		trayDiskWatch()
+		trayRebuild()
+	}
+	settingsSection(c, "磁盘信息", func(first *bool) {
+		settingsSectionRow(c, first, func() {
+			settingsSwitch(c, "显示磁盘容量", "托盘菜单中列出每块磁盘的可用空间",
+				func() bool { return trayDiskShown(a.store.settings()).capOn },
+				func(v bool) {
+					a.applySettings(func(x *appSettings) { x.NoTrayDiskCap = !v })
+					trayRefresh()
+				})
+		})
+		settingsSectionRow(c, first, func() {
+			settingsSwitch(c, "显示读写速度", "托盘菜单中显示磁盘的实时读写速度",
+				func() bool { return trayDiskShown(a.store.settings()).speedOn },
+				func(v bool) {
+					a.applySettings(func(x *appSettings) { x.NoTrayDiskSpeed = !v })
+					trayRefresh()
+				})
+		})
+	})
+	settingsSection(c, "快速搜索", func(first *bool) {
+		settingsSectionRow(c, first, func() {
+			settingsInfo(c, "打开方式", "托盘菜单 → 快速搜索…（或 Ctrl+K）")
+		})
+		settingsSectionRow(c, first, func() {
+			settingsInfo(c, "搜索范围", "全部磁盘，索引即时应答、后台遍历补全")
+		})
+		settingsSectionRow(c, first, func() {
+			settingsInfo(c, "结果排序", "Everything 式按名称排序，支持查询语法")
 		})
 	})
 }

@@ -74,6 +74,12 @@ type appSettings struct {
 	// older state file — which has neither field — reads as the new default.
 	NoNetworkWarmup bool `json:"noNetworkWarmup,omitempty"`
 
+	// The tray menu's disk section (tray.go): both default to on, so they
+	// are stored as their negations for the same reason — a state file
+	// written before the tray had switches reads as showing both.
+	NoTrayDiskCap   bool `json:"noTrayDiskCap,omitempty"`
+	NoTrayDiskSpeed bool `json:"noTrayDiskSpeed,omitempty"`
+
 	ColName float32 `json:"colName,omitempty"`
 	ColDate float32 `json:"colDate,omitempty"`
 	ColType float32 `json:"colType,omitempty"`

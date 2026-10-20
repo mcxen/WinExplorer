@@ -48,6 +48,9 @@ type aiTurn struct {
 	Choice *aiChoice  `json:"choice,omitempty"`
 	// OpenSent is the @ToAssistant text already posted from this reply.
 	OpenSent []string `json:"openSent,omitempty"`
+	// OpenDone is, per OpenUI card (openBlockKey), the label of the button
+	// that answered it: the card is locked and says what was chosen.
+	OpenDone map[string]string `json:"openDone,omitempty"`
 	// Tool is the MCP tool that produced a tool line. Stopped marks a reply
 	// the user cut off; the partial text stays in the transcript.
 	Tool    string `json:"tool,omitempty"`
@@ -89,6 +92,10 @@ type assistantUI struct {
 	modelBusy  map[string]bool
 	paint      map[int]*assistPaint
 	live       assistLive
+	// open is the OpenUI cards' state this window keeps: form values, the
+	// source shown for a card that failed, the button awaiting a confirm,
+	// and the shortcuts of the latest card.
+	open assistOpenState
 	// form fields for adding a provider, a password or a memory.
 	pName, pURL, pModel, pKey string
 	pwName, pwSecret          string
@@ -355,9 +362,11 @@ func (a *App) assistantTranscript(c *ui.Context) {
 		})
 		return
 	}
+	a.assist.open.keys = nil
 	for _, ex := range assistantExchanges(a.assist.turns) {
 		a.assistantExchange(c, ex)
 	}
+	a.assistantOpenShortcuts(c)
 }
 
 // assistExchange is one user request plus the tool steps and reply that
@@ -574,12 +583,11 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			}
 			for _, i := range ex.Rest {
 				t := turns[i]
-				if t.Plan != "" && !a.assist.applied[t.Plan] {
-					if components.Button(c, "应用方案", components.ButtonPrimary).Clicked() {
-						a.assistantApplyPlan(t.Plan)
-					}
+				if t.Plan != "" {
+					a.assistantPlanCard(c.Key("plan-"+t.Plan), t.Plan)
 				}
-				a.assistantChoices(c, i)
+				hide := t.Choice != nil && t.Choice.Prompt != "" && strings.Contains(final, t.Choice.Prompt)
+				a.assistantChoices(c.Key("choice-"+itoa(i)), i, hide)
 			}
 		},
 	})
@@ -675,12 +683,10 @@ func (a *App) assistantTurn(c *ui.Context, i int) {
 		if text != "" {
 			ui.Text(c.Key("tool-"+itoa(i)), text).FontSize(11).TextColor(colorMuted()).Wrap()
 		}
-		if t.Plan != "" && !a.assist.applied[t.Plan] {
-			if components.Button(c, "应用方案", components.ButtonPrimary).Clicked() {
-				a.assistantApplyPlan(t.Plan)
-			}
+		if t.Plan != "" {
+			a.assistantPlanCard(c.Key("plan-"+t.Plan), t.Plan)
 		}
-		a.assistantChoices(c, i)
+		a.assistantChoices(c, i, false)
 	default:
 		prose, blocks := splitOpenUI(text)
 		if prose != "" {
@@ -689,76 +695,7 @@ func (a *App) assistantTurn(c *ui.Context, i int) {
 		for n, block := range blocks {
 			a.paintOpenBlock(c.Key("openui-"+itoa(i)+"-"+itoa(n)), block, i)
 		}
-		a.assistantChoices(c, i)
-	}
-}
-
-func (a *App) assistantChoices(c *ui.Context, i int) {
-	ch := a.assist.turns[i].Choice
-	if ch == nil {
-		return
-	}
-	ui.Column(c.Key("choice-" + itoa(i))).FillWidth().Padding(8).Gap(4).Radius(6).
-		Background(colorHover()).Children(func() {
-		if ch.Prompt != "" {
-			ui.Text(c, ch.Prompt).FontSize(12).TextColor(colorText()).Wrap()
-		}
-		hint := "可多选"
-		if !ch.Multi {
-			hint = "选一项"
-		}
-		if ch.Sent {
-			hint = "已发送"
-		}
-		ui.Text(c, hint).FontSize(11).TextColor(colorMuted())
-		for j := range ch.Options {
-			if ch.Sent {
-				mark := "○ "
-				if ch.On[j] {
-					mark = "● "
-				}
-				ui.Text(c, mark+ch.Options[j]).FontSize(12).TextColor(colorMuted()).Wrap()
-				continue
-			}
-			box := ui.Checkbox(c.Key("opt-"+itoa(j)), &ch.On[j], ch.Options[j])
-			if !ch.Multi && box.Clicked() && ch.On[j] {
-				for k := range ch.On {
-					if k != j {
-						ch.On[k] = false
-					}
-				}
-			}
-		}
-		if !ch.Sent && components.Button(c, "发送所选", components.ButtonPrimary).Clicked() {
-			a.assistantSendChoices(i)
-		}
-	})
-}
-
-func (a *App) assistantSendChoices(i int) {
-	if a.assist.running || i < 0 || i >= len(a.assist.turns) {
-		return
-	}
-	ch := a.assist.turns[i].Choice
-	if ch == nil || ch.Sent {
-		return
-	}
-	var picked []string
-	for j, on := range ch.On {
-		if on {
-			picked = append(picked, ch.Options[j])
-		}
-	}
-	if len(picked) == 0 {
-		a.statusMsg = "先勾选至少一项"
-		return
-	}
-	a.assist.draft = "我选择：" + strings.Join(picked, "；")
-	before := len(a.assist.turns)
-	a.assistantSubmit()
-	if len(a.assist.turns) > before && i < len(a.assist.turns) && a.assist.turns[i].Choice != nil {
-		a.assist.turns[i].Choice.Sent = true
-		a.assist.persistSession(a.assist.folder)
+		a.assistantChoices(c, i, false)
 	}
 }
 

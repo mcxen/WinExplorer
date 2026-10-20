@@ -19,6 +19,8 @@ type aiChoice struct {
 	Options []string `json:"options"`
 	On      []bool   `json:"on,omitempty"`
 	Sent    bool     `json:"sent,omitempty"`
+	// Custom is what the user typed in place of the options, once sent.
+	Custom string `json:"custom,omitempty"`
 }
 
 // parseChoices pulls the first choice block out of a model or tool reply.

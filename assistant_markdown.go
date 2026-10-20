@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo/ui/markdown/parser"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 	"github.com/oneo-me/onevra/source/components"
@@ -45,10 +47,37 @@ func (a *App) assistMarkdown(c *ui.Context, p *assistPaint, src string, turns []
 		md.last = src
 		md.out = linkMarkdownPaths(normalizeOpenMarkers(src))
 	}
+	// Colors are resolved per frame so an appearance change does not leave a
+	// stale Markdown palette behind.
+	md.opts.Theme = assistMarkdownTheme()
 	if streaming {
 		markdown.Stream(c, md.out, md.opts)
 	} else {
 		markdown.View(c, md.out, md.opts)
+	}
+}
+
+// assistMarkdownTheme keeps the Markdown blocks on the app's tokens. Quote
+// backgrounds are painted by assistQuoteBlock because markdown.Theme only
+// exposes the quote bar and text.
+func assistMarkdownTheme() *markdown.Theme {
+	return &markdown.Theme{
+		FontSize:            13.5,
+		Text:                colorText(),
+		Muted:               colorMuted(),
+		Link:                colorAccent(),
+		Strong:              colorText(),
+		Code:                colorText(),
+		CodeBackground:      colorHover(),
+		QuoteBar:            colorDivider(),
+		QuoteText:           colorMuted(),
+		Rule:                colorDivider(),
+		CodeBlockBackground: colorSurface(),
+		CodeBlockBorder:     colorDivider(),
+		TableBorder:         colorDivider(),
+		TableHeader:         colorHover(),
+		Mark:                colorHit(),
+		Checkbox:            colorAccent(),
 	}
 }
 
@@ -59,6 +88,9 @@ func (a *App) assistMarkdownOptions(md *assistMD) *markdown.Options {
 		// The pane is narrow: long lines wrap rather than hide sideways.
 		WrapCode: true,
 		Reveal:   &markdown.Reveal{Unit: markdown.ByWord},
+	}
+	o.Block = func(c *ui.Context, d *parser.Document, i int) bool {
+		return assistQuoteBlock(c, d, i, o)
 	}
 	o.CodeBlock = func(c *ui.Context, b *markdown.CodeBlockView) { assistCodeBlock(c, md, b) }
 	o.Code = map[string]func(c *ui.Context, b *markdown.CodeBlockView){
@@ -97,26 +129,65 @@ func openBlockKey(src string) string {
 }
 
 // assistOpenPlaceholder stands for an OpenUI program still being written.
+// Its 64-DIP floor is the height of the smallest card, so closing the fence
+// swaps the placeholder for a card without moving the reply below it.
 func assistOpenPlaceholder(c *ui.Context) {
-	ui.Row(c).FillWidth().Padding(10).Gap(8).Radius(6).Background(colorHover()).AlignItems(ui.Center).
+	ui.Row(c).FillWidth().MinHeight(64).Padding(10).Gap(8).Radius(8).Border(1, colorDivider()).
+		Background(colorSurface()).AlignItems(ui.Center).Label("OpenUI placeholder").
 		Children(func() {
 			components.Spinner(c, components.SpinnerRing)
 			ui.Text(c, "正在生成界面…").FontSize(12).TextColor(colorMuted())
 		})
 }
 
+// assistQuoteBlock gives quote blocks the same raised surface and divider as
+// cards. markdown.Theme has no quote background, so render the quote's own
+// source in a surface box and let the nested view keep all Markdown styling.
+func assistQuoteBlock(c *ui.Context, d *parser.Document, i int, o *markdown.Options) bool {
+	b := d.Block(i)
+	if b == nil || b.Kind != parser.Quote {
+		return false
+	}
+	src := stripQuoteMarkers(d.String()[b.Start:b.End])
+	ui.Column(c).FillWidth().MinWidth(0).Padding(8, 10).Radius(6).BorderStartWidth(3).
+		BorderColor(colorDivider()).Background(colorSurface()).Children(func() {
+		markdown.View(c, src, o)
+	})
+	return true
+}
+
+// stripQuoteMarkers removes one quote marker per line; a nested quote keeps
+// its marker and is styled by the nested Markdown view.
+func stripQuoteMarkers(src string) string {
+	lines := strings.Split(src, "\n")
+	for i, line := range lines {
+		line = strings.TrimLeft(line, " ")
+		if strings.HasPrefix(line, ">") {
+			line = strings.TrimPrefix(line, ">")
+			line = strings.TrimPrefix(line, " ")
+		}
+		lines[i] = line
+	}
+	return strings.Join(lines, "\n")
+}
+
+// assistCopyFeedbackDuration matches mygo's ordinary toast lifetime. The
+// inline "已复制" label is the copy toast's counterpart and must not turn back
+// before or after that toast.
+const assistCopyFeedbackDuration = 4 * time.Second
+
 // assistCodeBlock is a code block with the language and a 复制 button above
 // the code. The library's own block reads its labels from the system
 // locale; the pane is Chinese whatever the system says.
 func assistCodeBlock(c *ui.Context, md *assistMD, b *markdown.CodeBlockView) {
 	box := ui.Column(c).FillWidth().MinWidth(0).Radius(6).Border(1, colorDivider()).
-		Background(colorHover()).Clip().Label("代码 " + b.Language)
+		Background(colorSurface()).Clip().Label("代码 " + b.Language)
 	box.Children(func() {
 		ui.Row(c).FillWidth().Padding(4, 6, 0, 10).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, b.Language).FontSize(11).TextColor(colorMuted()).Unselectable()
 			ui.Spacer(c)
 			at, ok := md.copied[b.Index]
-			copied := ok && c.Now().Sub(at) < 2*time.Second
+			copied := ok && c.Now().Sub(at) < assistCopyFeedbackDuration
 			label, icon := "复制", lucide.Copy()
 			if copied {
 				label, icon = "已复制", lucide.Check()
@@ -133,7 +204,7 @@ func assistCodeBlock(c *ui.Context, md *assistMD, b *markdown.CodeBlockView) {
 			if btn.Clicked() {
 				c.WriteClipboard(b.Code())
 				md.copied[b.Index] = c.Now()
-				c.After(2 * time.Second)
+				c.After(assistCopyFeedbackDuration)
 			}
 		})
 		b.Body(c)

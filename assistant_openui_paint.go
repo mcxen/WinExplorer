@@ -176,7 +176,7 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 		})
 	case "card":
 		ui.Column(c).FillWidth().MinWidth(0).Padding(10).Gap(8).Radius(8).Border(1, colorDivider()).
-			Background(colorHover()).Children(func() {
+			Background(colorSurface()).Label("OpenUI card").Children(func() {
 			for i, ch := range v.Children {
 				a.paintOpenView(c.Key(i), ch, p, depth+1)
 			}
@@ -357,7 +357,7 @@ func (a *App) openMessage(v *ouiView, p *openPaint) (msg, missing string) {
 func (a *App) paintOpenTable(c *ui.Context, v *ouiView) {
 	cols := make([]ui.TableColumn, len(v.Cols))
 	for i, col := range v.Cols {
-		cols[i] = ui.TableColumn{Title: col.Label, ID: itoa(i), MinWidth: 56}
+		cols[i] = ui.TableColumn{Title: col.Label, ID: itoa(i), MinWidth: 56, MaxWidth: 220}
 	}
 	n := 0
 	for _, col := range v.Cols {
@@ -374,10 +374,11 @@ func (a *App) paintOpenTable(c *ui.Context, v *ouiView) {
 			for r := 0; r < n; r++ {
 				components.TableRow(c, r, cell(r, 0), false, func(ci int) {
 					text := cell(r, ci)
+					shown := openCellText(text)
 					if p, ok := linkPath(text); ok && text != "" {
-						link := ui.ButtonBase(c.Key(ci)).MinWidth(0).Label("打开 " + text).Tooltip("在窗口中打开")
+						link := ui.ButtonBase(c.Key(ci)).MinWidth(0).Label("打开 " + text).Tooltip(text)
 						link.Children(func() {
-							t := ui.Text(c, text).FontSize(12).TextColor(tokAccent).SingleLine()
+							t := ui.Text(c, shown).FontSize(12).TextColor(tokAccent).SingleLine().Tooltip(text)
 							if link.Hovered() {
 								t.Underline()
 							}
@@ -387,7 +388,7 @@ func (a *App) paintOpenTable(c *ui.Context, v *ouiView) {
 						}
 						return
 					}
-					ui.Text(c.Key(ci), text).FontSize(12).TextColor(colorText()).SingleLine()
+					ui.Text(c.Key(ci), shown).FontSize(12).TextColor(colorText()).SingleLine().Tooltip(text)
 				})
 			}
 		})
@@ -397,6 +398,30 @@ func (a *App) paintOpenTable(c *ui.Context, v *ouiView) {
 		return
 	}
 	table()
+}
+
+// openCellText keeps table cells one line and bounded. Path cells use the
+// search breadcrumb's middle elision so their root and nearest folders stay
+// identifiable; every other cell keeps its head and tail around one ellipsis.
+func openCellText(text string) string {
+	_, isPath := linkPath(text)
+	if isPath {
+		text = searchPathText(searchPathSegments(text, homeForSearch(), 5))
+		return middleEllipsisText(text, 44)
+	}
+	return middleEllipsisText(text, 32)
+}
+
+// middleEllipsisText collapses the middle of a long label while preserving
+// enough at both ends to identify it in a narrow table cell.
+func middleEllipsisText(text string, max int) string {
+	r := []rune(text)
+	if max < 3 || len(r) <= max {
+		return text
+	}
+	head := (max - 1) / 2
+	tail := max - 1 - head
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
 }
 
 // assistantSendOpen posts a card's message as the next user message and

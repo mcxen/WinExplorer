@@ -165,3 +165,51 @@ f = Form("x", [], [Input("n", "名字", "text", "required")])`)
 		t.Fatal("rows are still labelled by number")
 	}
 }
+
+// TestOpenTableCellsElideWithFullTooltips: cells stay narrow and one line.
+// Path labels keep their root and nearest folders around a middle ellipsis,
+// while the element keeps the complete value for its hover tooltip.
+func TestOpenTableCellsElideWithFullTooltips(t *testing.T) {
+	long := `C:\alpha\bravo\charlie\delta\echo\foxtrot\golf\report-final.docx`
+	shown := openCellText(long)
+	if !strings.Contains(shown, "…") || !strings.Contains(shown, "report-final.docx") {
+		t.Fatalf("path cell %q does not keep its identifying tail", shown)
+	}
+	if got := middleEllipsisText("abcdefghij", 6); got != "ab…hij" {
+		t.Fatalf("middleEllipsisText = %q", got)
+	}
+
+	a := &App{}
+	a.assist.turns = []aiTurn{
+		{Role: "user", Text: "x"},
+		{Role: "assistant", Text: "```openui\nroot = Table([Col(\"位置\", [\"" + long + "\"])])\n```"},
+	}
+	tt := assistTester(a, 500)
+	tt.Frame()
+	if !tt.HasText("…") || !tt.HasText("eport-final.docx") {
+		t.Fatalf("the elided path is not shown: %v", tt.Texts())
+	}
+	if tt.HasText(long) {
+		t.Fatalf("the complete path still stretches the cell: %v", tt.Texts())
+	}
+}
+
+// TestAssistantQuoteUsesRaisedSurface: quote source keeps Markdown formatting
+// inside the same surface treatment as assistant cards.
+func TestAssistantQuoteUsesRaisedSurface(t *testing.T) {
+	a := &App{}
+	a.assist.turns = []aiTurn{
+		{Role: "user", Text: "x"},
+		{Role: "assistant", Text: "> 这是 **引用**。\n>\n> - 第一项"},
+	}
+	tt := assistTester(a, 500)
+	tt.Frame()
+	for _, s := range []string{"这是", "引用", "第一项"} {
+		if !tt.HasText(s) {
+			t.Fatalf("quote content %q missing: %v", s, tt.Texts())
+		}
+	}
+	if tt.HasText("> 这是") {
+		t.Fatalf("quote markers show: %v", tt.Texts())
+	}
+}

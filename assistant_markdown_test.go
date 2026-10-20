@@ -11,7 +11,11 @@ import (
 func TestLinkMarkdownPaths(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"看 `C:\\Users\\a\\下载`", "看 [`C:\\Users\\a\\下载`](<file:///C:/Users/a/下载>)"},
+		{"用 `C:\\Program Files\\Sunvale\\资料`", "用 [`C:\\Program Files\\Sunvale\\资料`](<file:///C:/Program Files/Sunvale/资料>)"},
 		{"在 /home/a/文档 里", "在 [/home/a/文档](<file:///home/a/文档>) 里"},
+		// Bare prose paths stop at spaces today; callers wanting a Windows
+		// path with spaces to be one link wrap it in a code span.
+		{"C:\\Program Files\\Sunvale", "[C:\\\\Program](<file:///C:/Program>) Files\\Sunvale"},
 		{"比例 1/2 不是路径", "比例 1/2 不是路径"},
 		{"[已有](https://x.test/a/b)", "[已有](https://x.test/a/b)"},
 		{"```\n/etc/hosts\n```", "```\n/etc/hosts\n```"},
@@ -89,6 +93,67 @@ func TestAssistantStreamingHoldsTheCardsPlace(t *testing.T) {
 	if got := streamLive("前文\n<<<choices\n- a"); got != "前文" {
 		t.Fatalf("a half choice block shows: %q", got)
 	}
+}
+
+// TestAssistantOpenPlaceholderMatchesCardHeight: closing the OpenUI fence
+// swaps equal-height surfaces, so the text below does not jump.
+func TestAssistantOpenPlaceholderMatchesCardHeight(t *testing.T) {
+	const text = "```openui\nroot = Card([h])\nh = CardHeader(\"卡片标题\", \"说明\")\n```"
+	a := &App{}
+	a.assist.running = true
+	a.assist.turns = []aiTurn{{Role: "user", Text: "x"}, {Role: "assistant", Text: streamLive(text[:len(text)-4])}}
+	tt := assistTester(a, 500)
+	tt.Frame()
+	before, ok := tt.Find("OpenUI placeholder")
+	if !ok {
+		t.Fatalf("no placeholder: %v", tt.Texts())
+	}
+
+	a.assist.running = false
+	a.assist.turns[1].Text = text
+	tt.Advance(time.Second)
+	after, ok := tt.Find("OpenUI card")
+	if !ok {
+		t.Fatalf("no card: %v", tt.Texts())
+	}
+	if diff := abs32(before.H - after.H); diff > 2 {
+		t.Fatalf("placeholder/card height jumped by %.1f DIP: %.1f -> %.1f", diff, before.H, after.H)
+	}
+}
+
+// TestAssistantCodeCopyFeedbackLastsFourSeconds: the inline confirmation has
+// the same lifetime as mygo's ordinary toast.
+func TestAssistantCodeCopyFeedbackLastsFourSeconds(t *testing.T) {
+	a := &App{}
+	a.assist.turns = []aiTurn{
+		{Role: "user", Text: "x"},
+		{Role: "assistant", Text: "```sh\nls -la\n```"},
+	}
+	tt := assistTester(a, 500)
+	tt.Frame()
+	if err := tt.Click("复制"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("已复制") {
+		t.Fatalf("copy did not confirm: %v", tt.Texts())
+	}
+	tt.Advance(assistCopyFeedbackDuration - time.Millisecond)
+	if !tt.HasText("已复制") {
+		t.Fatal("copy feedback ended before the toast lifetime")
+	}
+	tt.Advance(20 * time.Millisecond)
+	tt.Frame()
+	if tt.HasText("已复制") {
+		t.Fatal("copy feedback outlived the toast lifetime")
+	}
+}
+
+func abs32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // TestAssistLiveDropsStalePartials: a partial landing after the finished

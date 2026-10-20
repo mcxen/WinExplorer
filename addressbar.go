@@ -399,7 +399,8 @@ func (a *App) breadcrumbBar(c *ui.Context) {
 				a.crumbButton(c, crumbs[i], i == len(crumbs)-1)
 			}
 			// The rest of the row is the bar's: a click there edits.
-			ui.Box(c).Grow(1).MinWidth(8).Height(30)
+			ui.Box(c).Grow(1).MinWidth(8).Height(30).
+				Label("地址栏空白").OnClick(a.beginPathEdit)
 		})
 		edit := ui.ButtonBase(c).Size(24, 24).Radius(4).Shrink(0).
 			Label("编辑地址").Tooltip("编辑地址 (Ctrl+L)")

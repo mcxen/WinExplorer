@@ -17,11 +17,11 @@ import (
 // emptyBarPoint is a point of the crumb bar past the crumbs.
 func emptyBarPoint(t *testing.T, tt *ui.Tester) (float32, float32) {
 	t.Helper()
-	r, ok := tt.Find("编辑地址")
+	r, ok := tt.Find("地址栏空白")
 	if !ok {
-		t.Fatalf("no edit button: %v", tt.Texts())
+		t.Fatalf("no empty address-bar area: %v", tt.Texts())
 	}
-	return r.X - 30, r.Y + r.H/2
+	return r.X + r.W/2, r.Y + r.H/2
 }
 
 // typeIntoAddress types s and reports the draft afterwards.
@@ -251,6 +251,7 @@ func TestBreadcrumbMenus(t *testing.T) {
 	if a.cur().path != filepath.Join(root, "c") {
 		t.Fatalf("chose c: at %s", a.cur().path)
 	}
+	tt.Frame()
 	tt.RightClickAt(emptyBarPoint(t, tt))
 	if err := tt.ChooseMenuItem("复制地址"); err != nil {
 		t.Fatal(err)

@@ -156,10 +156,27 @@ func drawWinClose(p *ui.Painter, r ui.Rect, ink ui.Color) {
 	p.StrokePath(&x, 1, ink)
 }
 
-// tabTitle is a tab's base name, or 此电脑 on This PC.
+// tabTitle is the name a tab shows: the same words the address bar and the
+// sidebar use (主文件夹, 画廊, 下载) rather than a place's internal id or
+// the English folder name on disk; any other folder shows its base name.
 func tabTitle(path string) string {
-	if path == pathThisPC {
+	switch path {
+	case pathThisPC:
 		return "此电脑"
+	case pathHome:
+		return "主文件夹"
+	case pathGallery:
+		return "画廊"
+	case pathTrash:
+		return "回收站"
+	case pathDisks:
+		return "磁盘健康"
+	}
+	if n, ok := knownFolderNames()[filepath.Clean(path)]; ok {
+		return n
+	}
+	if filepath.Clean(path) == "/" {
+		return sysRootName()
 	}
 	name := filepath.Base(path)
 	if name == "" || name == "." || name == string(filepath.Separator) {

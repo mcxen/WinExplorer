@@ -123,14 +123,15 @@ func (a *App) breadcrumbs() []Crumb {
 		if n, ok := known[filepath.Clean(built)]; ok {
 			name = n
 		} else if filepath.Clean(built) == "/" || built == `\` || built == `/` {
-			name = "Macintosh HD"
+			name = sysRootName()
 		}
 		crumbs = append(crumbs, Crumb{Name: name, Path: filepath.Clean(built)})
 	case path == "/" || strings.HasPrefix(path, "/"):
-		// Unix paths have no volume name. "/" is Macintosh HD, the same
-		// drive This PC lists, so Up from it returns to This PC.
+		// Unix paths have no volume name. "/" is the root volume, named as
+		// the platform names it (sysRootName), the same drive This PC lists,
+		// so Up from it returns to This PC.
 		built = "/"
-		crumbs = append(crumbs, Crumb{Name: "Macintosh HD", Path: "/"})
+		crumbs = append(crumbs, Crumb{Name: sysRootName(), Path: "/"})
 	}
 	rest = strings.Trim(rest, `/\`)
 	if rest == "" {
@@ -202,7 +203,7 @@ func (a *App) quickPlaces() []Place {
 
 func (a *App) thisPCPlaces() []Place {
 	root := "/"
-	places := []Place{{Name: "Macintosh HD", Path: root, Kind: "drive"}}
+	places := []Place{{Name: sysRootName(), Path: root, Kind: "drive"}}
 	vols, err := os.ReadDir("/Volumes")
 	if err != nil {
 		return places

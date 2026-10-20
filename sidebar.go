@@ -277,7 +277,7 @@ func (a *App) navPaneRow(c *ui.Context, r navRow) {
 // moves a drop into that folder; only the heading pins.
 func (a *App) navSectionRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
-		Radius(4).Padding(0, 8).AlignItems(ui.Center).Label(r.label)
+		Radius(4).Padding(0, 8).AlignItems(ui.Center).Justify(ui.Start).Label(r.label)
 	row.Children(func() {
 		ui.Text(c, r.label).FontSize(11).FontWeight(600).TextColor(colorMuted()).
 			SingleLine()

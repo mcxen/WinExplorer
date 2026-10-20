@@ -28,7 +28,7 @@ func menuIndexOf(labels []string, label string) int {
 
 // TestSizeColumnText checks the 大小 column's cell for every state a row
 // can be in: a file's own size, a folder's cached tally — an empty folder
-// reads 0 B — "…" while the engine is walking, and blank before it is
+// reads blank, as Explorer's does — "…" while the engine is walking, and blank before it is
 // asked for.
 func TestSizeColumnText(t *testing.T) {
 	cached := "/sizes-ui/cached"
@@ -55,7 +55,7 @@ func TestSizeColumnText(t *testing.T) {
 		{"file", Entry{Path: "/sizes-ui/a.txt", Size: 2048}, "2.0 KB"},
 		{"empty file", Entry{Path: "/sizes-ui/b.txt"}, "0 B"},
 		{"cached folder", Entry{Path: cached, IsDir: true}, "1.2 KB"},
-		{"cached empty folder", Entry{Path: empty, IsDir: true}, "0 B"},
+		{"cached empty folder", Entry{Path: empty, IsDir: true}, ""},
 		{"folder being walked", Entry{Path: busy, IsDir: true}, "…"},
 		{"folder not yet walked", Entry{Path: "/sizes-ui/unknown", IsDir: true}, ""},
 	}

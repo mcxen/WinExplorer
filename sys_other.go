@@ -71,3 +71,7 @@ func sysOpenWithScan() {}
 func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
 	_ = exec.Command // keep the import for platforms that grow support
 }
+
+// sysRootName is the root volume's name in the sidebar, the breadcrumb and
+// This PC: the generic Unix root.
+func sysRootName() string { return "文件系统" }

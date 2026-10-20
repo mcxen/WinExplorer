@@ -59,6 +59,9 @@ type tabState struct {
 	// or tile the frame before laid out, which the band hit-tests against.
 	marquee    marqueeState
 	itemBounds map[string]ui.Rect
+	// detailsPaneW is the details list's width last frame, which the
+	// default columns fit to (files.go fittedCols).
+	detailsPaneW float32
 
 	// networkDir says the folder lives on a network mount, measured once
 	// per icon view: the tiles read it to decide whether to decode their

@@ -122,7 +122,7 @@ func (a *App) homeView(c *ui.Context) {
 
 func (a *App) homeSection(c *ui.Context, title string) {
 	row := ui.ButtonBase(c.Key("home-section-"+title)).FillWidth().Height(32).
-		Padding(8, 4, 8, 6).AlignItems(ui.Center).Label(title)
+		Padding(8, 4, 8, 6).AlignItems(ui.Center).Justify(ui.Start).Label(title)
 	row.Children(func() {
 		ui.Text(c, title).FontSize(13).FontWeight(600).TextColor(colorText()).
 			SingleLine()

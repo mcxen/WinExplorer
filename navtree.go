@@ -106,6 +106,12 @@ func (a *App) navSync(path string) {
 	if path == "" || specialPath(path) {
 		return
 	}
+	// 主文件夹 and its known folders have rows of their own above the tree,
+	// and that row lights up: opening every system folder from / down to
+	// the home folder would bury the pane under bin, boot, dev and etc.
+	if underKnownFolder(path) {
+		return
+	}
 	if a.navTree.open == nil {
 		a.navTree.open = map[string]bool{}
 	}
@@ -174,4 +180,25 @@ func (a *App) navTreeReveal() {
 		return
 	}
 	a.navTree.list.ScrollTo(a.navTree.row, ui.Center)
+}
+
+// underKnownFolder reports whether path is 主文件夹 or one of the known
+// folders the sidebar lists (桌面, 下载, …), or inside one of the latter.
+// The home folder itself only counts exactly: a project somewhere under it
+// still opens the tree down to it.
+func underKnownFolder(path string) bool {
+	path = filepath.Clean(path)
+	home, _ := os.UserHomeDir()
+	for dir := range knownFolderNames() {
+		if dir == filepath.Clean(home) {
+			if path == dir {
+				return true
+			}
+			continue
+		}
+		if pathWithin(path, dir) {
+			return true
+		}
+	}
+	return false
 }

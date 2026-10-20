@@ -319,3 +319,7 @@ func scanOpenWithAppsLinux() {
 	}
 	openWith.Store(r)
 }
+
+// sysRootName is the root volume's name in the sidebar, the breadcrumb and
+// This PC: what the Linux file managers call the root; Macintosh HD would be a stranger here.
+func sysRootName() string { return "文件系统" }

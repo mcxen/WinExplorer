@@ -200,7 +200,7 @@ func (a *App) assistantComposer(c *ui.Context) {
 	}
 	comp := chat.GlassComposer(c, &a.assist.floatLay, &a.assist.draft, chat.ComposerOptions{
 		Label:       "给助手的消息",
-		Placeholder: "整理、重命名，或指定要读的文件…",
+		Placeholder: "让助手整理这个文件夹…",
 		SendLabel:   "发送",
 		StopLabel:   "停止",
 		Running:     a.assist.running,
@@ -328,13 +328,29 @@ func (a *App) clampAssistWidth(c *ui.Context, w float32) float32 {
 	return w
 }
 
+// assistStarters are the empty transcript's example requests.
+var assistStarters = []string{
+	"按拍摄日期重命名照片",
+	"把安装包和压缩包归档到“归档”文件夹",
+	"找出重复或临时文件",
+}
+
 func (a *App) assistantTranscript(c *ui.Context) {
 	if len(a.assist.turns) == 0 {
 		ui.Column(c).FillWidth().Padding(48, 8, 12, 8).Gap(8).AlignItems(ui.Center).Children(func() {
 			components.Icon(c, lucide.Bot).Size(28, 28).TextColor(colorMuted())
 			ui.Text(c, "晴谷助手").FontSize(18).FontWeight(600).TextColor(colorText())
-			ui.Text(c, "整理当前文件夹，或指定要读的文件。模型在输入框里选。").
+			ui.Text(c, "整理、重命名、归档当前文件夹里的文件。").
 				FontSize(13).TextColor(colorMuted()).Wrap().TextAlign(ui.Center)
+			// Starters put a request in the box rather than sending it: the
+			// user still reads it, picks the model and presses 发送.
+			ui.Column(c).FillWidth().Gap(6).Padding(12, 0, 0, 0).Children(func() {
+				for _, s := range assistStarters {
+					if components.Button(c, s, components.ButtonSecondary).FillWidth().Clicked() {
+						a.assist.draft = s
+					}
+				}
+			})
 		})
 		return
 	}

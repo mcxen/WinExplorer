@@ -28,6 +28,9 @@ const (
 	galleryWorkers   = 4        // concurrent decodes
 	galleryCellSide  = 120      // a month grid's cell, the tile's 112 px inside
 	galleryScrollPad = 20       // the page scroll's padding, above and below
+	// galleryCellH is a cell's height: the square picture, then its name
+	// and date under it.
+	galleryCellH = galleryCellSide + 34
 )
 
 // galleryPhoto is one picture the gallery shows.
@@ -288,7 +291,7 @@ func (a *App) galleryView(c *ui.Context) {
 				end++
 			}
 			a.homeSection(c, fmt.Sprintf("%s（%d 张）", key, end-i))
-			grid := ui.GridView(c, nil, end-i, galleryCellSide, galleryCellSide, func(j int) {
+			grid := ui.GridView(c, nil, end-i, galleryCellSide, galleryCellH, func(j int) {
 				if j >= 0 && j < end-i {
 					a.galleryTile(c, photos[i+j])
 				}
@@ -304,7 +307,7 @@ func (a *App) galleryView(c *ui.Context) {
 		// The page's scroll says how many rows of tiles it shows, which
 		// Page Up and Page Down move by.
 		if b := scroll.Bounds(); b.H > 0 {
-			a.cur().gridRows = max(int((b.H-galleryScrollPad)/galleryCellSide), 1)
+			a.cur().gridRows = max(int((b.H-galleryScrollPad)/galleryCellH), 1)
 		}
 	})
 	a.bindPaneMenu(c, scroll)
@@ -314,7 +317,7 @@ func (a *App) galleryView(c *ui.Context) {
 // frame until it decodes, and the item behaves like any other file —
 // select, open, quick preview, drag, context menu.
 func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
-	tile := ui.ButtonBase(c.Key(p.path)).Size(112, 112).Shrink(0).Radius(4).
+	tile := ui.ButtonBase(c.Key(p.path)).Size(112, galleryCellH-8).Shrink(0).Radius(4).
 		Clip().Label(p.name)
 	t := a.cur()
 	if t.itemBounds == nil {
@@ -326,16 +329,10 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 		tile.Background(colorSelected())
 	case tile.Hovered():
 		tile.Background(colorHover())
-	default:
-		tile.Background(colorHover().Alpha(0.35))
 	}
 	aiFxRow(c, tile, aiFx.look(p.path), 0, 4)
 	tile.Children(func() {
-		if bm := galleryThumb(p.path); bm != nil {
-			ui.Image(c, bm).Fit(ui.Cover)
-			return
-		}
-		ui.Box(c).Fill()
+		ui.Column(c).Fill().Gap(3).Children(func() { a.galleryTileBody(c, p) })
 	})
 	if tile.Clicked() {
 		a.selectOnly(p.path)
@@ -356,6 +353,26 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 	if a.cur().reveal == p.path {
 		tile.ScrollIntoView()
 	}
+}
+
+// galleryTileBody is a tile's picture with its name and date under it.
+func (a *App) galleryTileBody(c *ui.Context, p galleryPhoto) {
+	// The picture fills its square edge to edge; only a picture still
+	// decoding shows the quiet frame, so no grey band is left under a
+	// landscape shot.
+	pic := ui.Box(c).Size(112, 112).Shrink(0).Radius(4).Clip()
+	if galleryThumb(p.path) == nil {
+		pic.Background(colorHover().Alpha(0.35))
+	}
+	pic.Children(func() {
+		if bm := galleryThumb(p.path); bm != nil {
+			ui.Image(c, bm).Fill().Fit(ui.Cover)
+		}
+	})
+	ui.Column(c).FillWidth().Padding(0, 4).Gap(1).Children(func() {
+		ui.Text(c, p.name).FontSize(11).TextColor(colorText()).SingleLine().FillWidth()
+		ui.Text(c, p.modTime.Format("2006/01/02")).FontSize(10).TextColor(colorMuted()).SingleLine()
+	})
 }
 
 // galleryEntry is the file pane's Entry for a picture, so every

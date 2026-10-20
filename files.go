@@ -328,6 +328,10 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 		}
 	})
 	head.ScrollWith(list)
+	// The next frame fits the columns to the pane this one laid out in.
+	if b := list.Bounds(); b.W > 0 {
+		t.detailsPaneW = b.W
+	}
 	a.bindPaneMenu(c, list)
 }
 
@@ -345,9 +349,52 @@ func (a *App) nameColW() float32 {
 	return colW(a.colWidths.name, colNameFlexW)
 }
 
-func (a *App) dateColW() float32 { return colW(a.colWidths.date, colDateW) }
-func (a *App) typColW() float32  { return colW(a.colWidths.typ, colTypeW) }
-func (a *App) locColW() float32  { return colW(a.colWidths.loc, colLocW) }
+func (a *App) dateColW() float32 { d, _ := a.fittedCols(); return d }
+func (a *App) typColW() float32  { _, t := a.fittedCols(); return t }
+
+// Floors the details view squeezes its default columns to, enough for
+// "2026/10/20 19:48" and for a short type name.
+const (
+	colDateFitMin float32 = 112
+	colTypeFitMin float32 = 80
+)
+
+// fittedCols is the 修改日期 and 类型 widths for the pane the details view
+// laid out in last frame. When the pane is narrower than the row (the
+// assistant panel or the preview pane open beside it), the default
+// columns give way, the date first, so 大小 stays on screen; a width the
+// user dragged is theirs and never squeezed.
+func (a *App) fittedCols() (date, typ float32) {
+	date, typ = colW(a.colWidths.date, colDateW), colW(a.colWidths.typ, colTypeW)
+	pane := a.cur().detailsPaneW
+	if pane <= 0 {
+		return date, typ
+	}
+	other := typ
+	if strings.TrimSpace(a.cur().query) != "" {
+		other = a.locColW()
+	}
+	need := a.nameColW() + date + other + a.sizeColW() + rowInset*2
+	return squeezeCols(need-pane, date, typ, a.colWidths.date <= 0, a.colWidths.typ <= 0)
+}
+
+// squeezeCols takes over from the date column, down to its floor, then
+// from the type column, until over is gone or both are at their floors.
+func squeezeCols(over, date, typ float32, dateFree, typFree bool) (float32, float32) {
+	if over <= 0 {
+		return date, typ
+	}
+	if dateFree {
+		cut := min(over, max(date-colDateFitMin, 0))
+		date -= cut
+		over -= cut
+	}
+	if typFree && over > 0 {
+		typ -= min(over, max(typ-colTypeFitMin, 0))
+	}
+	return date, typ
+}
+func (a *App) locColW() float32 { return colW(a.colWidths.loc, colLocW) }
 
 // sizeColW is the 大小 column's width. The 此电脑 page's drive rows carry
 // "可用 X，共 Y", which the 96px file-size column cannot hold, so drives get
@@ -385,6 +432,9 @@ func (a *App) saveColWidths() {
 func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool, slot *float32) {
 	cell := ui.ButtonBase(c).Height(a.detailsRowH()).Padding(0, 8).Gap(4).
 		AlignItems(ui.Center).Radius(4).Label(title)
+	// A button centers its content; the labels sit where their cells'
+	// text starts, as Explorer's do: 大小 at the end, the rest at the start.
+	cell.Justify(ui.Start)
 	if flex {
 		cell.Grow(1).Shrink(1).MinWidth(colNameMin)
 	} else {
@@ -514,6 +564,11 @@ func sizeColumnText(e Entry) string {
 		return formatBytes(e.Size)
 	}
 	if st, ok := lookupDirStat(e.Path); ok {
+		// An empty folder's 0 B reads like a file that lost its data;
+		// Explorer leaves the cell blank.
+		if st.Size == 0 {
+			return ""
+		}
 		return formatBytes(st.Size)
 	}
 	if dirStatInProgress(e.Path) {
@@ -842,7 +897,7 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 				a.renameField(c, font)
 				return
 			}
-			label := searchNameText(c, a.activeSearchQuery(), a.displayName(e), font).
+			label := searchNameText(c, a.activeSearchQuery(), tileName(a.displayName(e), tileNameRunes(box)), font).
 				TextAlign(ui.Center).MaxLines(2).FillWidth()
 			if look.flash > 0 {
 				label.TextColor(flashColor(colorText(), look))
@@ -1363,4 +1418,38 @@ func typeLabel(e Entry) string {
 	default:
 		return strings.ToUpper(e.Ext) + " 文件"
 	}
+}
+
+// tileNameRunes is about how many characters a tile's two label lines hold
+// at the icon size box.
+func tileNameRunes(box float32) int {
+	switch {
+	case box >= 96:
+		return 44
+	case box >= 48:
+		return 32
+	}
+	return 26
+}
+
+// tileName is a tile's label: a name past max runes keeps its start and
+// its end (the extension, the counter, the date at the tail) around a
+// middle ellipsis, and a zero-width space after each _ - . lets the
+// two lines break between the name's parts instead of mid-word, as
+// "IMG_20261012_18 / 3344.jpg" did.
+func tileName(name string, max int) string {
+	r := []rune(name)
+	if max > 3 && len(r) > max {
+		head := (max - 1) * 3 / 5
+		tail := max - 1 - head
+		r = append(append(append([]rune{}, r[:head]...), '…'), r[len(r)-tail:]...)
+	}
+	var b strings.Builder
+	for i, ch := range r {
+		b.WriteRune(ch)
+		if (ch == '_' || ch == '-' || ch == '.') && i > 0 && i < len(r)-1 {
+			b.WriteRune('\u200b')
+		}
+	}
+	return b.String()
 }

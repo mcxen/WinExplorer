@@ -381,3 +381,7 @@ func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
 		}
 	}
 }
+
+// sysRootName is the root volume's name in the sidebar, the breadcrumb and
+// This PC: only reached by a Unix-style root path.
+func sysRootName() string { return "本地磁盘" }

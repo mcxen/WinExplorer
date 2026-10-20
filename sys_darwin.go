@@ -119,7 +119,7 @@ func sysSearchPrune() []string { return []string{"/Volumes", "/System/Volumes"} 
 // sysVolumes lists the root volume and the mounted ones.
 func sysVolumes() []Place {
 	root := "/"
-	places := []Place{{Name: "Macintosh HD", Path: root, Kind: "drive"}}
+	places := []Place{{Name: sysRootName(), Path: root, Kind: "drive"}}
 	vols, err := os.ReadDir("/Volumes")
 	if err != nil {
 		return places
@@ -256,3 +256,7 @@ func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
 		a.navigate("/Applications")
 	}
 }
+
+// sysRootName is the root volume's name in the sidebar, the breadcrumb and
+// This PC: Finder's name for the startup volume.
+func sysRootName() string { return "Macintosh HD" }

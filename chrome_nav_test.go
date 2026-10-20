@@ -35,8 +35,9 @@ func TestBreadcrumbSeparatorsSitOnTheCrumbLine(t *testing.T) {
 	a, tt, _ := keynavWindow(t, 1)
 	// The home folder's Desktop, not a literal path: the home folder is not
 	// /Users/mcx on a runner, and a literal one there loses the 主文件夹 crumb
-	// — the name then matches the sidebar's entry instead. Its last crumb is
-	// 桌面 while the tab's title is Desktop, so each name locates one label.
+	// — the name then matches the sidebar's entry instead. The tab's title
+	// is the last crumb's name, so the last crumb is left out: every other
+	// name locates one label.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +46,8 @@ func TestBreadcrumbSeparatorsSitOnTheCrumbLine(t *testing.T) {
 	tt.Frame()
 
 	var crumbs []ui.Rect
-	for _, crumb := range a.breadcrumbs() {
+	all := a.breadcrumbs()
+	for _, crumb := range all[:len(all)-1] {
 		r, ok := tt.Find(crumb.Name)
 		if !ok || r.W == 0 {
 			t.Fatalf("the crumb %q is not in the window: %v", crumb.Name, tt.Texts())

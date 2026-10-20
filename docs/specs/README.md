@@ -4,18 +4,17 @@
 
 所有 `文件:函数` 引用基于 `origin/main` 的 `bf9ae80`（助手：去掉访问路径限制）。
 
-## 状态
+## 规格列表
 
-| 编号 | 方案 | 状态 | 分支建议 |
-| --- | --- | --- | --- |
-| 01 | [全局搜索显示增强](01-global-search.md)（8 个阶段） | 待开发 | `feat/search-p1` … `feat/search-p8` |
-| 02 | [侧栏目录树打磨](02-tree-polish.md) | 待开发 | `feat/tree-polish` |
-| 03 | [下一步重构](03-refactor-next.md) | 待开发 | `refactor/<步骤名>` |
-| 04 | [标签页后续](04-tabs-followups.md) | 待开发 | `feat/tabs-followups` |
-| 05 | [助手后续](05-assistant-followups.md) | 待开发 | `feat/assistant-followups` |
-| — | 地址栏修复（无规格，单独进行） | 进行中 | `fix/addressbar` |
+| 编号 | 方案 |
+| --- | --- |
+| 01 | [全局搜索显示增强](01-global-search.md)（8 个阶段） |
+| 02 | [侧栏目录树打磨](02-tree-polish.md) |
+| 03 | [下一步重构](03-refactor-next.md) |
+| 04 | [标签页后续](04-tabs-followups.md) |
+| 05 | [助手后续](05-assistant-followups.md) |
 
-状态取值：待开发 / 进行中 / 已完成。开始一个方案时把状态改为“进行中”，合并后改为“已完成”，与代码同一提交。
+**任务状态、分支、依赖与验收统一维护在仓库根目录 [`TASK.md`](../../TASK.md)**，本目录不再记录状态，避免两处不一致。界面与动效规范见 [`docs/UI.md`](../UI.md)。
 
 ## 编码代理约定
 

@@ -239,14 +239,14 @@ func TestSearchBoxSortSwitch(t *testing.T) {
 	}
 }
 
-// TestSearchBoxSortSegmentIsOnScreen: the relevance/name switch is in the
-// query row and changing it reorders the visible hits.
+// TestSearchBoxSortSegmentIsOnScreen: the relevance/folder/type/name switch is
+// in the query row and changing it reorders the visible hits.
 func TestSearchBoxSortSegmentIsOnScreen(t *testing.T) {
 	a, tt, _ := keynavWindow(t, 1)
 	tt.Key(ui.Ctrl, ui.KeyK)
 	tt.Frame()
 	sortLabels := append(tt.Texts()[:0:0], tt.Texts()...)
-	if !tt.HasText("相关度") || !tt.HasText("名称") {
+	if !tt.HasText("相关度") || !tt.HasText("按文件夹") || !tt.HasText("按类型") || !tt.HasText("名称") {
 		t.Fatalf("the sort switch is missing: %v", tt.Texts())
 	}
 	// The pane's 名称 column has the same label earlier in the walk: click the
@@ -255,13 +255,148 @@ func TestSearchBoxSortSegmentIsOnScreen(t *testing.T) {
 	if !ok {
 		t.Fatalf("the relevance segment is not built: %v", sortLabels)
 	}
-	// The label is narrower than its segment. The name segment starts about
-	// one label width after the relevance label.
-	tt.ClickAt(first.X+first.W*2+2, first.Y+first.H/2)
+	// Use the type segment's rectangle to reach the name segment: the pane's
+	// own 名称 column can also be present in the window.
+	typ, okType := tt.Find("按类型")
+	if !okType {
+		t.Fatalf("the type segment is not built: %v", tt.Texts())
+	}
+	// The labels are text boxes inside padded segments: stepping past the
+	// type label's padding lands in the center of the next segment's name.
+	tt.ClickAt(typ.X+typ.W+24, first.Y+first.H/2)
 	tt.Frame()
 	if a.searchBox.sortBy != sortName {
 		t.Fatalf("sort = %v, want name after clicking 名称", a.searchBox.sortBy)
 	}
+}
+
+func TestSearchBoxGroupRows(t *testing.T) {
+	now := time.Now()
+	folderResults := []Entry{
+		{Name: "b.md", Path: "/work/reports/b.md", Dir: "/work/reports", Ext: "md", ModTime: now},
+		{Name: "a.txt", Path: "/work/reports/a.txt", Dir: "/work/reports", Ext: "txt", ModTime: now},
+		{Name: "e.txt", Path: "/work/archive/e.txt", Dir: "/work/archive", Ext: "txt", ModTime: now},
+		{Name: "c.png", Path: "/work/archive/c.png", Dir: "/work/archive", Ext: "png", ModTime: now},
+		{Name: "d.pdf", Path: "/work/archive/d.pdf", Dir: "/work/archive", Ext: "pdf", ModTime: now},
+	}
+	b := &searchBoxState{sortBy: sortFolder, results: folderResults}
+	b.sortHits()
+	groups := groupedRows(b.rows)
+	if len(groups) != 2 {
+		t.Fatalf("folder headings = %d, want 2: %+v", len(groups), groups)
+	}
+	if groups[0].count != 3 || groups[1].count != 2 {
+		t.Fatalf("folder group counts = %+v, want archive=3 reports=2", groups)
+	}
+	for _, g := range groups {
+		if !strings.HasSuffix(g.label, " · "+itoa(g.count)) {
+			t.Fatalf("folder heading %q does not show %d items", g.label, g.count)
+		}
+	}
+
+	typeResults := []Entry{
+		{Name: "b.md", Path: "/work/b.md", Ext: "md", ModTime: now},
+		{Name: "a.txt", Path: "/work/a.txt", Ext: "txt", ModTime: now},
+		{Name: "c.png", Path: "/work/c.png", Ext: "png", ModTime: now},
+		{Name: "folder", Path: "/work/folder", IsDir: true, ModTime: now},
+	}
+	b = &searchBoxState{sortBy: sortType, results: typeResults}
+	b.sortHits()
+	groups = groupedRows(b.rows)
+	got := make(map[string]int, len(groups))
+	for _, g := range groups {
+		got[g.label] = g.count
+	}
+	want := map[string]int{"文本文档 · 2": 2, "PNG 文件 · 1": 1, "文件夹 · 1": 1}
+	if len(groups) != len(want) {
+		t.Fatalf("type headings = %+v, want one per type %v", groups, want)
+	}
+	for label, count := range want {
+		if got[label] != count {
+			t.Fatalf("type group %q = %d items, want %d: %v", label, got[label], count, got)
+		}
+	}
+}
+
+func TestSearchBoxMoveSkipsGroupHeadings(t *testing.T) {
+	now := time.Now()
+	a := &App{searchBox: searchBoxState{
+		sortBy: sortFolder,
+		results: []Entry{
+			{Name: "a.txt", Path: "/work/reports/a.txt", Dir: "/work/reports", Ext: "txt", ModTime: now},
+			{Name: "b.txt", Path: "/work/reports/b.txt", Dir: "/work/reports", Ext: "txt", ModTime: now},
+			{Name: "c.txt", Path: "/work/archive/c.txt", Dir: "/work/archive", Ext: "txt", ModTime: now},
+		},
+	}}
+	a.searchBox.sortHits()
+	a.searchBox.cursor = 0 // The list starts on the first heading.
+
+	for _, step := range []struct {
+		move int
+		row  int
+		name string
+	}{
+		{1, 1, "c.txt"},
+		{1, 3, "a.txt"},
+		{1, 4, "b.txt"},
+		{-1, 3, "a.txt"},
+		{-1, 1, "c.txt"},
+	} {
+		a.searchBoxMove(step.move)
+		if a.searchBox.cursor != step.row {
+			t.Fatalf("move %+v landed on display row %d, want %d", step, a.searchBox.cursor, step.row)
+		}
+		hit, ok := a.searchBox.hit()
+		if !ok || hit.Name != step.name {
+			t.Fatalf("move %+v selected %+v, want %q", step, hit, step.name)
+		}
+	}
+}
+
+// BenchmarkSearchBoxGroupSwitch10000 is the frame budget for changing the
+// grouping of a full result set: sorting and rebuilding the display rows must
+// stay below 16ms even before the next paint.
+func BenchmarkSearchBoxGroupSwitch10000(b *testing.B) {
+	now := time.Now()
+	results := make([]Entry, 10000)
+	for i := range results {
+		ext := []string{"txt", "md", "png", "pdf"}[i%4]
+		dir := filepath.Join("/work", "folder-"+itoa(i%100))
+		results[i] = Entry{
+			Name:    "result-" + itoa(i) + "." + ext,
+			Path:    filepath.Join(dir, "result-"+itoa(i)+"."+ext),
+			Dir:     dir,
+			Ext:     ext,
+			ModTime: now.Add(-time.Duration(i) * time.Second),
+		}
+	}
+
+	b.ResetTimer()
+	start := time.Now()
+	for i := 0; i < b.N; i++ {
+		state := &searchBoxState{sortBy: sortFolder, results: slices.Clone(results)}
+		state.sortHits()
+	}
+	b.StopTimer()
+	avg := time.Since(start) / time.Duration(b.N)
+	if avg >= 16*time.Millisecond {
+		b.Fatalf("group switch averaged %v, want < 16ms", avg)
+	}
+}
+
+type searchRowGroup struct {
+	label string
+	count int
+}
+
+func groupedRows(rows []searchDisplayRow) []searchRowGroup {
+	var out []searchRowGroup
+	for _, row := range rows {
+		if row.heading {
+			out = append(out, searchRowGroup{label: row.label, count: row.count})
+		}
+	}
+	return out
 }
 
 // TestSearchPathSegmentClick: a breadcrumb under a hit is a mouse shortcut to

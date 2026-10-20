@@ -70,6 +70,7 @@ type searchBoxState struct {
 	filters    searchFilters
 	allResults []Entry
 	results    []Entry
+	rows       []searchDisplayRow
 	list       ui.ListState
 	busy       bool
 	started    time.Time
@@ -193,8 +194,19 @@ type searchSort int
 
 const (
 	sortRelevance searchSort = iota
+	sortFolder
+	sortType
 	sortName
 )
+
+// searchDisplayRow flattens grouped results for the virtual list: a heading
+// is not a hit and the keyboard walks around it.
+type searchDisplayRow struct {
+	heading bool
+	label   string
+	count   int
+	hit     int
+}
 
 // searchQueryWithFilters appends the filter bar's choices to the typed
 // query. A raw query of nothing but filters is a legitimate search: it lists
@@ -279,6 +291,7 @@ func (a *App) searchBoxFrame() {
 	b.walkQuery = searchquery.Parse(strings.TrimSpace(q))
 	b.allResults = nil
 	b.results = nil
+	b.rows = nil
 	b.seen = nil
 	b.scores = nil
 	b.kinds = nil
@@ -363,10 +376,14 @@ func (a *App) searchBoxFrame() {
 
 // hit is the entry under the cursor, if the list has one.
 func (b *searchBoxState) hit() (Entry, bool) {
-	if b.cursor < 0 || b.cursor >= len(b.results) {
+	if b.cursor < 0 || b.cursor >= len(b.rows) {
 		return Entry{}, false
 	}
-	return b.results[b.cursor], true
+	i := b.rows[b.cursor].hit
+	if b.rows[b.cursor].heading || i < 0 || i >= len(b.results) {
+		return Entry{}, false
+	}
+	return b.results[i], true
 }
 
 // addHits folds a raw batch into the walk's results. The filter bar then
@@ -424,15 +441,72 @@ func (b *searchBoxState) refilter() {
 	b.sortHits()
 }
 
-// sortHits puts the hits in the order the switch asks for. Relevance keeps
-// the name and then the path as ties, so the order is deterministic as
-// batches stream in; name is the Everything order.
-func (b *searchBoxState) sortHits() {
-	if b.sortBy == sortName {
-		sortHitsByName(b.results)
+// rebuildDisplayRows turns the sorted results into list rows. Ungrouped modes
+// have one row per hit; folder/type modes put a heading before each run.
+func (b *searchBoxState) rebuildDisplayRows() {
+	b.rows = b.rows[:0]
+	if b.sortBy != sortFolder && b.sortBy != sortType {
+		for i := range b.results {
+			b.rows = append(b.rows, searchDisplayRow{hit: i})
+		}
 		return
 	}
-	sortHitsByScore(b.results, b.scores)
+	for i := 0; i < len(b.results); {
+		j := i + 1
+		for j < len(b.results) && b.groupKey(b.results[i]) == b.groupKey(b.results[j]) {
+			j++
+		}
+		b.rows = append(b.rows, searchDisplayRow{
+			heading: true,
+			label:   b.groupLabel(b.results[i]) + " · " + itoa(j-i),
+			count:   j - i,
+		})
+		for ; i < j; i++ {
+			b.rows = append(b.rows, searchDisplayRow{hit: i})
+		}
+	}
+}
+
+func (b *searchBoxState) groupKey(e Entry) string {
+	if b.sortBy == sortType {
+		return typeLabel(e)
+	}
+	return strings.ToLower(e.Dir)
+}
+
+func (b *searchBoxState) groupLabel(e Entry) string {
+	if b.sortBy == sortType {
+		return typeLabel(e)
+	}
+	return searchPathText(searchPathSegments(e.Dir, homeForSearch(), 4))
+}
+
+// sortHits puts the hits in the order the switch asks for. Relevance keeps
+// the name and then the path as ties, so the order is deterministic as
+// batches stream in; folder and type modes add heading rows, while name is
+// the Everything order.
+func (b *searchBoxState) sortHits() {
+	switch b.sortBy {
+	case sortName:
+		sortHitsByName(b.results)
+	case sortFolder:
+		slices.SortStableFunc(b.results, func(x, y Entry) int {
+			if c := strings.Compare(strings.ToLower(x.Dir), strings.ToLower(y.Dir)); c != 0 {
+				return c
+			}
+			return strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name))
+		})
+	case sortType:
+		slices.SortStableFunc(b.results, func(x, y Entry) int {
+			if c := strings.Compare(typeLabel(x), typeLabel(y)); c != 0 {
+				return c
+			}
+			return strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name))
+		})
+	default:
+		sortHitsByScore(b.results, b.scores)
+	}
+	b.rebuildDisplayRows()
 }
 
 // sortHitsByScore puts higher scores first, with name and path breaking ties.
@@ -478,14 +552,27 @@ func sortHitsByName(hits []Entry) {
 // newer walk — leaves the cursor at the top.
 func (b *searchBoxState) cursorRow() int {
 	if b.cursorPath == "" {
+		for i, row := range b.rows {
+			if !row.heading {
+				return i
+			}
+		}
 		return 0
 	}
-	for i, e := range b.results {
-		if e.Path == b.cursorPath {
+	for i, row := range b.rows {
+		if row.heading || row.hit < 0 || row.hit >= len(b.results) {
+			continue
+		}
+		if b.results[row.hit].Path == b.cursorPath {
 			return i
 		}
 	}
 	b.cursorPath = ""
+	for i, row := range b.rows {
+		if !row.heading {
+			return i
+		}
+	}
 	return 0
 }
 
@@ -493,14 +580,39 @@ func (b *searchBoxState) cursorRow() int {
 // scrolls the hit it lands on into view.
 func (a *App) searchBoxMove(d int) {
 	b := &a.searchBox
-	if len(b.results) == 0 {
+	if len(b.rows) == 0 {
 		return
 	}
-	i := min(max(b.cursor+d, 0), len(b.results)-1)
+	i := max(b.cursor, 0)
+	step := 1
+	if d < 0 {
+		step = -1
+	}
+	steps := d
+	if steps < 0 {
+		steps = -steps
+	}
+	for n := 0; n < steps; n++ {
+		next := i
+		for {
+			next += step
+			if next < 0 || next >= len(b.rows) {
+				break
+			}
+			if !b.rows[next].heading {
+				i = next
+				break
+			}
+		}
+		if next < 0 || next >= len(b.rows) {
+			break
+		}
+	}
 	if i == b.cursor {
 		return
 	}
-	b.cursor, b.cursorPath = i, b.results[i].Path
+	b.cursor = i
+	b.cursorPath = b.results[b.rows[i].hit].Path
 	b.list.ScrollIntoView(i)
 	repaint()
 }
@@ -575,7 +687,7 @@ func (a *App) searchBoxBody(c *ui.Context) {
 			a.searchBoxKeys(c, in)
 			sortIdx := int(b.sortBy)
 			idx := scopeIndex(b.scope)
-			if ui.Segmented(c, &sortIdx, "相关度", "名称").Shrink(0).Changed() {
+			if ui.Segmented(c, &sortIdx, "相关度", "按文件夹", "按类型", "名称").Shrink(0).Changed() {
 				b.sortBy = searchSort(sortIdx)
 				b.sortHits()
 				b.cursor = b.cursorRow()
@@ -592,12 +704,27 @@ func (a *App) searchBoxBody(c *ui.Context) {
 		if len(b.results) == 0 {
 			a.searchBoxNotice(c, listH)
 		} else {
-			ui.List(c, &b.list, len(b.results), func(i int) {
-				a.searchHitRow(c, i)
+			ui.List(c, &b.list, len(b.rows), func(i int) {
+				a.searchDisplayRowAt(c, i)
 			}).FillWidth().Height(listH).MinHeight(0)
 		}
 		a.searchBoxStatus(c)
 	})
+}
+
+func (a *App) searchDisplayRowAt(c *ui.Context, i int) {
+	b := &a.searchBox
+	if i < 0 || i >= len(b.rows) {
+		return
+	}
+	row := b.rows[i]
+	if row.heading {
+		ui.Row(c).FillWidth().Height(24).Padding(0, 6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, row.label).FontSize(11).FontWeight(600).TextColor(colorMuted()).SingleLine()
+		})
+		return
+	}
+	a.searchHitRow(c, row.hit)
 }
 
 // searchFilterBar is the row under the query: each menu narrows the same

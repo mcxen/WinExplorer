@@ -311,6 +311,7 @@ func (a *App) searchBoxCancel() {
 	b.filters = searchFilters{}
 	b.allResults = nil
 	b.results = nil
+	b.rows = nil
 	b.seen = nil
 	b.busy = false
 	b.src = sourceNone

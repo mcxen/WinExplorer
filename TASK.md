@@ -48,7 +48,7 @@
 | F5 | 消除 TestRemoteExtRun 偶发失败 | 中 | 已完成 | 本文 | — | `fix/test-remoteext` |
 | R1 | 拆分 searchbox.go | 高 | 已完成 | [03 §3](docs/specs/03-refactor-next.md) | — | `refactor/searchbox-split` |
 | S1 | 搜索：完整文件名 + 相对路径 + 两行行 | 高 | 已完成 | [01 阶段 1](docs/specs/01-global-search.md) | R1 | `feat/search-p1` |
-| S2 | 搜索：路径分段可点击 | 中 | 待开发 | 01 阶段 2 | S1 | `feat/search-p2` |
+| S2 | 搜索：路径分段可点击 | 中 | 已完成 | 01 阶段 2 | S1 | `feat/search-p2` |
 | S3 | 搜索：相关度排序 | 高 | 已完成 | 01 阶段 3 | S1 | `feat/search-p3` |
 | S4 | 搜索：匹配原因标签 | 中 | 待开发 | 01 阶段 4 | S3 | `feat/search-p4` |
 | S5 | 搜索：筛选条 | 中 | 待开发 | 01 阶段 5 | S3 | `feat/search-p5` |

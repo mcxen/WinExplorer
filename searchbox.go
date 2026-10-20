@@ -475,8 +475,7 @@ func (a *App) searchHitRow(c *ui.Context, i int) {
 		main.Children(func() {
 			ui.RichText(c, searchNameSpans(b.parsed, e.Name, e.IsDir, 12)...).
 				SingleLine().MinWidth(0)
-			ui.Text(c, searchPathText(searchPathSegments(e.Dir, homeForSearch(), 5))).
-				FontSize(11).TextColor(colorMuted()).SingleLine().MinWidth(0)
+			a.searchPathRow(c, e)
 		})
 		meta := ui.Column(c).Width(searchHitMetaW).Shrink(0).Height(searchHitRowH).Justify(ui.Center)
 		meta.Children(func() {
@@ -512,6 +511,72 @@ func (a *App) searchHitRow(c *ui.Context, i int) {
 	if row.DoubleClicked() {
 		a.openSearchHit(e)
 	}
+}
+
+// searchPathRow is a hit's parent path as clickable breadcrumbs. A segment
+// takes the mouse to its folder without choosing the row: the innermost
+// button gets the click, as the 位置 button does. The elided middle has no
+// destination of its own and shows the hidden folders on hover instead.
+func (a *App) searchPathRow(c *ui.Context, e Entry) {
+	segs := searchPathSegments(e.Dir, homeForSearch(), 5)
+	row := ui.Row(c).MinWidth(0).Height(16).AlignItems(ui.Center).Gap(2).ClipX()
+	row.Children(func() {
+		for i, seg := range segs {
+			if i > 0 {
+				ui.Text(c, "›").FontSize(11).TextColor(colorMuted()).Shrink(0).
+					Padding(0, 2)
+			}
+			if seg.Elided {
+				text := ui.Text(c, seg.Label).FontSize(11).TextColor(colorMuted()).Shrink(0)
+				hidden := elidedPath(e.Dir, segs)
+				text.Tooltip("省略的路径：" + hidden)
+				continue
+			}
+			btn := ui.ButtonBase(c.Key("seg-"+e.Path+"|"+seg.Path)).
+				Height(16).Padding(0, 2).Radius(3).Shrink(0)
+			if btn.Hovered() {
+				btn.Background(colorHover())
+			}
+			btn.Children(func() {
+				ui.Text(c, seg.Label).FontSize(11).TextColor(func() ui.Color {
+					if btn.Hovered() {
+						return colorAccent()
+					}
+					return colorMuted()
+				}()).SingleLine()
+			})
+			if btn.Clicked() {
+				a.searchBoxClose()
+				a.showExplorer()
+				a.navigate(seg.Path)
+			}
+		}
+	})
+}
+
+// elidedPath names the folders the ellipsis stands for, or the full parent
+// path when the segments cannot say exactly which ones they hid.
+func elidedPath(dir string, segs []pathSeg) string {
+	for i, seg := range segs {
+		if !seg.Elided {
+			continue
+		}
+		if i == 0 || i+1 >= len(segs) {
+			return dir
+		}
+		rel, ok := searchPathBelow(segs[i+1].Path, segs[i-1].Path)
+		if !ok {
+			return dir
+		}
+		names := splitPath(rel)
+		if len(names) > 1 {
+			names = names[:len(names)-1]
+		}
+		if len(names) > 0 {
+			return strings.Join(names, " › ")
+		}
+	}
+	return dir
 }
 
 // searchBoxStatus is the palette's footer, Everything's line: which engine

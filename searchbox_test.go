@@ -41,8 +41,8 @@ func TestCtrlKSearchBox(t *testing.T) {
 	// Nested hits keep the palette's labels unique: the pane shows the
 	// folders but not the files below them.
 	for _, sub := range []string{"alpha-dir", "beta-dir", "gamma-dir"} {
-		subdir := filepath.Join(dir, sub)
-		if err := os.Mkdir(subdir, 0o755); err != nil {
+		subdir := filepath.Join(dir, sub, "inner-"+sub)
+		if err := os.MkdirAll(subdir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(subdir, "nested-"+sub+".txt"), []byte("hello"), 0o644); err != nil {
@@ -71,10 +71,8 @@ func TestCtrlKSearchBox(t *testing.T) {
 	}
 	// The hits are laid out as rows: two of them stack at the same left edge,
 	// 44 DIP apart — the list inside the dialog has a real height.
-	firstBreadcrumb := searchPathText(searchPathSegments(a.searchBox.results[0].Dir, homeForSearch(), 5))
-	secondBreadcrumb := searchPathText(searchPathSegments(a.searchBox.results[1].Dir, homeForSearch(), 5))
-	firstRow, okFirst := tt.Find(firstBreadcrumb)
-	secondRow, okSecond := tt.Find(secondBreadcrumb)
+	firstRow, okFirst := tt.Find(a.searchBox.results[0].Name)
+	secondRow, okSecond := tt.Find(a.searchBox.results[1].Name)
 	if !okFirst || !okSecond {
 		t.Fatalf("the hits are not in the window: %v / %v", firstRow, secondRow)
 	}
@@ -262,6 +260,76 @@ func TestSearchBoxSortSegmentIsOnScreen(t *testing.T) {
 	tt.Frame()
 	if a.searchBox.sortBy != sortName {
 		t.Fatalf("sort = %v, want name after clicking 名称", a.searchBox.sortBy)
+	}
+}
+
+// TestSearchPathSegmentClick: a breadcrumb under a hit is a mouse shortcut to
+// that folder: the panel closes, the tab navigates there, and the row's cursor
+// does not move first.
+func TestSearchPathSegmentClick(t *testing.T) {
+	a, tt, dir := keynavWindow(t, 1)
+	nested := filepath.Join(dir, "reports", "2026", "q4")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "needle.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+	tt.Key(ui.Ctrl, ui.KeyK)
+	tt.Frame()
+	a.searchBox.scope = scopeFolder
+	tt.Type("needle")
+	tt.Frame()
+	waitSearchBox(t, tt, a)
+	tt.Frame()
+	if len(a.searchBox.results) != 1 {
+		t.Fatalf("hits = %v, want needle.txt", namesOf(a.searchBox.results))
+	}
+	before := a.searchBox.cursor
+	link := a.searchBox.results[0]
+	segs := searchPathSegments(link.Dir, homeForSearch(), 5)
+	if len(segs) < 2 {
+		t.Fatalf("segments = %+v, want a breadcrumb", segs)
+	}
+	// Click the second-to-last segment, which is 2026: its label is unique
+	// in the palette's path line.
+	want := segs[len(segs)-2]
+	r, ok := tt.Find(want.Label)
+	if !ok {
+		t.Fatalf("the %q segment is not built: %v", want.Label, tt.Texts())
+	}
+	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+	if a.searchBox.open {
+		t.Fatal("the palette stayed open after a breadcrumb click")
+	}
+	if a.cur().path != want.Path {
+		t.Fatalf("the tab is in %q, want the segment %q", a.cur().path, want.Path)
+	}
+	if a.searchBox.cursor != before {
+		t.Fatalf("the breadcrumb moved the palette cursor to %d", a.searchBox.cursor)
+	}
+}
+
+// TestSearchPathElidedSegmentHasNoDestination: the middle ellipsis is not a
+// button, and its tooltip names the hidden folders.
+func TestSearchPathElidedSegmentHasNoDestination(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "Users", "alice")
+	dir := filepath.Join(home, "Library", "Caches", "com", "app", "very", "deep", "nested", "folder", "structure")
+	segs := searchPathSegments(dir, home, 5)
+	elided := -1
+	for i := range segs {
+		if segs[i].Elided {
+			elided = i
+		}
+	}
+	if elided < 0 {
+		t.Fatalf("segments = %+v, want one elided segment", segs)
+	}
+	want := "Caches › com › app › very › deep › nested"
+	if got := elidedPath(dir, segs); got != want {
+		t.Fatalf("elided tooltip = %q, want %q", got, want)
 	}
 }
 

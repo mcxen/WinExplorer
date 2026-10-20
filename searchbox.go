@@ -10,6 +10,7 @@ import (
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 
+	"sunvale/internal/search"
 	"sunvale/internal/searchquery"
 )
 
@@ -364,7 +365,9 @@ func (a *App) searchBoxFrame() {
 				return
 			}
 		}
-		streamMatches(roots, query, hidden, deadline, func(batch []Entry, more bool) {
+		search.Stream(roots, query, search.Options{
+			Hidden: hidden, Deadline: deadline, Max: searchMaxResults,
+		}, func(batch []Entry, more bool) {
 			land(func() {
 				if !live() {
 					return // closed, or a newer query took over

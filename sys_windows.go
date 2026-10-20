@@ -65,12 +65,6 @@ func volumeRoot(path string) string {
 	return `C:\`
 }
 
-// sysSearchPrune are the directories a 全局 search skips: none. Each drive is
-// its own root and Everything searches the system's folders too; the drives'
-// own unreadable ones (System Volume Information, $Recycle.Bin) are skipped by
-// the walk itself.
-func sysSearchPrune() []string { return nil }
-
 // sysHiddenName applies Explorer's hidden rule to a folder entry. Dot names
 // remain hidden for compatibility, while the Win32 attribute is what makes
 // ordinary names such as AppData hidden in the address-bar completion.

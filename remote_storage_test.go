@@ -191,6 +191,147 @@ func TestRemoteStorageChangesTheHomepage(t *testing.T) {
 	}
 }
 
+// TestRemoteHomepageStorages: the homepage's storage row lists the enabled
+// mounts and skips a disabled one, and a remark replaces the path as the
+// label the row shows.
+func TestRemoteHomepageStorages(t *testing.T) {
+	e := storageEnv(t)
+	pics := filepath.Join(e.home, "Pictures")
+	if err := os.MkdirAll(pics, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tok := e.login()
+	rr := e.api(http.MethodPost, "/api/storage/create", tok, map[string]any{
+		"mount_path": "/pics", "driver": "local",
+		"addition": `{"root":"` + pics + `"}`, "remark": "图片",
+	})
+	if rr.Code != 200 {
+		t.Fatalf("create: %d (%s)", rr.Code, rr.Message)
+	}
+	var created struct {
+		ID uint `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Data, &created); err != nil {
+		t.Fatal(err)
+	}
+
+	rr = e.api(http.MethodGet, "/api/fs/storage_list", tok, nil)
+	if rr.Code != 200 {
+		t.Fatalf("storage list: %d (%s)", rr.Code, rr.Message)
+	}
+	var page remoteFSListData
+	if err := json.Unmarshal(rr.Data, &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 2 || page.Content[0].Name != "主文件夹" || page.Content[0].Path != "/" ||
+		page.Content[1].Name != "图片" || page.Content[1].Path != "/pics" || !page.Content[1].IsDir {
+		t.Fatalf("homepage storages = %+v", page.Content)
+	}
+
+	if rr := e.api(http.MethodPost, "/api/storage/disable?id="+strconv.Itoa(int(created.ID)), tok, nil); rr.Code != 200 {
+		t.Fatalf("disable: %d (%s)", rr.Code, rr.Message)
+	}
+	rr = e.api(http.MethodGet, "/api/fs/storage_list", tok, nil)
+	if err := json.Unmarshal(rr.Data, &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 1 || page.Content[0].Path != "/" {
+		t.Fatalf("disabled mount still listed: %+v", page.Content)
+	}
+	if guest := e.api(http.MethodGet, "/api/fs/storage_list", "", nil); guest.Code != 401 {
+		t.Fatalf("guest storage list: code %d", guest.Code)
+	}
+}
+
+// TestRemoteHiddenFiles: dotfiles stay out of listings until the owner
+// turns the switch on, and the switch is the same one both pages read.
+func TestRemoteHiddenFiles(t *testing.T) {
+	e := storageEnv(t)
+	e.writeFile(".secret", "x")
+	e.writeFile("visible.txt", "y")
+	if err := os.Mkdir(filepath.Join(e.home, ".hidden"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tok := e.login()
+
+	names := func() []string {
+		t.Helper()
+		rr := e.api(http.MethodPost, "/api/fs/list", tok, map[string]any{"path": "/"})
+		if rr.Code != 200 {
+			t.Fatalf("list: %d (%s)", rr.Code, rr.Message)
+		}
+		var page remoteFSListData
+		if err := json.Unmarshal(rr.Data, &page); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, o := range page.Content {
+			out = append(out, o.Name)
+		}
+		return out
+	}
+	got := names()
+	for _, bad := range []string{".secret", ".hidden"} {
+		for _, n := range got {
+			if n == bad {
+				t.Fatalf("hidden %q listed while the switch is off: %v", bad, got)
+			}
+		}
+	}
+	hasVisible := false
+	for _, n := range got {
+		if n == "visible.txt" {
+			hasVisible = true
+		}
+	}
+	if !hasVisible {
+		t.Fatalf("visible.txt missing: %v", got)
+	}
+
+	// The directory completion used by the address bar follows the same
+	// switch, so a hidden folder is not suggested either.
+	rr := e.api(http.MethodPost, "/api/fs/dirs", tok, map[string]any{"path": "/"})
+	if rr.Code != 200 {
+		t.Fatalf("dirs: %d (%s)", rr.Code, rr.Message)
+	}
+	var dirs []remoteDirEntry
+	if err := json.Unmarshal(rr.Data, &dirs); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range dirs {
+		if d.Name == ".hidden" {
+			t.Fatal("the address-bar completion suggested a hidden folder")
+		}
+	}
+
+	if rr := e.api(http.MethodGet, "/api/fs/hidden", tok, nil); rr.Code != 200 {
+		t.Fatalf("read switch: %d (%s)", rr.Code, rr.Message)
+	}
+	if rr := e.api(http.MethodPost, "/api/fs/hidden", tok, map[string]any{"show": true}); rr.Code != 200 {
+		t.Fatalf("turn on: %d (%s)", rr.Code, rr.Message)
+	}
+	got = names()
+	seen := map[string]bool{}
+	for _, n := range got {
+		seen[n] = true
+	}
+	if !seen[".secret"] || !seen[".hidden"] {
+		t.Fatalf("hidden entries still missing after the switch: %v", got)
+	}
+
+	// It persists: a fresh read of the switch comes back on.
+	rr = e.api(http.MethodGet, "/api/fs/hidden", tok, nil)
+	var sw struct {
+		Show bool `json:"show"`
+	}
+	if err := json.Unmarshal(rr.Data, &sw); err != nil || !sw.Show {
+		t.Fatalf("switch did not persist: %s", rr.Data)
+	}
+	if guest := e.api(http.MethodPost, "/api/fs/hidden", "", map[string]any{"show": false}); guest.Code != 401 {
+		t.Fatalf("guest flipped the switch: code %d", guest.Code)
+	}
+}
+
 // TestRemoteDriverEndpoints: the create page's driver list and form.
 func TestRemoteDriverEndpoints(t *testing.T) {
 	e := storageEnv(t)

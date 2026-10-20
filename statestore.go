@@ -33,9 +33,13 @@ type persistedState struct {
 	// each maps a virtual path to a disk folder, and the one at "/" is what
 	// the remote browser opens on.
 	RemoteStorages []remoteStorage `json:"remoteStorages,omitempty"`
-	Shares         []remoteShare   `json:"shares"`
-	Settings       *appSettings    `json:"settings"`
-	Plugins        []string        `json:"plugins"`
+	// RemoteShowHidden is the remote pages' 显示隐藏的项目 switch
+	// (remote_fs.go). Off by default, and stored apart from the desktop's
+	// own ShowHidden: the phone and the window hide different things.
+	RemoteShowHidden bool          `json:"remoteShowHidden,omitempty"`
+	Shares           []remoteShare `json:"shares"`
+	Settings         *appSettings  `json:"settings"`
+	Plugins          []string      `json:"plugins"`
 	// PluginSettings holds each plugin's own key-value preferences, by
 	// plugin id. A state file written before this field existed
 	// unmarshals to nil, and the setters initialize it lazily.
@@ -453,6 +457,21 @@ func (st *persistedState) setRemoteStorages(list []remoteStorage) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.RemoteStorages = append([]remoteStorage(nil), list...)
+	st.saveLocked()
+}
+
+// remoteShowHidden reports the remote pages' hidden-file switch.
+func (st *persistedState) remoteShowHidden() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.RemoteShowHidden
+}
+
+// setRemoteShowHidden persists the remote pages' hidden-file switch.
+func (st *persistedState) setRemoteShowHidden(on bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.RemoteShowHidden = on
 	st.saveLocked()
 }
 

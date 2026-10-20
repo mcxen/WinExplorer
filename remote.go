@@ -308,6 +308,8 @@ func (a *App) remoteMux() http.Handler {
 	mux.HandleFunc("/api/share/disable", a.remoteHandleShareDisable)
 	mux.HandleFunc("/sd/", a.remoteHandleShareDown)
 
+	mux.HandleFunc("/api/fs/storage_list", a.remoteHandleFSStorageList)
+	mux.HandleFunc("/api/fs/hidden", a.remoteHandleHidden)
 	// OpenList's storage and driver APIs: the mount table the remote tree
 	// is served from, and the driver form the create page renders.
 	mux.HandleFunc("/api/storage/list", a.remoteHandleStorageList)

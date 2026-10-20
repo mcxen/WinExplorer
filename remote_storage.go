@@ -241,6 +241,36 @@ func storageRespOf(s remoteStorage) *remoteStorage {
 
 // ---- handlers -------------------------------------------------------------
 
+// remoteHandleFSStorageList implements GET /api/fs/storage_list: the
+// enabled mounts as folders, which is the list the homepage shows above
+// the root mount's own files. Disabled mounts stay off the homepage — a
+// stopped mount is not a place to browse — while the management page's
+// own storage list still shows them, through /api/storage/list.
+func (a *App) remoteHandleFSStorageList(w http.ResponseWriter, r *http.Request) {
+	if !a.remoteIsAdmin(r) {
+		remoteErr(w, 401, "Guest user is disabled, login please")
+		return
+	}
+	var objs []remoteObj
+	for _, s := range a.remoteStorages() {
+		if s.Disabled {
+			continue
+		}
+		name := "主文件夹"
+		if s.MountPath != "/" {
+			name = strings.Trim(s.MountPath, "/")
+		}
+		if s.Remark != "" {
+			name = s.Remark
+		}
+		objs = append(objs, remoteObj{
+			Name: name, IsDir: true, Modified: s.Modified, Created: s.Modified,
+			Type: remoteFSTypeFolder, HashInfo: "null", Path: s.MountPath,
+		})
+	}
+	remoteOK(w, remoteFSListData{Content: objs, Total: int64(len(objs)), Write: false, Provider: "storage"})
+}
+
 // remoteHandleStorageList implements GET /api/storage/list: the mounts in
 // order, paged as OpenList pages them.
 func (a *App) remoteHandleStorageList(w http.ResponseWriter, r *http.Request) {

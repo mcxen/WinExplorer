@@ -593,6 +593,11 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
       <p class="hint">修改后旧地址失效，请使用新地址访问</p>
      </div>
      <div class="card">
+      <h2>隐藏的项目</h2>
+      <p class="mtext">控制文件页和远程首页是否列出以点开头的文件。两边共用这一处开关，关掉后列表里不再出现它们。</p>
+      <div class="setrow"><input type="checkbox" id="hiddenSwitch" class="switch"><span id="hiddenSwLabel">隐藏</span></div>
+     </div>
+     <div class="card">
       <h2>远程访问</h2>
       <p class="mtext">关闭后其他设备无法访问本服务，这个管理页也随之不可达。</p>
       <div class="setrow"><input type="checkbox" id="setSwitch" class="switch"><span id="setSwLabel">—</span></div>
@@ -651,6 +656,15 @@ let globalSearch=false,searchResults=null,searchSeq=0,searchTimer=null;
 let rowEls=new Map();
 try{const v=localStorage.getItem(VIEW_KEY);if(VIEWS.some(x=>x[0]===v))view=v}catch(e){}
 try{const s=JSON.parse(localStorage.getItem(SORT_KEY)||'null');if(s&&s.key){sortKey=s.key;sortAsc=!!s.asc}}catch(e){}
+async function loadHidden(){
+ const j=await api('/api/fs/hidden','GET');
+ showHidden=!!(j&&j.data&&j.data.show);
+}
+async function setHidden(on){
+ const j=await api('/api/fs/hidden','POST',{show:on});
+ showHidden=!!(j&&j.data&&j.data.show);
+ loadDir(curPath,true);
+}
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
 function btn(t,cls){const b=document.createElement('button');if(cls)b.className=cls;if(t)b.textContent=t;return b}
 function icon(n){const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('class','ic');s.setAttribute('viewBox','0 0 24 24');s.innerHTML=ICONS[n]||ICONS.file;return s}
@@ -746,6 +760,7 @@ async function boot(){
  }catch(e){}
  const m=await api('/api/me');
  if(m&&m.code===200&&m.data&&m.data.role===2){
+  await loadHidden();
   // 导航树要的容量信息先安静地取一次，仪表盘打开时再正式刷新。
   const st=await api('/api/sunvale/status');
   if(st&&st.code===200)status=st.data;
@@ -794,6 +809,8 @@ function renderStatus(){
  $('stSwitch').checked=!!s.enabled;
  $('setSwitch').checked=!!s.enabled;
  $('setSwLabel').textContent=s.enabled?'已开启':'已关闭';
+ const hs=$('hiddenSwitch');
+ if(hs){hs.checked=showHidden;$('hiddenSwLabel').textContent=showHidden?'显示':'隐藏';}
  $('setName').textContent=s.username||'—';
  if(s.port)$('portIn').value=s.port;
  const d=s.disk||{},t=d.total||0,f=d.free||0,used=Math.max(t-f,0);
@@ -968,7 +985,7 @@ const locLabel=p=>!p||p==='/'?'主文件夹':p;
 function inSearch(){return globalSearch&&!!(searchResults||$('filterBox').value.trim())}
 function visibleItems(){
  if(globalSearch&&searchResults)return sortList(searchResults);
- let list=items.filter(i=>showHidden||i.name[0]!=='.');
+ let list=items.slice();
  const q=filter.trim().toLowerCase();
  if(q)list=list.filter(i=>i.name.toLowerCase().indexOf(q)>=0);
  return sortList(list);
@@ -1933,7 +1950,7 @@ function backgroundMenuItems(){
   {label:'查看',icon:'grid'},
   ...VIEWS.map(([k,label])=>({label:'  '+label,checked:view===k,fn:()=>setView(k)})),
   null,
-  {label:'显示隐藏的项目',icon:'eye',checked:showHidden,fn:()=>{showHidden=!showHidden;render()}},
+  {label:'显示隐藏的项目',icon:'eye',checked:showHidden,fn:()=>setHidden(!showHidden)},
   {label:'显示项目复选框',icon:'check',checked:itemCheckboxes,fn:()=>{itemCheckboxes=!itemCheckboxes;render()}},
   null,
   {label:'刷新',icon:'refresh',fn:doRefresh}
@@ -1958,7 +1975,7 @@ function viewMenuItems(){
  items.push(null);
  items.push({label:'紧凑视图',checked:compact,fn:()=>{compact=!compact;render()}});
  items.push(null);
- items.push({label:'显示隐藏的项目',checked:showHidden,fn:()=>{showHidden=!showHidden;render()}});
+ items.push({label:'显示隐藏的项目',checked:showHidden,fn:()=>setHidden(!showHidden)});
  items.push({label:'显示项目复选框',checked:itemCheckboxes,fn:()=>{itemCheckboxes=!itemCheckboxes;render()}});
  return items;
 }
@@ -2782,6 +2799,7 @@ $('goShares').onclick=()=>go('shares');
 $('stCopy').onclick=()=>{if(status&&status.url)copyText(status.url)};
 $('stSwitch').onchange=()=>setRemote($('stSwitch').checked);
 $('setSwitch').onchange=()=>setRemote($('setSwitch').checked);
+$('hiddenSwitch').onchange=()=>setHidden($('hiddenSwitch').checked);
 $('accSave').onclick=saveAccount;
 $('tokenReset').onclick=resetTokenFlow;
 $('portApply').onclick=applyPort;

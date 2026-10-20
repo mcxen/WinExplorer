@@ -53,6 +53,9 @@ type remoteObj struct {
 	Type        int               `json:"type"`
 	HashInfo    string            `json:"hashinfo"`
 	HashInfoMap map[string]string `json:"hash_info"`
+	// Path is set only on the homepage's storage rows, where the label is
+	// not the virtual path the row opens.
+	Path string `json:"path,omitempty"`
 }
 
 // remoteFSHome mirrors newApp's homePath: the directory the virtual root
@@ -375,10 +378,17 @@ func (a *App) remoteHandleFSList(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 500, "object not found")
 		return
 	}
+	hidden := a.remoteShowHidden()
 	vdir := remoteVPath(disk)
 	objs := make([]remoteObj, 0, len(entries))
 	for _, de := range entries {
 		name := de.Name()
+		// Dotfiles stay out unless the owner asked the remote pages to show
+		// them. The filter lives here, not in each page, so the homepage and
+		// the management file page cannot disagree.
+		if !hidden && strings.HasPrefix(name, ".") {
+			continue
+		}
 		diskName := filepath.Join(disk, name)
 		st, err := os.Stat(diskName)
 		if err != nil {
@@ -417,6 +427,39 @@ func (a *App) remoteHandleFSList(w http.ResponseWriter, r *http.Request) {
 		WriteContentBypass: false,
 		Provider:           "unknown",
 	})
+}
+
+// remoteShowHidden reports whether the remote pages list dotfiles. It is
+// the remote server's own switch, not the desktop's 查看 setting: a phone
+// browsing the homepage should not inherit what the desktop window hides.
+func (a *App) remoteShowHidden() bool {
+	if a.store == nil {
+		return false
+	}
+	return a.store.remoteShowHidden()
+}
+
+// remoteHandleHidden is GET/POST /api/fs/hidden: the owner reads the
+// switch, and a POST flips it. Both pages ask here so the homepage and the
+// management file page stay on the same answer.
+func (a *App) remoteHandleHidden(w http.ResponseWriter, r *http.Request) {
+	if !a.remoteIsAdmin(r) {
+		remoteErr(w, 401, "Guest user is disabled, login please")
+		return
+	}
+	if r.Method == http.MethodPost {
+		var req struct {
+			Show bool `json:"show"`
+		}
+		if err := remoteReadReq(r, &req); err != nil {
+			remoteErr(w, 400, "bad request")
+			return
+		}
+		if a.store != nil {
+			a.store.setRemoteShowHidden(req.Show)
+		}
+	}
+	remoteOK(w, map[string]any{"show": a.remoteShowHidden()})
 }
 
 // remoteFSGetData is the data payload of /api/fs/get: the object with its

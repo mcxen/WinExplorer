@@ -84,6 +84,7 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"紧凑视图", "显示隐藏的项目", "显示项目复选框", "预览窗格",
 		"压缩为 ZIP 文件", "全部解压", "解压到…", "复制为路径", "属性",
 		"历史记录", "补全建议", "清除历史记录", "输入路径",
+		"隐藏的项目", "api/fs/hidden",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the management page lost the %q command", want)

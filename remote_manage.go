@@ -652,7 +652,11 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dirs := make([]remoteDirEntry, 0, len(entries))
+	hidden := a.remoteShowHidden()
 	for _, de := range entries {
+		if !hidden && strings.HasPrefix(de.Name(), ".") {
+			continue
+		}
 		// os.Stat follows symlinks, so a link to a folder lists as one, the
 		// same way /api/fs/list shows it.
 		st, err := os.Stat(filepath.Join(disk, de.Name()))

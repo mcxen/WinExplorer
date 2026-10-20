@@ -41,6 +41,12 @@ header a:hover{background:var(--hover)}
 #searchInput{width:170px}
 main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
 #hint{padding:2px 2px 10px;color:var(--muted);font-size:13px}
+#storages{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.st{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;cursor:pointer}
+.st:hover{background:var(--hover)}
+.st .ic{width:16px;height:16px;color:var(--accent)}
+.st.on{border-color:var(--accent)}
+#btnHidden.on{color:var(--accent);border-color:var(--accent)}
 #list{list-style:none;margin:0;padding:6px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 2px 10px var(--shadow)}
 #list:empty{display:none}
 .row{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px}
@@ -94,13 +100,14 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
  </div>
 </div>
 <div id="app" class="hidden">
- <header><h1 id="siteTitle">晴谷</h1><button id="btnTheme" class="tbtn" title="切换浅色/深色主题"></button><a href="/@manage">管理</a><button id="logoutBtn">退出</button></header>
+ <header><h1 id="siteTitle">晴谷</h1><button id="btnHidden" class="tbtn" title="显示隐藏的项目">隐藏</button><button id="btnTheme" class="tbtn" title="切换浅色/深色主题"></button><a href="/@manage">管理</a><button id="logoutBtn">退出</button></header>
  <div class="toolbar">
   <nav id="breadcrumb"></nav>
   <form id="searchForm"><input id="searchInput" placeholder="搜索当前目录"><button>搜索</button></form>
  </div>
  <main>
   <div id="hint" class="hidden"></div>
+  <div id="storages" class="hidden"></div>
   <div id="loading" class="loading hidden"><span class="spin"></span>加载中…</div>
   <ul id="list"></ul>
   <div id="msg" class="hidden"></div>
@@ -193,6 +200,44 @@ function rowEl(it,onClick){
  li.append(ic,nm,sz,tm);
  return li;
 }
+let showHidden=false;
+function paintHidden(){
+ const b=$('btnHidden');
+ b.classList.toggle('on',showHidden);
+ b.textContent=showHidden?'隐藏：开':'隐藏';
+ b.title=showHidden?'隐藏的项目当前显示':'显示隐藏的项目';
+}
+async function loadHidden(){
+ const j=await api('/api/fs/hidden','GET');
+ showHidden=!!(j&&j.data&&j.data.show);
+ paintHidden();
+}
+async function toggleHidden(){
+ const j=await api('/api/fs/hidden','POST',{show:!showHidden});
+ showHidden=!!(j&&j.data&&j.data.show);
+ paintHidden();
+ loadDir(currentPath);
+}
+// renderStorages is the homepage's mount row, OpenList's storage list:
+// only the root shows it, and each chip opens that mount.
+async function renderStorages(){
+ const box=$('storages');
+ box.textContent='';
+ if(currentPath!=='/'){box.classList.add('hidden');return}
+ const j=await api('/api/fs/storage_list','GET');
+ const items=(j&&j.data&&j.data.content)||[];
+ if(!items.length){box.classList.add('hidden');return}
+ box.classList.remove('hidden');
+ for(const it of items){
+  const b=document.createElement('button');
+  b.className='st'+(it.path===currentPath?' on':'');
+  b.type='button';
+  const ic=document.createElement('span');ic.className='ic';ic.innerHTML=iconSvg(KIND2ICON.folder);
+  b.append(ic,document.createTextNode(it.name));
+  b.onclick=()=>loadDir(it.path||'/');
+  box.appendChild(b);
+ }
+}
 async function loadDir(path){
  path=path||'/';
  if(path[0]!=='/')path='/'+path;
@@ -200,6 +245,7 @@ async function loadDir(path){
  $('searchInput').value='';
  $('hint').classList.add('hidden');
  renderBC();
+ renderStorages();
  hideMsg();
  $('list').innerHTML='';
  showLoading(true);
@@ -343,7 +389,7 @@ async function boot(){
   }
  }catch(e){}
  const m=await api('/api/me');
- if(m&&m.code===200&&m.data&&m.data.role===2){enterApp();loadDir(initPath)}
+ if(m&&m.code===200&&m.data&&m.data.role===2){enterApp();await loadHidden();loadDir(initPath)}
  else showLogin();
 }
 // 主题：太阳/月亮图标跟随当前模式，点击后在 light/dark 间切换并记住选择
@@ -352,6 +398,8 @@ $('btnTheme').onclick=()=>{svToggleTheme();paintThemeBtn()};
 paintThemeBtn();
 $('loginForm').addEventListener('submit',e=>{e.preventDefault();doLogin()});
 $('logoutBtn').onclick=doLogout;
+$('btnHidden').onclick=toggleHidden;
+paintHidden();
 $('searchForm').addEventListener('submit',e=>{e.preventDefault();doSearch()});
 $('pvClose').onclick=closePreview;
 $('pwdForm').addEventListener('submit',e=>{

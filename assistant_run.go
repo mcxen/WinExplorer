@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -54,10 +53,6 @@ type assistRun struct {
 	onPending  func(string)
 	onSwitched func(model string)
 }
-
-// errAssistantStopped is a user stop, not a failed reply. Partial text
-// already painted stays on screen.
-var errAssistantStopped = errors.New("已停止")
 
 // assistRunResult is what a headless caller gets back. Text is the final
 // assistant answer, Events keeps tool output for an A2A artifact, and
@@ -384,134 +379,6 @@ func publishAssist(run assistRun, id int, turn aiTurn, partial bool, result *ass
 	}
 }
 
-func assistantStopped(ctx context.Context, err error) bool {
-	if ctx != nil && ctx.Err() != nil {
-		return true
-	}
-	return err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, adk.ErrStreamCanceled))
-}
-
-// readMessageStream drains one model or tool stream. onText sees the text
-// so far and any reasoning accumulated beside it. Cancel keeps the partial
-// message and returns errAssistantStopped.
-func readMessageStream(ctx context.Context, stream *schema.StreamReader[*schema.Message], onText func(full, reasoning string), onTool func(name string)) (*schema.Message, error) {
-	if stream == nil {
-		return nil, nil
-	}
-	defer stream.Close()
-	var chunks []*schema.Message
-	var text, reasoning strings.Builder
-	stopped := false
-	for {
-		if ctx.Err() != nil {
-			stopped = true
-			break
-		}
-		chunk, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			if assistantStopped(ctx, err) {
-				stopped = true
-				break
-			}
-			return nil, err
-		}
-		if chunk == nil {
-			continue
-		}
-		chunks = append(chunks, chunk)
-		if chunk.Content != "" {
-			text.WriteString(chunk.Content)
-		}
-		if chunk.ReasoningContent != "" {
-			reasoning.WriteString(chunk.ReasoningContent)
-		}
-		if onText != nil && (chunk.Content != "" || chunk.ReasoningContent != "") {
-			onText(text.String(), reasoning.String())
-		}
-		if onTool != nil {
-			for _, call := range chunk.ToolCalls {
-				name := strings.TrimSpace(call.Function.Name)
-				if name != "" {
-					onTool(name)
-				}
-			}
-		}
-	}
-	if len(chunks) == 0 {
-		if stopped {
-			return nil, errAssistantStopped
-		}
-		return nil, nil
-	}
-	msg, err := schema.ConcatMessages(chunks)
-	if err != nil || msg == nil {
-		msg = &schema.Message{Role: schema.Assistant, Content: text.String()}
-	} else if msg.Content == "" {
-		msg.Content = text.String()
-	}
-	if stopped {
-		return msg, errAssistantStopped
-	}
-	return msg, nil
-}
-
-// streamLive is what a reply shows while it streams: a half-written choice
-// block is hidden, as streamShown does, but an OpenUI program is kept so the
-// pane can hold its place with a placeholder until it closes.
-func streamLive(text string) string {
-	cut, hide := len(text), false
-	if i := strings.Index(text, choiceOpen); i >= 0 && !strings.Contains(text[i:], choiceClose) {
-		cut, hide = i, true
-	}
-	if i := strings.Index(text, "```choices"); i >= 0 && strings.Count(text[i:], "```") < 2 && i < cut {
-		cut, hide = i, true
-	}
-	if hide {
-		return strings.TrimSpace(text[:cut])
-	}
-	return text
-}
-
-// streamShown hides an unfinished choice or OpenUI block so the markers do
-// not flash as separate tokens before the block is complete.
-func streamShown(text string) string {
-	cut, hide := len(text), false
-	if i := strings.Index(text, choiceOpen); i >= 0 && !strings.Contains(text[i:], choiceClose) && i < cut {
-		cut, hide = i, true
-	}
-	if i := strings.Index(text, "```choices"); i >= 0 && strings.Count(text[i:], "```") < 2 && i < cut {
-		cut, hide = i, true
-	}
-	if i := unclosedFence(text); i >= 0 && i < cut {
-		cut, hide = i, true
-	}
-	if i := strings.Index(text, openUIMarkerOpen); i >= 0 && !strings.Contains(text[i:], openUIMarkerEnd) && i < cut {
-		cut, hide = i, true
-	}
-	if hide {
-		return strings.TrimSpace(text[:cut])
-	}
-	return text
-}
-
-func reasoningLabel(text string) string {
-	text = strings.TrimSpace(text)
-	if i := strings.LastIndex(text, "\n"); i >= 0 {
-		text = strings.TrimSpace(text[i+1:])
-	}
-	rs := []rune(text)
-	if len(rs) > 36 {
-		text = "…" + string(rs[len(rs)-36:])
-	}
-	if text == "" {
-		return "正在思考…"
-	}
-	return "思考中 " + text
-}
-
 // assistModelHistory appends the named-file excerpts to the last user
 // message. The caller's history is left alone: its messages are shared with
 // the visible transcript, and the excerpts must not be written to disk.
@@ -601,28 +468,6 @@ func sessionPlain(s string) string {
 // crowd out the current folder.
 func (a *App) assistHistory() []*schema.Message {
 	return modelHistory(a.assist.turns)
-}
-
-func modelHistory(turns []aiTurn) []*schema.Message {
-	var msgs []*schema.Message
-	for _, t := range turns {
-		switch t.Role {
-		case "user":
-			body := t.Text
-			if t.Model != "" {
-				body = t.Model
-			}
-			msgs = append(msgs, schema.UserMessage(limitRunes(body, assistHistRunes)))
-		case "assistant":
-			if t.Text != "" {
-				msgs = append(msgs, schema.AssistantMessage(limitRunes(t.Text, assistHistRunes), nil))
-			}
-		}
-	}
-	if len(msgs) > assistHistMsgs {
-		msgs = msgs[len(msgs)-assistHistMsgs:]
-	}
-	return msgs
 }
 
 // showAssistEvent reports whether the reply is a choice the user has to

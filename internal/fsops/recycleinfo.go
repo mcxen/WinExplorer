@@ -1,4 +1,4 @@
-package main
+package fsops
 
 import (
 	"encoding/binary"
@@ -18,7 +18,7 @@ import (
 //	24  UTF-16LE the original path
 
 // parseRecycleInfo returns the original path recorded in a $I file.
-func parseRecycleInfo(data []byte) (string, bool) {
+func ParseRecycleInfo(data []byte) (string, bool) {
 	if len(data) < 24 {
 		return "", false
 	}
@@ -38,7 +38,7 @@ func parseRecycleInfo(data []byte) (string, bool) {
 
 // recycleDeletedAt is the deletion time the $I file records, zero when
 // unreadable.
-func recycleDeletedAt(data []byte) time.Time {
+func RecycleDeletedAt(data []byte) time.Time {
 	if len(data) < 20 || binary.LittleEndian.Uint32(data[0:]) != 2 {
 		return time.Time{}
 	}
@@ -62,7 +62,7 @@ func filetimeToTime(ft uint64) time.Time {
 
 // winFiletime converts a time to FILETIME, without time.Duration, which
 // overflows past about 292 years.
-func winFiletime(t time.Time) uint64 {
+func WinFiletime(t time.Time) uint64 {
 	sec := t.Unix() - windowsEpoch
 	return uint64(sec)*1e7 + uint64(t.Nanosecond())/100
 }
@@ -80,10 +80,10 @@ func decodeUTF16(u []uint16) string {
 // trashinfoEscape percent-escapes a path for a .trashinfo file, which is
 // a URI-style Path= line; the freedesktop spec says only % must be
 // escaped, as UTF-8 passes through directly.
-func trashinfoEscape(path string) string {
+func TrashinfoEscape(path string) string {
 	return strings.ReplaceAll(path, "%", "%25")
 }
 
-func trashinfoUnescape(path string) string {
+func TrashinfoUnescape(path string) string {
 	return strings.ReplaceAll(path, "%25", "%")
 }

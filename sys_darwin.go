@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"sunvale/internal/fsops"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -169,7 +171,7 @@ func sysTrashMove(path string) (string, string, error) {
 	if base == "" || base == "." || base == string(filepath.Separator) {
 		return "", "", fmt.Errorf("无效的路径")
 	}
-	name, err := uniqueTrashName(trash, base)
+	name, err := fsops.UniqueTrashName(trash, base)
 	if err != nil {
 		return "", "", err
 	}

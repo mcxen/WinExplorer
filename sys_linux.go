@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"sunvale/internal/fsops"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -182,7 +184,7 @@ func sysTrashMove(path string) (string, string, error) {
 	if base == "" || base == "." || base == "/" {
 		return "", "", fmt.Errorf("无效的路径")
 	}
-	name, err := uniqueTrashName(trash, base)
+	name, err := fsops.UniqueTrashName(trash, base)
 	if err != nil {
 		return "", "", err
 	}
@@ -194,7 +196,7 @@ func sysTrashMove(path string) (string, string, error) {
 	info := filepath.Join(root, "info", name+".trashinfo")
 	_ = os.WriteFile(info, []byte(fmt.Sprintf(
 		"[Trash Info]\nPath=%s\nDeletionDate=%s\n",
-		trashinfoEscape(path), time.Now().Format(time.RFC3339))), 0o600)
+		fsops.TrashinfoEscape(path), time.Now().Format(time.RFC3339))), 0o600)
 	return dst, name, nil
 }
 

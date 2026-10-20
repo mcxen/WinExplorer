@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"sunvale/internal/fsops"
+
 	"sunvale/internal/rename"
 )
 
@@ -86,7 +88,7 @@ func remoteBatchPlan(req *remoteBatchReq, srcDir, dstDir string, allowMerge bool
 			return nil, 500, "object not found"
 		}
 		dst := filepath.Join(dstDir, name)
-		if pathWithin(dst, src) {
+		if fsops.PathWithin(dst, src) {
 			continue // into itself or its own subtree: a no-op or a cycle
 		}
 		dstInfo, err := os.Lstat(dst)

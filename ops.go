@@ -1,13 +1,13 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"sunvale/internal/fsops"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
@@ -127,7 +127,7 @@ func (a *App) doPaste() {
 			if src == "" || src == pathThisPC {
 				continue
 			}
-			if pathWithin(dstDir, src) {
+			if fsops.PathWithin(dstDir, src) {
 				a.statusMsg = "无法将文件夹粘贴到其自身或子文件夹中"
 				return
 			}
@@ -148,7 +148,7 @@ func (a *App) doPaste() {
 			pasted = append(pasted, src)
 			continue
 		}
-		name, err := pasteOne(src, dstDir)
+		name, err := fsops.PasteOne(src, dstDir)
 		if err != nil {
 			failed = append(failed, filepath.Base(src))
 			continue
@@ -199,158 +199,6 @@ func (a *App) doPaste() {
 	if len(failed) > 0 {
 		a.statusMsg = "粘贴失败：" + strings.Join(failed, "、")
 	}
-}
-
-// pathWithin reports whether path is dir or a descendant of dir.
-func pathWithin(path, dir string) bool {
-	path = filepath.Clean(path)
-	dir = filepath.Clean(dir)
-	if path == dir {
-		return true
-	}
-	rel, err := filepath.Rel(dir, path)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func pasteOne(src, dstDir string) (string, error) {
-	info, err := os.Lstat(src)
-	if err != nil {
-		return "", err
-	}
-	name, err := uniqueCopyName(dstDir, filepath.Base(src), info.IsDir())
-	if err != nil {
-		return "", err
-	}
-	dst := filepath.Join(dstDir, name)
-	if info.IsDir() {
-		if err := copyDir(src, dst); err != nil {
-			return "", err
-		}
-		return name, nil
-	}
-	if err := copyFile(src, dst, info); err != nil {
-		return "", err
-	}
-	return name, nil
-}
-
-// uniqueCopyName is Windows-style: "名称 - 副本", then "名称 - 副本 (2)",
-// with the suffix before the extension for files.
-func uniqueCopyName(dir, name string, isDir bool) (string, error) {
-	candidate := copyName(name, isDir, 1)
-	for n := 2; n < 10000; n++ {
-		_, err := os.Lstat(filepath.Join(dir, candidate))
-		if errors.Is(err, os.ErrNotExist) {
-			return candidate, nil
-		}
-		if err != nil {
-			return "", err
-		}
-		candidate = copyName(name, isDir, n)
-	}
-	return "", fmt.Errorf("无法生成不冲突的名称")
-}
-
-func copyName(name string, isDir bool, n int) string {
-	suffix := " - 副本"
-	if n > 1 {
-		suffix = fmt.Sprintf(" - 副本 (%d)", n)
-	}
-	if isDir {
-		return name + suffix
-	}
-	ext := filepath.Ext(name)
-	stem := strings.TrimSuffix(name, ext)
-	if stem == "" {
-		return name + suffix
-	}
-	return stem + suffix + ext
-}
-
-func copyFile(src, dst string, info os.FileInfo) error {
-	if info.Mode()&os.ModeSymlink != 0 {
-		target, err := os.Readlink(src)
-		if err != nil {
-			return err
-		}
-		return os.Symlink(target, dst)
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(out, in)
-	closeErr := out.Close()
-	if copyErr != nil {
-		_ = os.Remove(dst)
-		return copyErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(dst)
-		return closeErr
-	}
-	_ = os.Chtimes(dst, info.ModTime(), info.ModTime())
-	return nil
-}
-
-func copyDir(src, dst string) error {
-	srcClean := filepath.Clean(src)
-	seen := map[string]struct{}{srcClean: {}}
-	return copyDirRec(srcClean, dst, seen)
-}
-
-func copyDirRec(src, dst string, seen map[string]struct{}) error {
-	info, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	if err := os.Mkdir(dst, info.Mode().Perm()); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		srcPath := filepath.Join(src, e.Name())
-		dstPath := filepath.Join(dst, e.Name())
-		fi, err := os.Lstat(srcPath)
-		if err != nil {
-			return err
-		}
-		if fi.Mode()&os.ModeSymlink != 0 {
-			if err := copyFile(srcPath, dstPath, fi); err != nil {
-				return err
-			}
-			continue
-		}
-		if fi.IsDir() {
-			real, err := filepath.EvalSymlinks(srcPath)
-			if err == nil {
-				real = filepath.Clean(real)
-				if _, ok := seen[real]; ok {
-					continue
-				}
-				seen[real] = struct{}{}
-			}
-			if err := copyDirRec(srcPath, dstPath, seen); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := copyFile(srcPath, dstPath, fi); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (a *App) doDelete() {
@@ -405,27 +253,6 @@ func trashDir() (string, error) { return sysTrashDir() }
 // plus the key the restore log files it under (platform.go).
 func moveToTrash(path string) (string, string, error) { return sysTrashMove(path) }
 
-func uniqueTrashName(dir, name string) (string, error) {
-	candidate := name
-	ext := filepath.Ext(name)
-	stem := strings.TrimSuffix(name, ext)
-	if stem == "" {
-		stem = name
-		ext = ""
-	}
-	for n := 2; n < 10000; n++ {
-		_, err := os.Lstat(filepath.Join(dir, candidate))
-		if errors.Is(err, os.ErrNotExist) {
-			return candidate, nil
-		}
-		if err != nil {
-			return "", err
-		}
-		candidate = fmt.Sprintf("%s %d%s", stem, n, ext)
-	}
-	return "", fmt.Errorf("废纸篓中名称冲突")
-}
-
 func (a *App) commitRename() {
 	if a.cur().renaming == "" {
 		return
@@ -468,7 +295,7 @@ func (a *App) doNewFolder() {
 		a.statusMsg = "无法在此页面中新建文件夹"
 		return
 	}
-	name, err := uniqueNewFolderName(a.cur().path)
+	name, err := fsops.UniqueNewFolderName(a.cur().path)
 	if err != nil {
 		a.statusMsg = "新建文件夹失败：" + err.Error()
 		return
@@ -484,21 +311,6 @@ func (a *App) doNewFolder() {
 	a.cur().reveal = dir
 	a.cur().renaming = name
 	a.cur().renameBuf = name
-}
-
-func uniqueNewFolderName(dir string) (string, error) {
-	candidate := "新建文件夹"
-	for n := 2; n < 10000; n++ {
-		_, err := os.Lstat(filepath.Join(dir, candidate))
-		if errors.Is(err, os.ErrNotExist) {
-			return candidate, nil
-		}
-		if err != nil {
-			return "", err
-		}
-		candidate = fmt.Sprintf("新建文件夹 (%d)", n)
-	}
-	return "", fmt.Errorf("无法生成不冲突的名称")
 }
 
 func (a *App) doRefresh() {

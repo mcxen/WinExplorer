@@ -230,7 +230,8 @@ func TestAppDeclaredExtsBundle(t *testing.T) {
 	bundle := filepath.Join(dir, "Demo.app", "Contents")
 	os.MkdirAll(bundle, 0o755)
 	os.WriteFile(filepath.Join(bundle, "Info.plist"), []byte(
-		`<dict><key>CFBundleTypeExtensions</key><array><string>zzq</string></array></dict>`), 0o644)
+		`<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleTypeExtensions</key><array><string>zzq</string></array></dict></plist>`), 0o644)
 	got := appDeclaredExts(filepath.Join(dir, "Demo.app"))
 	if len(got) != 1 || got[0] != "zzq" {
 		t.Fatalf("bundle decl = %v", got)

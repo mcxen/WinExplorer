@@ -31,7 +31,6 @@
    go test -count=1 ./...
    ```
 7. **已知的既有失败**（与本次改动无关，不要尝试顺手修，也不要因此停工）：
-   - `TestAppDeclaredExtsBundle`
    - `TestBatchRenameDialogRowsAndDrag`
    - `diskhealth` 子包在 Linux 上的 `smartKeys` 相关用例
    

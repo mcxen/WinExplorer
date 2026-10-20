@@ -103,19 +103,23 @@ func scanOpenWithAppsMac() {
 	publish()
 }
 
-// appDeclaredExts converts an app's Info.plist to XML and returns the
-// extensions its CFBundleTypeExtensions arrays claim. plutil handles the
-// binary plists most apps ship; a failed conversion yields none.
+// appDeclaredExts returns the extensions an app's Info.plist claims. XML
+// plists are read directly, so parsing does not depend on macOS-only
+// plutil; the converter is reserved for the binary plists many apps ship.
 func appDeclaredExts(bundle string) []string {
 	plist := filepath.Join(bundle, "Contents", "Info.plist")
-	if _, err := os.Stat(plist); err != nil {
-		return nil
-	}
-	out, err := exec.Command("plutil", "-convert", "xml1", "-o", "-", plist).Output()
+	data, err := os.ReadFile(plist)
 	if err != nil {
 		return nil
 	}
-	return parseDeclaredExts(string(out))
+	if !strings.HasPrefix(strings.TrimSpace(string(data)), "<?xml") &&
+		!strings.Contains(string(data), "<plist") {
+		data, err = exec.Command("plutil", "-convert", "xml1", "-o", "-", plist).Output()
+		if err != nil {
+			return nil
+		}
+	}
+	return parseDeclaredExts(string(data))
 }
 
 // utiExts maps the standard UTIs apps declare in LSItemContentTypes to

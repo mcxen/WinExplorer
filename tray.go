@@ -32,6 +32,12 @@ var tray *mygo.Tray
 // many windows minimize to the tray, the notification comes once per run.
 var trayNotified bool
 
+// appQuitting is set when a real quit starts (the tray's 退出晴谷, or the
+// system quit), before the windows are asked to close. A close while it is
+// false hides the window in the tray; the flag is what lets the quit close
+// them for real.
+var appQuitting bool
+
 // trayIconSide is the tray icon's edge in pixels: mygo suggests 16×16 points,
 // and 32 covers Retina's 2×.
 const trayIconSide = 32
@@ -420,10 +426,28 @@ func trayNewWindow() {
 	win.Focus()
 }
 
-// minimizeToTray is the minimize that keeps the process in the tray: the
-// window hides instead of docking in the taskbar, and the first time a
-// notification says where it went, so a window gone from the taskbar is not
-// mistaken for a quit. OnMinimize fires it on the main thread.
+// closeToTray reports whether closing a window should hide it in the
+// tray instead of ending the process. A quit in progress, or a run whose
+// tray never came up, still closes: otherwise the window would vanish
+// with no way back and no way to quit.
+func closeToTray(quitting, hasTray bool) bool {
+	return hasTray && !quitting
+}
+
+// hideWindowToTray handles a close. It returns true when the close was
+// turned into a hide, so the caller cancels the real close.
+func hideWindowToTray(win *mygo.Window) bool {
+	if !closeToTray(appQuitting, tray != nil) || win == nil {
+		return false
+	}
+	minimizeToTray(win)
+	return true
+}
+
+// minimizeToTray keeps the process in the tray: the window hides instead
+// of docking in the taskbar or exiting, and the first time a notification
+// says where it went. OnMinimize and a cancelled close both fire it on
+// the main thread.
 func minimizeToTray(win *mygo.Window) {
 	if win == nil {
 		return
@@ -441,6 +465,6 @@ func minimizeToTray(win *mygo.Window) {
 	}
 	_ = mygo.NewNotification(mygo.NotificationOptions{
 		Title: "晴谷",
-		Body:  "晴谷已最小化到托盘，点击托盘图标可恢复窗口",
+		Body:  "晴谷在后台运行，点击托盘图标可恢复窗口",
 	}).Show()
 }

@@ -125,6 +125,10 @@ func main() {
 	// windows are gone and the event loop is about to stop, not per window.
 	// The size engine's cache and the search index land on disk first: they
 	// are local and fast, while remoteStop waits on the network.
+	// A quit (the tray's 退出晴谷, Cmd+Q) is the only close that ends the
+	// process. It is marked before the windows are asked to close, so their
+	// OnClose lets that one through instead of hiding them again.
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { appQuitting = true })
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		// 恢复上次会话: the tabs and boxes of the windows still open, before
 		// anything closes. A window's own close already saved its record, so
@@ -176,6 +180,13 @@ func newAppWindow(app *App) *mygo.Window {
 	// taskbar, so the process — and its background size statistics — keeps
 	// running out of sight.
 	win.OnMinimize(func() { minimizeToTray(win) })
+	// The caption close and the system's close both hide the window in the
+	// tray. The process keeps running; 退出晴谷 is what actually quits.
+	win.OnClose(func(e *mygo.CloseEvent) {
+		if hideWindowToTray(win) {
+			e.PreventDefault()
+		}
+	})
 	return win
 }
 

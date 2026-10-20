@@ -220,3 +220,18 @@ func TestDiskUpdateDispatcher(t *testing.T) {
 		t.Fatalf("after removal ran %v, want [2 3]", got)
 	}
 }
+
+// TestCloseToTray pins the close policy: a window close hides into the
+// tray while one exists and nobody is quitting, and a real quit — or a
+// run with no tray — still closes the window.
+func TestCloseToTray(t *testing.T) {
+	if !closeToTray(false, true) {
+		t.Fatal("close with a tray should hide, not quit")
+	}
+	if closeToTray(true, true) {
+		t.Fatal("a quit in progress must be allowed to close the window")
+	}
+	if closeToTray(false, false) {
+		t.Fatal("without a tray, close must still close")
+	}
+}

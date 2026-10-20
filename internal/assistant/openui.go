@@ -1,12 +1,10 @@
-package main
+package assistant
 
 import (
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/oneo-me/onevra/source/components"
 )
 
 // assistant_openui.go draws a fenced OpenUI Lang subset with the file
@@ -16,8 +14,8 @@ import (
 
 const (
 	openUIFence      = "```openui"
-	openUIMarkerOpen = "]]>openui:content"
-	openUIMarkerEnd  = "]]>openui:end"
+	OpenUIMarkerOpen = "]]>openui:content"
+	OpenUIMarkerEnd  = "]]>openui:end"
 	openUIMaxStmts   = 120
 	openUIMaxCols    = 8
 	openUIMaxCells   = 60
@@ -29,19 +27,19 @@ type openPiece struct {
 	src  string
 }
 
-// ouiExpr is one OpenUI expression. Calls and actions keep positional args.
-type ouiExpr struct {
+// OUIExpr is one OpenUI expression. Calls and actions keep positional args.
+type OUIExpr struct {
 	kind  string
 	s     string
 	n     float64
 	yes   bool
-	items []ouiExpr
+	items []OUIExpr
 	name  string
-	args  []ouiExpr
+	args  []OUIExpr
 }
 
-// ouiView is the part of a program this pane knows how to draw.
-type ouiView struct {
+// OUIView is the part of a program this pane knows how to draw.
+type OUIView struct {
 	Kind     string
 	Text     string
 	Sub      string
@@ -51,9 +49,9 @@ type ouiView struct {
 	Gap      float32
 	Label    string
 	Action   string
-	Children []*ouiView
-	Items    []*ouiView
-	Cols     []ouiCol
+	Children []*OUIView
+	Items    []*OUIView
+	Cols     []OUICol
 	Path     string
 	Extra    int
 	// Name, Placeholder, Options, Required and Multiline are a form
@@ -65,8 +63,8 @@ type ouiView struct {
 	Multiline   bool
 }
 
-// ouiCol is one Table column. Cells line up by index with the other columns.
-type ouiCol struct {
+// OUICol is one Table column. Cells line up by index with the other columns.
+type OUICol struct {
 	Label string
 	Cells []string
 }
@@ -77,15 +75,15 @@ type ouiParser struct {
 	depth int
 }
 
-// splitOpenUI pulls complete OpenUI programs out of a reply. Prose stays in
+// SplitOpenUI pulls complete OpenUI programs out of a reply. Prose stays in
 // order; an opener without a closer is dropped so a stopped stream does not
 // leave the fence on screen. The fence is kept in the stored turn so the
 // next request still shows the model what it drew.
-func splitOpenUI(text string) (string, []string) {
+func SplitOpenUI(text string) (string, []string) {
 	var blocks []string
 	for {
 		fence := fenceStart(text)
-		marker := strings.Index(text, openUIMarkerOpen)
+		marker := strings.Index(text, OpenUIMarkerOpen)
 		switch {
 		case fence < 0 && marker < 0:
 			return strings.TrimSpace(text), blocks
@@ -99,7 +97,7 @@ func splitOpenUI(text string) (string, []string) {
 			}
 			text = next
 		default:
-			block, next, ok := cutBlock(text, openUIMarkerOpen, openUIMarkerEnd)
+			block, next, ok := CutBlock(text, OpenUIMarkerOpen, OpenUIMarkerEnd)
 			if !ok {
 				return strings.TrimSpace(text[:marker]), blocks
 			}
@@ -132,7 +130,7 @@ func cutOpenFence(text string) (block, rest string, ok bool) {
 
 // unclosedFence is the byte index of the first ```openui that has no closer.
 // A closed block earlier in the reply does not hide the text around it.
-func unclosedFence(text string) int {
+func UnclosedFence(text string) int {
 	lower := strings.ToLower(text)
 	from := 0
 	for from < len(text) {
@@ -154,12 +152,12 @@ func unclosedFence(text string) int {
 	return -1
 }
 
-// parseOpenUI builds a view from one program. A bad line is skipped. root is
+// ParseOpenUI builds a view from one program. A bad line is skipped. root is
 // the entry; without it, the last Stack or Card is used. Unknown components
 // and cycles drop out instead of blanking the whole reply.
-func parseOpenUI(src string) *ouiView {
+func ParseOpenUI(src string) *OUIView {
 	src = strings.TrimPrefix(strings.TrimSpace(src), "\uFEFF")
-	env := map[string]ouiExpr{}
+	env := map[string]OUIExpr{}
 	var order []string
 	for _, line := range strings.Split(src, "\n") {
 		if len(order) >= openUIMaxStmts {
@@ -183,12 +181,12 @@ func parseOpenUI(src string) *ouiView {
 		order = append(order, name)
 	}
 	if _, ok := env["root"]; ok {
-		return realizeOpen(env, ouiExpr{kind: "ref", name: "root"}, map[string]bool{})
+		return realizeOpen(env, OUIExpr{kind: "ref", name: "root"}, map[string]bool{})
 	}
 	for i := len(order) - 1; i >= 0; i-- {
 		e := env[order[i]]
 		if e.kind == "call" && (e.name == "Stack" || e.name == "Card") {
-			return realizeOpen(env, ouiExpr{kind: "ref", name: order[i]}, map[string]bool{})
+			return realizeOpen(env, OUIExpr{kind: "ref", name: order[i]}, map[string]bool{})
 		}
 	}
 	return nil
@@ -220,15 +218,15 @@ func openIdent(s string) bool {
 	return true
 }
 
-func (p *ouiParser) parseExpr() (ouiExpr, bool) {
+func (p *ouiParser) parseExpr() (OUIExpr, bool) {
 	if p.depth > 32 {
-		return ouiExpr{}, false
+		return OUIExpr{}, false
 	}
 	p.depth++
 	defer func() { p.depth-- }()
 	left, ok := p.parseTerm()
 	if !ok {
-		return ouiExpr{}, false
+		return OUIExpr{}, false
 	}
 	for {
 		p.skip()
@@ -238,82 +236,82 @@ func (p *ouiParser) parseExpr() (ouiExpr, bool) {
 		p.i++
 		right, ok := p.parseTerm()
 		if !ok {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
-		left = ouiExpr{kind: "concat", items: []ouiExpr{left, right}}
+		left = OUIExpr{kind: "concat", items: []OUIExpr{left, right}}
 	}
 	return left, true
 }
 
-func (p *ouiParser) parseTerm() (ouiExpr, bool) {
+func (p *ouiParser) parseTerm() (OUIExpr, bool) {
 	p.skip()
 	switch p.peek() {
 	case '"':
 		s, ok := p.parseString()
 		if !ok {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
-		return ouiExpr{kind: "string", s: s}, true
+		return OUIExpr{kind: "string", s: s}, true
 	case '[':
 		p.i++
 		items, ok := p.parseList(']')
 		if !ok {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
-		return ouiExpr{kind: "array", items: items}, true
+		return OUIExpr{kind: "array", items: items}, true
 	case '{':
 		fields, ok := p.parseObject()
 		if !ok {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
-		return ouiExpr{kind: "object", items: fields}, true
+		return OUIExpr{kind: "object", items: fields}, true
 	case '@':
 		p.i++
 		name, ok := p.parseIdent()
 		if !ok {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
 		p.skip()
 		if p.peek() != '(' {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
 		p.i++
 		args, ok := p.parseList(')')
 		if !ok {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
-		return ouiExpr{kind: "action", name: name, args: args}, true
+		return OUIExpr{kind: "action", name: name, args: args}, true
 	}
 	if n, ok := p.parseNumber(); ok {
-		return ouiExpr{kind: "number", n: n}, true
+		return OUIExpr{kind: "number", n: n}, true
 	}
 	name, ok := p.parseIdent()
 	if !ok {
-		return ouiExpr{}, false
+		return OUIExpr{}, false
 	}
 	p.skip()
 	if p.peek() == '(' {
 		p.i++
 		args, ok := p.parseList(')')
 		if !ok {
-			return ouiExpr{}, false
+			return OUIExpr{}, false
 		}
-		return ouiExpr{kind: "call", name: name, args: args}, true
+		return OUIExpr{kind: "call", name: name, args: args}, true
 	}
 	switch name {
 	case "true":
-		return ouiExpr{kind: "bool", yes: true}, true
+		return OUIExpr{kind: "bool", yes: true}, true
 	case "false":
-		return ouiExpr{kind: "bool"}, true
+		return OUIExpr{kind: "bool"}, true
 	case "null":
-		return ouiExpr{kind: "null"}, true
+		return OUIExpr{kind: "null"}, true
 	default:
-		return ouiExpr{kind: "ref", name: name}, true
+		return OUIExpr{kind: "ref", name: name}, true
 	}
 }
 
-func (p *ouiParser) parseList(end byte) ([]ouiExpr, bool) {
-	var items []ouiExpr
+func (p *ouiParser) parseList(end byte) ([]OUIExpr, bool) {
+	var items []OUIExpr
 	for {
 		p.skip()
 		if p.i >= len(p.s) {
@@ -346,12 +344,12 @@ func (p *ouiParser) parseList(end byte) ([]ouiExpr, bool) {
 
 // parseObject reads {key: value, …}. Each value comes back with its key
 // as its name, for the rules of a form field ({required: true}).
-func (p *ouiParser) parseObject() ([]ouiExpr, bool) {
+func (p *ouiParser) parseObject() ([]OUIExpr, bool) {
 	if p.peek() != '{' {
 		return nil, false
 	}
 	p.i++
-	var out []ouiExpr
+	var out []OUIExpr
 	for {
 		p.skip()
 		if p.peek() == '}' {
@@ -380,7 +378,7 @@ func (p *ouiParser) parseObject() ([]ouiExpr, bool) {
 		if v.kind != "ref" && v.kind != "call" {
 			v.name = key
 		} else {
-			v = ouiExpr{kind: "field", name: key, items: []ouiExpr{v}}
+			v = OUIExpr{kind: "field", name: key, items: []OUIExpr{v}}
 		}
 		out = append(out, v)
 		p.skip()
@@ -489,7 +487,7 @@ func (p *ouiParser) peek() byte {
 	return p.s[p.i]
 }
 
-func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiView {
+func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
 	if e.kind == "ref" {
 		if stack[e.name] || len(stack) > 16 {
 			return nil
@@ -504,7 +502,7 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 	}
 	if e.kind != "call" {
 		if text, ok := openText(env, e, stack); ok && text != "" {
-			return &ouiView{Kind: "text", Text: text, Size: "medium"}
+			return &OUIView{Kind: "text", Text: text, Size: "medium"}
 		}
 		return nil
 	}
@@ -515,20 +513,20 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 			return nil
 		}
 		row, gap := openStackLayout(e.args)
-		return &ouiView{Kind: "stack", Row: row, Gap: gap, Children: kids}
+		return &OUIView{Kind: "stack", Row: row, Gap: gap, Children: kids}
 	case "Card":
 		kids := openChildren(env, openArg(e.args, 0), stack)
 		if len(kids) == 0 {
 			return nil
 		}
-		return &ouiView{Kind: "card", Gap: 6, Children: kids}
+		return &OUIView{Kind: "card", Gap: 6, Children: kids}
 	case "CardHeader":
 		title, _ := openText(env, openArg(e.args, 0), stack)
 		sub, _ := openText(env, openArg(e.args, 1), stack)
 		if title == "" && sub == "" {
 			return nil
 		}
-		return &ouiView{Kind: "header", Text: title, Sub: sub}
+		return &OUIView{Kind: "header", Text: title, Sub: sub}
 	case "TextContent":
 		text, _ := openText(env, openArg(e.args, 0), stack)
 		if text == "" {
@@ -538,19 +536,19 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 		if size == "" {
 			size = "medium"
 		}
-		return &ouiView{Kind: "text", Text: text, Size: size}
+		return &OUIView{Kind: "text", Text: text, Size: size}
 	case "Table":
 		cols := openCols(env, openArg(e.args, 0), stack)
 		if len(cols) == 0 {
 			return nil
 		}
-		return &ouiView{Kind: "table", Cols: cols}
+		return &OUIView{Kind: "table", Cols: cols}
 	case "Tree":
 		items := openTreeItems(env, openArg(e.args, 0), stack)
 		if len(items) == 0 {
 			return nil
 		}
-		tree := &ouiView{Kind: "tree", Items: items}
+		tree := &OUIView{Kind: "tree", Items: items}
 		trimOpenTree(tree, 6, 200)
 		return tree
 	case "TreeItem":
@@ -567,7 +565,7 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 		if !pathOK && childrenArg.kind == "" && pathArg.kind != "null" {
 			childrenArg = pathArg
 		}
-		return &ouiView{
+		return &OUIView{
 			Kind:  "treeitem",
 			Text:  label,
 			Path:  strings.TrimSpace(path),
@@ -579,7 +577,7 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 			return nil
 		}
 		dir, _ := openText(env, openArg(e.args, 1), stack)
-		return &ouiView{Kind: "stack", Row: openIsRow(dir), Gap: 6, Children: kids}
+		return &OUIView{Kind: "stack", Row: openIsRow(dir), Gap: 6, Children: kids}
 	case "Button":
 		label, _ := openText(env, openArg(e.args, 0), stack)
 		label = strings.TrimSpace(label)
@@ -590,11 +588,11 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 		if action == "" {
 			action = label
 		}
-		return &ouiView{Kind: "button", Label: label, Action: action, Variant: variant}
+		return &OUIView{Kind: "button", Label: label, Action: action, Variant: variant}
 	case "Form":
 		// Form(name, buttons, fields) as OpenUI writes it; the two lists
 		// are told apart by what they hold, so either order draws.
-		var fields, buttons []*ouiView
+		var fields, buttons []*OUIView
 		for _, arg := range e.args[min(1, len(e.args)):] {
 			for _, v := range openChildren(env, arg, stack) {
 				if v.Kind == "button" || (v.Kind == "stack" && openAllButtons(v)) {
@@ -608,11 +606,11 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 			return nil
 		}
 		name, _ := openText(env, openArg(e.args, 0), stack)
-		return &ouiView{Kind: "form", Name: name, Children: append(fields, buttons...)}
+		return &OUIView{Kind: "form", Name: name, Children: append(fields, buttons...)}
 	case "FormControl":
 		label, _ := openText(env, openArg(e.args, 0), stack)
 		field := realizeOpen(env, openArg(e.args, 1), stack)
-		if field == nil || !openIsField(field.Kind) {
+		if field == nil || !OpenIsField(field.Kind) {
 			return nil
 		}
 		field.Label = strings.TrimSpace(label)
@@ -624,7 +622,7 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 			return nil
 		}
 		ph, _ := openText(env, openArg(e.args, 1), stack)
-		v := &ouiView{Kind: "input", Name: name, Placeholder: ph, Multiline: e.name == "TextArea"}
+		v := &OUIView{Kind: "input", Name: name, Placeholder: ph, Multiline: e.name == "TextArea"}
 		for _, arg := range e.args[min(2, len(e.args)):] {
 			if (arg.kind == "object" || arg.kind == "string") && openRequired(arg) {
 				v.Required = true
@@ -647,7 +645,7 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 			return nil
 		}
 		ph, _ := openText(env, openArg(e.args, 2), stack)
-		v := &ouiView{Kind: "select", Name: name, Options: opts, Placeholder: ph}
+		v := &OUIView{Kind: "select", Name: name, Options: opts, Placeholder: ph}
 		for _, arg := range e.args[min(2, len(e.args)):] {
 			if (arg.kind == "object" || arg.kind == "string") && openRequired(arg) {
 				v.Required = true
@@ -661,8 +659,8 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 
 // openTreeItems realizes TreeItem children, ignoring unrelated entries so a
 // malformed tree still shows the nodes that are valid.
-func openTreeItems(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []*ouiView {
-	var out []*ouiView
+func openTreeItems(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) []*OUIView {
+	var out []*OUIView
 	for _, item := range openList(env, e, stack) {
 		if v := realizeOpen(env, item, stack); v != nil && v.Kind == "treeitem" {
 			out = append(out, v)
@@ -674,15 +672,15 @@ func openTreeItems(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []*
 // trimOpenTree bounds what a reply can ask the pane to draw. The first 200
 // nodes and six levels stay visible; the remainder is reported on the last
 // kept branch instead of silently disappearing.
-func trimOpenTree(tree *ouiView, maxDepth, maxNodes int) {
+func trimOpenTree(tree *OUIView, maxDepth, maxNodes int) {
 	if tree == nil {
 		return
 	}
 	kept := 0
-	var walk func(parent *ouiView, depth int)
-	walk = func(parent *ouiView, depth int) {
+	var walk func(parent *OUIView, depth int)
+	walk = func(parent *OUIView, depth int) {
 		old := parent.Items
-		items := make([]*ouiView, 0, len(old))
+		items := make([]*OUIView, 0, len(old))
 		for _, item := range old {
 			size := openTreeSize(item)
 			if depth > maxDepth || kept >= maxNodes {
@@ -698,7 +696,7 @@ func trimOpenTree(tree *ouiView, maxDepth, maxNodes int) {
 	walk(tree, 1)
 }
 
-func openTreeSize(v *ouiView) int {
+func openTreeSize(v *OUIView) int {
 	if v == nil {
 		return 0
 	}
@@ -709,9 +707,9 @@ func openTreeSize(v *ouiView) int {
 	return n
 }
 
-func openIsField(kind string) bool { return kind == "input" || kind == "select" }
+func OpenIsField(kind string) bool { return kind == "input" || kind == "select" }
 
-func openAllButtons(v *ouiView) bool {
+func openAllButtons(v *OUIView) bool {
 	for _, ch := range v.Children {
 		if ch.Kind != "button" {
 			return false
@@ -723,7 +721,7 @@ func openAllButtons(v *ouiView) bool {
 // openRequired reads a field's rule: {required: true}, or the word
 // "required" among its trailing arguments (the system prompt cannot show
 // braces, which its formatter takes for placeholders).
-func openRequired(obj ouiExpr) bool {
+func openRequired(obj OUIExpr) bool {
 	if obj.kind == "string" {
 		v := strings.ToLower(strings.TrimSpace(obj.s))
 		return v == "required" || v == "必填"
@@ -738,7 +736,7 @@ func openRequired(obj ouiExpr) bool {
 
 // openOption is one entry of a Select: a string, or SelectItem(value, label)
 // read by its label.
-func openOption(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) (string, bool) {
+func openOption(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) (string, bool) {
 	if e.kind == "call" && e.name == "SelectItem" {
 		if label, ok := openText(env, openArg(e.args, 1), stack); ok && label != "" {
 			return label, true
@@ -748,15 +746,15 @@ func openOption(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) (strin
 	return openText(env, e, stack)
 }
 
-func openArg(args []ouiExpr, i int) ouiExpr {
+func openArg(args []OUIExpr, i int) OUIExpr {
 	if i < 0 || i >= len(args) {
-		return ouiExpr{}
+		return OUIExpr{}
 	}
 	return args[i]
 }
 
-func openChildren(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []*ouiView {
-	var out []*ouiView
+func openChildren(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) []*OUIView {
+	var out []*OUIView
 	for _, item := range openList(env, e, stack) {
 		if v := realizeOpen(env, item, stack); v != nil {
 			out = append(out, v)
@@ -765,8 +763,8 @@ func openChildren(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []*o
 	return out
 }
 
-func openButtons(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []*ouiView {
-	var out []*ouiView
+func openButtons(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) []*OUIView {
+	var out []*OUIView
 	for _, item := range openList(env, e, stack) {
 		v := realizeOpen(env, item, stack)
 		if v != nil && v.Kind == "button" {
@@ -776,7 +774,7 @@ func openButtons(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []*ou
 	return out
 }
 
-func openList(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []ouiExpr {
+func openList(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) []OUIExpr {
 	if e.kind == "ref" {
 		if stack[e.name] || len(stack) > 16 {
 			return nil
@@ -795,11 +793,11 @@ func openList(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []ouiExp
 	if e.kind == "" {
 		return nil
 	}
-	return []ouiExpr{e}
+	return []OUIExpr{e}
 }
 
-func openCols(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []ouiCol {
-	var cols []ouiCol
+func openCols(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) []OUICol {
+	var cols []OUICol
 	for _, item := range openList(env, e, stack) {
 		col, ok := openCol(env, item, stack)
 		if !ok {
@@ -813,21 +811,21 @@ func openCols(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []ouiCol
 	return cols
 }
 
-func openCol(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) (ouiCol, bool) {
+func openCol(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) (OUICol, bool) {
 	if e.kind == "ref" {
 		if stack[e.name] || len(stack) > 16 {
-			return ouiCol{}, false
+			return OUICol{}, false
 		}
 		next, ok := env[e.name]
 		if !ok {
-			return ouiCol{}, false
+			return OUICol{}, false
 		}
 		stack[e.name] = true
 		defer delete(stack, e.name)
 		return openCol(env, next, stack)
 	}
 	if e.kind != "call" || e.name != "Col" || len(e.args) < 2 {
-		return ouiCol{}, false
+		return OUICol{}, false
 	}
 	label, _ := openText(env, e.args[0], stack)
 	label = strings.TrimSpace(label)
@@ -845,10 +843,10 @@ func openCol(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) (ouiCol, 
 			break
 		}
 	}
-	return ouiCol{Label: label, Cells: cells}, true
+	return OUICol{Label: label, Cells: cells}, true
 }
 
-func openText(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) (string, bool) {
+func openText(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) (string, bool) {
 	switch e.kind {
 	case "":
 		return "", false
@@ -892,7 +890,7 @@ func openText(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) (string,
 	}
 }
 
-func openStackLayout(args []ouiExpr) (row bool, gap float32) {
+func openStackLayout(args []OUIExpr) (row bool, gap float32) {
 	gap = 8
 	if len(args) > 1 && args[1].kind == "string" {
 		row = openIsRow(args[1].s)
@@ -924,7 +922,7 @@ func openIsRow(s string) bool {
 	}
 }
 
-func openButtonArgs(env map[string]ouiExpr, args []ouiExpr, stack map[string]bool) (action, variant string) {
+func openButtonArgs(env map[string]OUIExpr, args []OUIExpr, stack map[string]bool) (action, variant string) {
 	if len(args) < 2 {
 		return "", ""
 	}
@@ -948,7 +946,7 @@ func openIsVariant(s string) bool {
 	}
 }
 
-func openAction(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) string {
+func openAction(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) string {
 	if e.kind == "ref" {
 		if stack[e.name] || len(stack) > 16 {
 			return ""
@@ -974,24 +972,7 @@ func openAction(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) string
 	return ""
 }
 
-func openButtonVariant(v string) components.ButtonVariant {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "primary":
-		return components.ButtonPrimary
-	case "danger", "destructive":
-		// Not the accent: a step that removes things should not read as
-		// the card's main action. It asks again before it sends.
-		return components.ButtonOutline
-	case "ghost", "link":
-		return components.ButtonGhost
-	case "outline":
-		return components.ButtonOutline
-	default:
-		return components.ButtonSecondary
-	}
-}
-
-func openShort(s string, n int) string {
+func OpenShort(s string, n int) string {
 	rs := []rune(s)
 	if len(rs) <= n {
 		return s
@@ -999,7 +980,7 @@ func openShort(s string, n int) string {
 	return string(rs[:n]) + "…"
 }
 
-func openTextStyle(size string) (font float32, heavy, muted bool) {
+func OpenTextStyle(size string) (font float32, heavy, muted bool) {
 	switch strings.ToLower(strings.TrimSpace(size)) {
 	case "small", "sm":
 		return 12, false, true

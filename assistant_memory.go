@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	assistant "sunvale/internal/assistant"
 	"sync"
 	"time"
 
@@ -428,14 +429,7 @@ func writeIndexFile(path string, idx assistIndex) error {
 }
 
 func writePrivate(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return assistant.WritePrivate(path, data)
 }
 
 func normalizeTurns(turns []aiTurn) []aiTurn {
@@ -544,108 +538,20 @@ func memoryPrompt(items []aiMemory) string {
 }
 
 func cleanMemory(text string) (string, error) {
-	text = strings.Join(strings.Fields(text), " ")
-	if text == "" {
-		return "", fmt.Errorf("没有要记的内容")
-	}
-	if len([]rune(text)) > assistMemoryRunes {
-		return "", fmt.Errorf("太长，请收成一句话")
-	}
-	if memorySecret(text) {
-		return "", fmt.Errorf("密码和密钥请放进密码本，不要记在记忆里")
-	}
-	return text, nil
+	return assistant.CleanMemory(text, assistMemoryRunes)
 }
 
-func memorySecret(text string) bool {
-	s := strings.ToLower(text)
-	for _, part := range []string{
-		"sk-", "api_key", "apikey", "api-key", "bearer ",
-		"-----begin", "password=", "passwd=", "secret=",
-		"密码是", "密码:", "密码：", "密钥是", "密钥:", "密钥：",
-		"令牌是", "令牌:", "令牌：",
-	} {
-		if strings.Contains(s, part) {
-			return true
-		}
-	}
-	return false
-}
+func memorySecret(text string) bool { return assistant.MemorySecret(text) }
 
-func limitRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n])
-}
+func limitRunes(s string, n int) string { return assistant.LimitRunes(s, n) }
 
-func safeSessionID(id string) bool {
-	if id == "" || len(id) > 64 {
-		return false
-	}
-	for _, r := range id {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'f':
-		case r >= 'A' && r <= 'F':
-		default:
-			return false
-		}
-	}
-	return true
-}
+func safeSessionID(id string) bool { return assistant.SafeSessionID(id) }
 
-func containsStr(list []string, s string) bool {
-	for _, item := range list {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}
+func containsStr(list []string, s string) bool { return assistant.Contains(list, s) }
 
-func homeish(path string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return path
-	}
-	rel, err := filepath.Rel(home, path)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return path
-	}
-	if rel == "." {
-		return "~"
-	}
-	return "~" + string(filepath.Separator) + rel
-}
+func homeish(path string) string { return assistant.Homeish(path) }
 
-func assistWhen(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	d := time.Since(t)
-	switch {
-	case d < 0:
-		return t.Format("1月2日 15:04")
-	case d < time.Minute:
-		return "刚刚"
-	case d < time.Hour:
-		n := int(d.Minutes())
-		if n < 1 {
-			n = 1
-		}
-		return fmt.Sprintf("%d 分钟前", n)
-	case d < 24*time.Hour:
-		n := int(d.Hours())
-		if n < 1 {
-			n = 1
-		}
-		return fmt.Sprintf("%d 小时前", n)
-	default:
-		return t.Format("1月2日 15:04")
-	}
-}
+func assistWhen(t time.Time) string { return assistant.When(t) }
 
 func (s *sunvaleTools) hasPlan(id string) bool {
 	s.mu.Lock()

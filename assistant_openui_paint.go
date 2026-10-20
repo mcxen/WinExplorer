@@ -35,6 +35,21 @@ type openShortcut struct {
 	run     func()
 }
 
+func openButtonVariant(v string) components.ButtonVariant {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "primary":
+		return components.ButtonPrimary
+	case "danger", "destructive":
+		return components.ButtonOutline
+	case "ghost", "link":
+		return components.ButtonGhost
+	case "outline":
+		return components.ButtonOutline
+	default:
+		return components.ButtonSecondary
+	}
+}
+
 // openPaint is one card being drawn.
 type openPaint struct {
 	turn   int

@@ -334,6 +334,9 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 	if tile.Clicked() {
 		a.selectOnly(p.path)
 	}
+	// The Edit menu's commands arrive at the focused tile on macOS, as they
+	// do at a row of the other views (files.go's bindItemInput).
+	tile.HandleInput(a.paneCommand)
 	if tile.DoubleClicked() {
 		a.selectOnly(p.path)
 		a.doOpen()

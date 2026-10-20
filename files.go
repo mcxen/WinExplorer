@@ -46,6 +46,10 @@ func (a *App) listRowH() float32 {
 func (a *App) filePane(c *ui.Context) {
 	pane := ui.Column(c).Grow(1).FillHeight().MinWidth(0).
 		Background(colorContent())
+	// macOS routes Cmd+C/X/V through the Edit menu, which reaches the view
+	// as an edit command rather than a key press; every row and tile takes
+	// those (bindItemInput), so they work while the listing has the focus.
+	// The pane itself stays out of it: a click focuses the row it hit.
 	pane.Children(func() {
 		// The band hit-tests the boxes the rows laid out in the frame before;
 		// clear the map so a view or folder change drops the boxes it no
@@ -1027,12 +1031,18 @@ func (a *App) paintSelect(el ui.Element, path string) {
 // Every row is also a drag source (the selection when the row is in it,
 // else the row alone), and folder rows accept drops that move files into
 // them.
+//
+// The row also takes the Edit menu's commands: on macOS Cmd+C/X/V reach the
+// focused element as "copy"/"cut"/"paste" rather than as key presses, and
+// the row a click focused is where they arrive. Without this the pane's
+// shortcuts never see them.
 func (a *App) bindItemInput(c *ui.Context, el ui.Element, e Entry) {
 	t := a.cur()
 	if t.itemBounds == nil {
 		t.itemBounds = map[string]ui.Rect{}
 	}
 	t.itemBounds[e.Path] = el.Bounds()
+	el.HandleInput(a.paneCommand)
 	if el.Clicked() {
 		a.clickEntry(e.Path, el.ClickModifiers())
 	}
@@ -1060,6 +1070,43 @@ func (a *App) clickEntry(path string, mods ui.Modifiers) {
 	default:
 		a.selectOnly(path)
 	}
+}
+
+// paneHandlesCommand reports whether name is one of the Edit menu's
+// commands the file pane acts on. The names are the platform's, as the Edit
+// menu declares them: "pasteAndMatchStyle" arrives when a menu item asks
+// for plain text, which for files is the same paste.
+func paneHandlesCommand(name string) bool {
+	switch name {
+	case "copy", "cut", "paste", "pasteAndMatchStyle", "selectAll", "undo", "delete":
+		return true
+	}
+	return false
+}
+
+// paneCommand handles the Edit menu's commands — what macOS sends for
+// Cmd+C/X/V/A/Z and Delete instead of a key press — while the file pane has
+// the keyboard focus. A focused text field intercepts them first, so typing
+// in the search box or a rename field still copies its own text.
+func (a *App) paneCommand(ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputCommand || !paneHandlesCommand(ev.Text) {
+		return false
+	}
+	switch ev.Text {
+	case "copy":
+		a.doCopy()
+	case "cut":
+		a.doCut()
+	case "paste", "pasteAndMatchStyle":
+		a.doPaste()
+	case "selectAll":
+		a.selectAll()
+	case "undo":
+		a.doUndo()
+	case "delete":
+		a.doDelete()
+	}
+	return true
 }
 
 // bindPaneMenu is the menu of the pane background: New (folder / text

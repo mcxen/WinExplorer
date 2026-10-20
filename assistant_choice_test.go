@@ -17,3 +17,15 @@ func TestParseChoices(t *testing.T) {
 		t.Fatal("a single bullet is a list, not a question")
 	}
 }
+
+func TestChoiceOptionValues(t *testing.T) {
+	for _, raw := range []any{
+		[]string{"按类型", "按日期"},
+		[]any{"按类型", "按日期"},
+		"- 按类型\n- 按日期",
+	} {
+		if got := choiceOptionValues(raw); len(got) != 2 || got[0] != "按类型" || got[1] != "按日期" {
+			t.Fatalf("choiceOptionValues(%+v) = %v", raw, got)
+		}
+	}
+}

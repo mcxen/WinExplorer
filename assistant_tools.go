@@ -496,9 +496,9 @@ func (s *sunvaleTools) navigateTo(_ context.Context, _ *mcp.CallToolRequest, arg
 }
 
 type choiceArgs struct {
-	Prompt  string   `json:"prompt" jsonschema:"问用户的问题"`
-	Mode    string   `json:"mode,omitempty" jsonschema:"multi 可多选，single 只能选一个，默认 multi"`
-	Options []string `json:"options" jsonschema:"2 到 8 条可执行的做法"`
+	Prompt  string `json:"prompt" jsonschema:"问用户的问题"`
+	Mode    string `json:"mode,omitempty" jsonschema:"multi 可多选，single 只能选一个，默认 multi"`
+	Options any    `json:"options" jsonschema:"必须是 JSON 字符串数组，包含 2 到 6 条可执行的做法"`
 }
 
 func (s *sunvaleTools) offerChoices(_ context.Context, _ *mcp.CallToolRequest, args choiceArgs) (*mcp.CallToolResult, any, error) {
@@ -506,7 +506,7 @@ func (s *sunvaleTools) offerChoices(_ context.Context, _ *mcp.CallToolRequest, a
 	if prompt == "" {
 		return mcpErr(fmt.Errorf("prompt 不能为空")), nil, nil
 	}
-	options, err := cleanChoiceOptions(args.Options)
+	options, err := cleanChoiceOptions(choiceOptionValues(args.Options))
 	if err != nil {
 		return mcpErr(err), nil, nil
 	}
@@ -516,6 +516,32 @@ func (s *sunvaleTools) offerChoices(_ context.Context, _ *mcp.CallToolRequest, a
 		multi = false
 	}
 	return mcpText(formatChoices(prompt, multi, options)), nil, nil
+}
+
+func choiceOptionValues(raw any) []string {
+	switch values := raw.(type) {
+	case []string:
+		return values
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			if text, ok := value.(string); ok {
+				out = append(out, text)
+			}
+		}
+		return out
+	case string:
+		var out []string
+		for _, line := range strings.Split(values, "\n") {
+			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
+			if line != "" {
+				out = append(out, line)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func cleanChoiceOptions(in []string) ([]string, error) {

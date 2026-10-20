@@ -16,6 +16,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/egoist/mygo"
 
+	assistant "sunvale/internal/assistant"
 	"sunvale/internal/rename"
 )
 
@@ -309,6 +310,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 			toolSeen := map[string]bool{}
 			msg, streamErr = readMessageStream(ctx, mv.MessageStream, func(full, reasoning string) {
 				if mv.Role == schema.Tool {
+					full = assistant.ToolText(full)
 					turn := aiTurn{Role: "tool", Text: full, Tool: mv.ToolName, Plan: planIDFrom(full)}
 					publishAssist(run, id, turn, true, &result)
 					return
@@ -418,6 +420,9 @@ func messageTurn(role schema.RoleType, tool string, msg *schema.Message) (aiTurn
 		tool = msg.ToolName
 	}
 	content := msg.Content
+	if role == schema.Tool {
+		content = assistant.ToolText(content)
+	}
 	// Tool output can quote fences from a file. Only assistant prose hides
 	// an unfinished choice or OpenUI block.
 	if role != schema.Tool {

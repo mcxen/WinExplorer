@@ -30,9 +30,9 @@ const (
 // pluginEnabled, so new previews keep the decoded still while off.
 func registerGifPlugin() {
 	RegisterPlugin(Plugin{
-		ID:   gifPluginID,
-		Name: "GIF 自动播放",
-		Desc: "预览窗格与图标视图播放 GIF 动画",
+		ID:        gifPluginID,
+		Name:      "GIF 自动播放",
+		Desc:      "预览窗格与图标视图播放 GIF 动画",
 		OnDisable: func(a *App) { stopGifPlay() },
 	})
 }

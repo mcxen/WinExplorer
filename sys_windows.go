@@ -13,6 +13,8 @@ import (
 	"time"
 	"unsafe"
 
+	"sunvale/internal/fsops"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -195,7 +197,7 @@ func recycleIndex() map[string]string {
 			if err != nil {
 				continue
 			}
-			orig, ok := parseRecycleInfo(meta)
+			orig, ok := fsops.ParseRecycleInfo(meta)
 			if !ok || orig == "" {
 				continue
 			}
@@ -295,7 +297,7 @@ func sysTrashList() []Entry {
 			if err != nil {
 				continue
 			}
-			orig, ok := parseRecycleInfo(meta)
+			orig, ok := fsops.ParseRecycleInfo(meta)
 			if !ok || orig == "" {
 				continue
 			}
@@ -309,7 +311,7 @@ func sysTrashList() []Entry {
 				Path:    payload,
 				IsDir:   info.IsDir(),
 				Size:    info.Size(),
-				ModTime: recycleDeletedAt(meta),
+				ModTime: fsops.RecycleDeletedAt(meta),
 			})
 		}
 	}

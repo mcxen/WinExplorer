@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // remote_storage.go is the OpenList-compatible storage API: the
@@ -176,7 +178,7 @@ func storageDiskRoot(s remoteStorage) string {
 // away rather than showing whatever is under it, /pics after /pics was
 // disabled is gone rather than answered by a shallower mount.
 func (a *App) remoteMountFor(vpath string) (remoteStorage, string, bool) {
-	vpath = remoteFSCleanVPath(vpath)
+	vpath = remote.FSCleanVPath(vpath)
 	var (
 		best   remoteStorage
 		inner  string
@@ -184,7 +186,7 @@ func (a *App) remoteMountFor(vpath string) (remoteStorage, string, bool) {
 		length int
 	)
 	for _, s := range a.remoteStorages() {
-		mp := remoteFSCleanVPath(s.MountPath)
+		mp := remote.FSCleanVPath(s.MountPath)
 		var (
 			match  bool
 			inside string
@@ -211,7 +213,7 @@ func (a *App) remoteMountFor(vpath string) (remoteStorage, string, bool) {
 // remoteDiskPathIn maps a path inside a storage to its disk path. ok is
 // false when the path would escape the mount.
 func remoteDiskPathIn(s remoteStorage, inner string) (string, bool) {
-	inner = remoteFSCleanVPath(inner)
+	inner = remote.FSCleanVPath(inner)
 	for _, seg := range strings.Split(inner, "/") {
 		if seg == ".." {
 			return "", false
@@ -248,7 +250,7 @@ func storageRespOf(s remoteStorage) *remoteStorage {
 // own storage list still shows them, through /api/storage/list.
 func (a *App) remoteHandleFSStorageList(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var objs []remoteObj
@@ -265,17 +267,17 @@ func (a *App) remoteHandleFSStorageList(w http.ResponseWriter, r *http.Request) 
 		}
 		objs = append(objs, remoteObj{
 			Name: name, IsDir: true, Modified: s.Modified, Created: s.Modified,
-			Type: remoteFSTypeFolder, HashInfo: "null", Path: s.MountPath,
+			Type: remote.FSTypeFolder, HashInfo: "null", Path: s.MountPath,
 		})
 	}
-	remoteOK(w, remoteFSListData{Content: objs, Total: int64(len(objs)), Write: false, Provider: "storage"})
+	remote.OK(w, remoteFSListData{Content: objs, Total: int64(len(objs)), Write: false, Provider: "storage"})
 }
 
 // remoteHandleStorageList implements GET /api/storage/list: the mounts in
 // order, paged as OpenList pages them.
 func (a *App) remoteHandleStorageList(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -300,23 +302,23 @@ func (a *App) remoteHandleStorageList(w http.ResponseWriter, r *http.Request) {
 	for _, s := range list[start:end] {
 		out = append(out, storageRespOf(s))
 	}
-	remoteOK(w, map[string]any{"content": out, "total": total})
+	remote.OK(w, map[string]any{"content": out, "total": total})
 }
 
 // remoteHandleStorageGet implements GET /api/storage/get?id=N.
 func (a *App) remoteHandleStorageGet(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	id, _ := strconv.Atoi(r.URL.Query().Get("id"))
 	for _, s := range a.remoteStorages() {
 		if int(s.ID) == id {
-			remoteOK(w, s)
+			remote.OK(w, s)
 			return
 		}
 	}
-	remoteErr(w, 500, "storage not found")
+	remote.Err(w, 500, "storage not found")
 }
 
 // remoteStorageReadReq decodes a storage body and validates the parts the
@@ -324,7 +326,7 @@ func (a *App) remoteHandleStorageGet(w http.ResponseWriter, r *http.Request) {
 // names a folder.
 func remoteStorageReadReq(r *http.Request) (remoteStorage, error) {
 	var s remoteStorage
-	if err := remoteReadReq(r, &s); err != nil {
+	if err := remote.ReadReq(r, &s); err != nil {
 		return s, err
 	}
 	if s.Driver == "" {
@@ -352,7 +354,7 @@ func validateStorage(s *remoteStorage) error {
 	if strings.TrimSpace(s.MountPath) == "" {
 		return errStorageMount
 	}
-	s.MountPath = remoteFSCleanVPath(s.MountPath)
+	s.MountPath = remote.FSCleanVPath(s.MountPath)
 	if s.MountPath != "/" {
 		s.MountPath = strings.TrimSuffix(s.MountPath, "/")
 	}
@@ -379,16 +381,16 @@ func validateStorage(s *remoteStorage) error {
 // remoteHandleStorageCreate implements POST /api/storage/create.
 func (a *App) remoteHandleStorageCreate(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	s, err := remoteStorageReadReq(r)
 	if err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	if err := validateStorage(&s); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	remoteStorageMu.Lock()
@@ -396,7 +398,7 @@ func (a *App) remoteHandleStorageCreate(w http.ResponseWriter, r *http.Request) 
 	for _, x := range list {
 		if x.MountPath == s.MountPath {
 			remoteStorageMu.Unlock()
-			remoteErr(w, 500, errStorageTaken.Error())
+			remote.Err(w, 500, errStorageTaken.Error())
 			return
 		}
 	}
@@ -408,27 +410,27 @@ func (a *App) remoteHandleStorageCreate(w http.ResponseWriter, r *http.Request) 
 	list = append(list, s)
 	a.remoteSaveStorages(list)
 	remoteStorageMu.Unlock()
-	remoteOK(w, map[string]any{"id": s.ID})
+	remote.OK(w, map[string]any{"id": s.ID})
 }
 
 // remoteHandleStorageUpdate implements POST /api/storage/update. The body
 // carries the whole storage, as OpenList's does.
 func (a *App) remoteHandleStorageUpdate(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	s, err := remoteStorageReadReq(r)
 	if err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	if s.ID == 0 {
-		remoteErr(w, 400, "id is required")
+		remote.Err(w, 400, "id is required")
 		return
 	}
 	if err := validateStorage(&s); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	remoteStorageMu.Lock()
@@ -441,7 +443,7 @@ func (a *App) remoteHandleStorageUpdate(w http.ResponseWriter, r *http.Request) 
 		for j := range list {
 			if j != i && list[j].MountPath == s.MountPath {
 				remoteStorageMu.Unlock()
-				remoteErr(w, 500, errStorageTaken.Error())
+				remote.Err(w, 500, errStorageTaken.Error())
 				return
 			}
 		}
@@ -452,18 +454,18 @@ func (a *App) remoteHandleStorageUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	if !found {
 		remoteStorageMu.Unlock()
-		remoteErr(w, 500, "storage not found")
+		remote.Err(w, 500, "storage not found")
 		return
 	}
 	a.remoteSaveStorages(list)
 	remoteStorageMu.Unlock()
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteHandleStorageDelete implements POST /api/storage/delete?id=N.
 func (a *App) remoteHandleStorageDelete(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	id, _ := strconv.Atoi(r.URL.Query().Get("id"))
@@ -475,7 +477,7 @@ func (a *App) remoteHandleStorageDelete(w http.ResponseWriter, r *http.Request) 
 		if int(s.ID) == id {
 			if s.MountPath == "/" {
 				remoteStorageMu.Unlock()
-				remoteErr(w, 500, "根挂载不能删除，请改为停用")
+				remote.Err(w, 500, "根挂载不能删除，请改为停用")
 				return
 			}
 			removed = true
@@ -485,19 +487,19 @@ func (a *App) remoteHandleStorageDelete(w http.ResponseWriter, r *http.Request) 
 	}
 	if !removed {
 		remoteStorageMu.Unlock()
-		remoteErr(w, 500, "storage not found")
+		remote.Err(w, 500, "storage not found")
 		return
 	}
 	a.remoteSaveStorages(kept)
 	remoteStorageMu.Unlock()
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteSetStorageDisabled implements enable and disable, which differ only
 // in the flag they set.
 func (a *App) remoteSetStorageDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	id, _ := strconv.Atoi(r.URL.Query().Get("id"))
@@ -518,12 +520,12 @@ func (a *App) remoteSetStorageDisabled(w http.ResponseWriter, r *http.Request, d
 	}
 	if !found {
 		remoteStorageMu.Unlock()
-		remoteErr(w, 500, "storage not found")
+		remote.Err(w, 500, "storage not found")
 		return
 	}
 	a.remoteSaveStorages(list)
 	remoteStorageMu.Unlock()
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 func (a *App) remoteHandleStorageEnable(w http.ResponseWriter, r *http.Request) {
@@ -539,30 +541,30 @@ func (a *App) remoteHandleStorageDisable(w http.ResponseWriter, r *http.Request)
 // reload; the endpoint exists so the frontend's button does not 404.
 func (a *App) remoteHandleStorageLoadAll(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteHandleDriverList implements GET /api/driver/list: every driver the
 // create page may pick, keyed by name, as OpenList answers.
 func (a *App) remoteHandleDriverList(w http.ResponseWriter, r *http.Request) {
-	remoteOK(w, map[string]localDriverInfo{"local": localDriver()})
+	remote.OK(w, map[string]localDriverInfo{"local": localDriver()})
 }
 
 // remoteHandleDriverNames implements GET /api/driver/names.
 func (a *App) remoteHandleDriverNames(w http.ResponseWriter, r *http.Request) {
-	remoteOK(w, []string{"local"})
+	remote.OK(w, []string{"local"})
 }
 
 // remoteHandleDriverInfo implements GET /api/driver/info?driver=local.
 func (a *App) remoteHandleDriverInfo(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("driver") != "local" {
-		remoteErr(w, 404, "driver not found")
+		remote.Err(w, 404, "driver not found")
 		return
 	}
-	remoteOK(w, localDriver())
+	remote.OK(w, localDriver())
 }
 
 // localDriver is the local driver's description: one field, the folder.

@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 
+	"sunvale/internal/fsops"
+
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 )
@@ -233,7 +235,7 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 		if srcClean == filepath.Clean(dstDir) {
 			continue
 		}
-		if !copyMode && pathWithin(dstDir, srcClean) {
+		if !copyMode && fsops.PathWithin(dstDir, srcClean) {
 			skipped = append(skipped, filepath.Base(src))
 			continue
 		}
@@ -254,11 +256,11 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 		placed := false
 		if copyMode {
 			if info.IsDir() {
-				if err := copyDir(srcClean, dst); err != nil {
+				if err := fsops.CopyDir(srcClean, dst); err != nil {
 					failed = append(failed, filepath.Base(src))
 					continue
 				}
-			} else if err := copyFile(srcClean, dst, info); err != nil {
+			} else if err := fsops.CopyFile(srcClean, dst, info); err != nil {
 				failed = append(failed, filepath.Base(src))
 				continue
 			}
@@ -267,7 +269,7 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 		} else if err := os.Rename(srcClean, dst); err != nil {
 			// 跨设备（EXDEV）回退为复制后删除。
 			if info.IsDir() {
-				if derr := copyDir(srcClean, dst); derr != nil {
+				if derr := fsops.CopyDir(srcClean, dst); derr != nil {
 					failed = append(failed, filepath.Base(src))
 					continue
 				}
@@ -275,7 +277,7 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 					failed = append(failed, filepath.Base(src))
 					continue
 				}
-			} else if derr := copyFile(srcClean, dst, info); derr != nil {
+			} else if derr := fsops.CopyFile(srcClean, dst, info); derr != nil {
 				failed = append(failed, filepath.Base(src))
 				continue
 			} else if rerr := os.Remove(srcClean); rerr != nil {

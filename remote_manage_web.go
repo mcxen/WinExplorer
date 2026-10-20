@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"net/http"
 	"strings"
+
+	"sunvale/internal/remote"
 )
 
 //go:embed remote_manage_web.html
@@ -14,8 +16,8 @@ var remoteManageHTMLRaw string
 // /*__SHARED_JS__*/ placeholders, so the served document stays one
 // self-contained file.
 var remoteManageHTML = strings.NewReplacer(
-	"/*__TOKENS__*/", WebUITokensCSS,
-	"/*__SHARED_JS__*/", WebUISharedJS,
+	"/*__TOKENS__*/", remote.WebUITokensCSS,
+	"/*__SHARED_JS__*/", remote.WebUISharedJS,
 ).Replace(remoteManageHTMLRaw)
 
 // remoteHandleManage serves Sunvale's built-in management page on /@manage

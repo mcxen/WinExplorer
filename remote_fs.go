@@ -1,23 +1,20 @@
 package main
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/json"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"sunvale/internal/remote"
 
 	"sunvale/internal/rename"
 )
@@ -27,17 +24,6 @@ import (
 // virtual-root path mapping they share with the download routes, and the
 // download sign. The virtual root "/" is the user's home directory — the
 // same os.UserHomeDir() newApp caches in homePath.
-
-// OpenList object types: 0 unknown, 1 folder, 2 video, 3 audio, 4 text,
-// 5 image.
-const (
-	remoteFSTypeUnknown = 0
-	remoteFSTypeFolder  = 1
-	remoteFSTypeVideo   = 2
-	remoteFSTypeAudio   = 3
-	remoteFSTypeText    = 4
-	remoteFSTypeImage   = 5
-)
 
 // remoteObj is one object of an OpenList listing. There is no hash backend,
 // so HashInfo is OpenList's "null" string and HashInfoMap serializes as
@@ -68,23 +54,12 @@ func remoteFSHome() string {
 	return home
 }
 
-// remoteFSCleanVPath normalizes a virtual path: backslashes become slashes,
-// a leading / is forced and path.Clean resolves it against the root, so no
-// ".." segment can survive to escape it.
-func remoteFSCleanVPath(vpath string) string {
-	p := strings.ReplaceAll(vpath, "\\", "/")
-	if !strings.HasPrefix(p, "/") {
-		p = "/" + p
-	}
-	return path.Clean(p)
-}
-
 // remoteDiskPath maps a virtual path to its disk path through the storage
 // mounts (remote_storage.go): the mount whose path holds vpath decides
 // which disk folder serves it, and ok is false when no enabled mount does
 // or the path would escape it.
 func (a *App) remoteDiskPath(vpath string) (string, bool) {
-	p := remoteFSCleanVPath(vpath)
+	p := remote.FSCleanVPath(vpath)
 	for _, seg := range strings.Split(p, "/") {
 		if seg == ".." {
 			return "", false
@@ -95,82 +70,6 @@ func (a *App) remoteDiskPath(vpath string) (string, bool) {
 		return "", false
 	}
 	return remoteDiskPathIn(mount, inner)
-}
-
-// remoteReadReq decodes one /api/fs/* request the way gin's c.ShouldBind
-// does: the JSON or form-encoded body first, the query string after it as a
-// fallback, so POST bodies and GET requests work alike. An empty body is
-// not an error — every field keeps its zero value — and unknown fields are
-// ignored, as gin ignores them.
-func remoteReadReq(r *http.Request, v any) error {
-	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		remoteBindQuery(r, v)
-		return nil
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return err
-	}
-	body = bytes.TrimSpace(body)
-	if len(body) > 0 {
-		jsonBody := strings.Contains(r.Header.Get("Content-Type"), "json")
-		if !jsonBody && len(body) > 0 && (body[0] == '{' || body[0] == '[') {
-			jsonBody = true
-		}
-		if jsonBody {
-			if err := json.Unmarshal(body, v); err != nil {
-				return err
-			}
-		} else if err := remoteBindValues(body, v); err != nil {
-			return err
-		}
-	}
-	remoteBindQuery(r, v)
-	return nil
-}
-
-// remoteBindQuery applies the query string to v, beside a body's values.
-func remoteBindQuery(r *http.Request, v any) {
-	if q := r.URL.RawQuery; q != "" {
-		_ = remoteBindValues([]byte(q), v)
-	}
-}
-
-// remoteBindValues fills the json-tagged fields of the struct v points to
-// from a form-encoded string — application/x-www-form-urlencoded bodies and
-// query strings share the syntax, values percent-decoded by the parser.
-func remoteBindValues(raw []byte, v any) error {
-	values, err := url.ParseQuery(string(raw))
-	if err != nil {
-		return err
-	}
-	rv := reflect.ValueOf(v).Elem()
-	rt := rv.Type()
-	for i := 0; i < rt.NumField(); i++ {
-		key := strings.Split(rt.Field(i).Tag.Get("json"), ",")[0]
-		if key == "" || key == "-" || !values.Has(key) {
-			continue
-		}
-		text := values.Get(key)
-		field := rv.Field(i)
-		switch field.Kind() {
-		case reflect.String:
-			field.SetString(text)
-		case reflect.Bool:
-			b, err := strconv.ParseBool(text)
-			if err != nil {
-				return err
-			}
-			field.SetBool(b)
-		case reflect.Int, reflect.Int32, reflect.Int64:
-			n, err := strconv.ParseInt(text, 10, 64)
-			if err != nil {
-				return err
-			}
-			field.SetInt(n)
-		}
-	}
-	return nil
 }
 
 // remoteVPath maps a disk path under the home directory back to its virtual
@@ -188,16 +87,6 @@ func remoteVPath(diskPath string) string {
 		rel = d
 	}
 	return path.Clean("/" + filepath.ToSlash(rel))
-}
-
-// remoteFSEncodePath percent-escapes every segment of a virtual path —
-// url.PathEscape semantics, / separators kept — for the /p download URL.
-func remoteFSEncodePath(vpath string) string {
-	segs := strings.Split(strings.TrimPrefix(remoteFSCleanVPath(vpath), "/"), "/")
-	for i, s := range segs {
-		segs[i] = url.PathEscape(s)
-	}
-	return "/" + strings.Join(segs, "/")
 }
 
 // remoteSign signs a virtual path for raw downloads, OpenList v4 style:
@@ -238,49 +127,6 @@ func (a *App) remoteVerifySign(vpath, sign string) bool {
 	return subtle.ConstantTimeCompare([]byte(want), []byte(sign)) == 1
 }
 
-// remoteFSType maps a file name to its OpenList type by lowercased
-// extension. The four lists are OpenList's default audio_types,
-// video_types, image_types and text_types settings, checked in the order
-// its utils.GetFileType checks them, so a client's preview choice agrees
-// with what a real OpenList server would report for the same name.
-func remoteFSType(name string, isDir bool) int {
-	if isDir {
-		return remoteFSTypeFolder
-	}
-	switch strings.ToLower(strings.TrimPrefix(filepath.Ext(name), ".")) {
-	case "mp3", "flac", "ogg", "m4a", "wav", "opus", "wma":
-		return remoteFSTypeAudio
-	case "mp4", "mkv", "avi", "mov", "rmvb", "webm", "flv", "m3u8":
-		return remoteFSTypeVideo
-	case "jpg", "tiff", "jpeg", "png", "gif", "bmp", "svg", "ico", "swf",
-		"webp", "avif":
-		return remoteFSTypeImage
-	case "txt", "htm", "html", "xml", "java", "properties", "sql", "js",
-		"md", "json", "conf", "ini", "vue", "php", "py", "bat", "gitignore",
-		"yml", "go", "sh", "c", "cpp", "h", "hpp", "tsx", "vtt", "srt", "ass",
-		"rs", "lrc", "strm":
-		return remoteFSTypeText
-	}
-	return remoteFSTypeUnknown
-}
-
-// remoteRequestBase is the scheme-and-host prefix raw_url links are built
-// on, the way OpenList's common.GetApiUrl follows the request: a TLS
-// connection or X-Forwarded-Proto yields https, X-Forwarded-Host replaces
-// r.Host, so a reverse proxy in front of the app still hands out working
-// links.
-func remoteRequestBase(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	host := r.Header.Get("X-Forwarded-Host")
-	if host == "" {
-		host = r.Host
-	}
-	return scheme + "://" + host
-}
-
 // remoteObjName is the name an object answers with: OpenList calls the
 // virtual root "root" (its local driver's root has no base name of its own),
 // a folder inside it its own base name.
@@ -312,7 +158,7 @@ func (a *App) remoteFSObj(name, vpath, disk string, st os.FileInfo) remoteObj {
 		IsDir:    st.IsDir(),
 		Modified: st.ModTime(),
 		Created:  created,
-		Type:     remoteFSType(name, st.IsDir()),
+		Type:     remote.FSType(name, st.IsDir()),
 		HashInfo: "null",
 	}
 	if !obj.IsDir {
@@ -347,35 +193,35 @@ func (a *App) remoteHandleFSList(w http.ResponseWriter, r *http.Request) {
 		PerPage  int    `json:"per_page"`
 		Refresh  bool   `json:"refresh"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
-	if vpath := remoteFSCleanVPath(req.Path); remoteShareVPath(vpath) {
+	if vpath := remote.FSCleanVPath(req.Path); remoteShareVPath(vpath) {
 		a.remoteShareFSList(w, r, vpath, req.Password, req.Page, req.PerPage)
 		return
 	}
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
-		remoteErr(w, 400, "invalid path")
+		remote.Err(w, 400, "invalid path")
 		return
 	}
 	info, err := os.Stat(disk)
 	if err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	if !info.IsDir() {
-		remoteErr(w, 500, "not a folder")
+		remote.Err(w, 500, "not a folder")
 		return
 	}
 	entries, err := os.ReadDir(disk)
 	if err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	hidden := a.remoteShowHidden()
@@ -418,7 +264,7 @@ func (a *App) remoteHandleFSList(w http.ResponseWriter, r *http.Request) {
 		}
 		content = objs[start:end]
 	}
-	remoteOK(w, remoteFSListData{
+	remote.OK(w, remoteFSListData{
 		Content:            content,
 		Total:              int64(len(objs)),
 		Readme:             "",
@@ -444,22 +290,22 @@ func (a *App) remoteShowHidden() bool {
 // management file page stay on the same answer.
 func (a *App) remoteHandleHidden(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	if r.Method == http.MethodPost {
 		var req struct {
 			Show bool `json:"show"`
 		}
-		if err := remoteReadReq(r, &req); err != nil {
-			remoteErr(w, 400, "bad request")
+		if err := remote.ReadReq(r, &req); err != nil {
+			remote.Err(w, 400, "bad request")
 			return
 		}
 		if a.store != nil {
 			a.store.setRemoteShowHidden(req.Show)
 		}
 	}
-	remoteOK(w, map[string]any{"show": a.remoteShowHidden()})
+	remote.OK(w, map[string]any{"show": a.remoteShowHidden()})
 }
 
 // remoteFSGetData is the data payload of /api/fs/get: the object with its
@@ -486,26 +332,26 @@ func (a *App) remoteHandleFSGet(w http.ResponseWriter, r *http.Request) {
 		Path     string `json:"path"`
 		Password string `json:"password"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
-	if vpath := remoteFSCleanVPath(req.Path); remoteShareVPath(vpath) {
+	if vpath := remote.FSCleanVPath(req.Path); remoteShareVPath(vpath) {
 		a.remoteShareFSGet(w, r, vpath, req.Password)
 		return
 	}
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
-		remoteErr(w, 400, "invalid path")
+		remote.Err(w, 400, "invalid path")
 		return
 	}
 	st, err := os.Stat(disk)
 	if err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	vpath := remoteVPath(disk)
@@ -516,10 +362,10 @@ func (a *App) remoteHandleFSGet(w http.ResponseWriter, r *http.Request) {
 		Provider:  "Local",
 	}
 	if !data.IsDir {
-		data.RawURL = remoteRequestBase(r) + "/p" + remoteFSEncodePath(vpath) + "?sign=" + data.Sign
+		data.RawURL = remote.RequestBase(r) + "/p" + remote.FSEncodePath(vpath) + "?sign=" + data.Sign
 		data.Related = a.remoteRelated(disk, data.Name, data.Type)
 	}
-	remoteOK(w, data)
+	remote.OK(w, data)
 }
 
 // remoteRelated is OpenList's filterRelated: for a video, the siblings in
@@ -528,7 +374,7 @@ func (a *App) remoteHandleFSGet(w http.ResponseWriter, r *http.Request) {
 // danmu next to the file. Anything else — a folder, a non-video, a folder
 // too big to list — stays nil, which serializes as null.
 func (a *App) remoteRelated(disk, name string, typ int) []remoteObj {
-	if typ != remoteFSTypeVideo {
+	if typ != remote.FSTypeVideo {
 		return nil
 	}
 	entries, err := os.ReadDir(filepath.Dir(disk))
@@ -578,7 +424,7 @@ type remoteFSSearchData struct {
 // the virtual root, as JoinPath("") does on OpenList's side.
 func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
@@ -589,21 +435,21 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 		Page     int    `json:"page"`
 		PerPage  int    `json:"per_page"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if req.Page < 1 || req.PerPage < 1 {
-		remoteErr(w, 400, "page and per_page must be positive")
+		remote.Err(w, 400, "page and per_page must be positive")
 		return
 	}
 	disk, ok := a.remoteDiskPath(req.Parent)
 	if !ok {
-		remoteErr(w, 400, "invalid path")
+		remote.Err(w, 400, "invalid path")
 		return
 	}
 	if st, err := os.Stat(disk); err != nil || !st.IsDir() {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	deadline := 3 * time.Second
@@ -621,7 +467,7 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 			Name:   h.Name,
 			IsDir:  h.IsDir,
 			Size:   h.Size,
-			Type:   remoteFSType(h.Name, h.IsDir),
+			Type:   remote.FSType(h.Name, h.IsDir),
 		})
 	}
 	start := int64(req.Page-1) * int64(req.PerPage)
@@ -633,5 +479,5 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		content = items[start:end]
 	}
-	remoteOK(w, remoteFSSearchData{Content: content, Total: int64(len(items))})
+	remote.OK(w, remoteFSSearchData{Content: content, Total: int64(len(items))})
 }

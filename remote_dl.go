@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"html"
 	"net/http"
 	"net/url"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // remoteHandleDown implements GET/HEAD /d/*, the OpenList download endpoint:
@@ -30,7 +31,7 @@ func (a *App) remoteHandleProxy(w http.ResponseWriter, r *http.Request) {
 // which answers Range, HEAD and conditional requests.
 func (a *App) remoteServeDownload(w http.ResponseWriter, r *http.Request, prefix string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		remoteHTMLFail(w, http.StatusMethodNotAllowed, "method not allowed")
+		remote.HTMLFail(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	// r.URL.Path arrives percent-decoded. A bare "/d" is the root, "/d/".
@@ -47,12 +48,12 @@ func (a *App) remoteServeDownload(w http.ResponseWriter, r *http.Request, prefix
 	// before touching the file, so file-shaped requests are verified first.
 	dirShaped := vpath == "/" || strings.HasSuffix(rawPath, "/")
 	if !dirShaped && !a.remoteVerifySign(vpath, sign) {
-		remoteHTMLFail(w, http.StatusUnauthorized, remoteSignErrText(sign))
+		remote.HTMLFail(w, http.StatusUnauthorized, remoteSignErrText(sign))
 		return
 	}
 	disk, ok := a.remoteDiskPath(vpath)
 	if !ok {
-		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
+		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	info, err := os.Stat(disk)
@@ -61,22 +62,22 @@ func (a *App) remoteServeDownload(w http.ResponseWriter, r *http.Request, prefix
 		if !os.IsNotExist(err) {
 			msg = err.Error()
 		}
-		remoteHTMLFail(w, http.StatusInternalServerError, msg)
+		remote.HTMLFail(w, http.StatusInternalServerError, msg)
 		return
 	}
 	if info.IsDir() {
-		remoteHTMLFail(w, http.StatusInternalServerError, "not a file")
+		remote.HTMLFail(w, http.StatusInternalServerError, "not a file")
 		return
 	}
 	// A trailing slash on a real file is still a file download, so the sign
 	// applies after all.
 	if dirShaped && !a.remoteVerifySign(vpath, sign) {
-		remoteHTMLFail(w, http.StatusUnauthorized, remoteSignErrText(sign))
+		remote.HTMLFail(w, http.StatusUnauthorized, remoteSignErrText(sign))
 		return
 	}
 	f, err := os.Open(disk)
 	if err != nil {
-		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
+		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	defer f.Close()
@@ -99,18 +100,4 @@ func remoteSignErrText(sign string) string {
 		}
 	}
 	return "sign invalid"
-}
-
-// remoteHTMLFail writes the plain HTML error page of the /d and /p
-// endpoints: the status line as title and heading, the message as the body
-// paragraph, like OpenList's error pages.
-func remoteHTMLFail(w http.ResponseWriter, code int, msg string) {
-	title := strconv.Itoa(code)
-	if text := http.StatusText(code); text != "" {
-		title = fmt.Sprintf("%d %s", code, text)
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(code)
-	fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>%s</title></head><body><h1>%s</h1><p>%s</p></body></html>`,
-		title, title, html.EscapeString(msg))
 }

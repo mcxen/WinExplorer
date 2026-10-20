@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // remoteLoginReq is the body of both login endpoints: the plaintext
@@ -18,17 +18,17 @@ type remoteLoginReq struct {
 // plaintext password, whose StaticHash must match the stored one.
 func (a *App) remoteHandleLogin(w http.ResponseWriter, r *http.Request) {
 	var req remoteLoginReq
-	if err := remoteReadJSON(r, &req); err != nil {
-		remoteErr(w, 400, err.Error())
+	if err := remote.ReadJSON(r, &req); err != nil {
+		remote.Err(w, 400, err.Error())
 		return
 	}
 	if req.Username == "" {
-		remoteErr(w, 400, "username is required")
+		remote.Err(w, 400, "username is required")
 		return
 	}
 	conf := a.remoteConf()
-	if req.Username != conf.Username || remoteHashPassword(req.Password) != conf.PassHash {
-		remoteErr(w, 401, "Invalid username or password")
+	if req.Username != conf.Username || remote.HashPassword(req.Password) != conf.PassHash {
+		remote.Err(w, 401, "Invalid username or password")
 		return
 	}
 	a.remoteLoginOK(w)
@@ -39,17 +39,17 @@ func (a *App) remoteHandleLogin(w http.ResponseWriter, r *http.Request) {
 // StaticHash, compared as it is.
 func (a *App) remoteHandleLoginHash(w http.ResponseWriter, r *http.Request) {
 	var req remoteLoginReq
-	if err := remoteReadJSON(r, &req); err != nil {
-		remoteErr(w, 400, err.Error())
+	if err := remote.ReadJSON(r, &req); err != nil {
+		remote.Err(w, 400, err.Error())
 		return
 	}
 	if req.Username == "" {
-		remoteErr(w, 400, "username is required")
+		remote.Err(w, 400, "username is required")
 		return
 	}
 	conf := a.remoteConf()
 	if req.Username != conf.Username || req.Password != conf.PassHash {
-		remoteErr(w, 401, "Invalid username or password")
+		remote.Err(w, 401, "Invalid username or password")
 		return
 	}
 	a.remoteLoginOK(w)
@@ -58,20 +58,11 @@ func (a *App) remoteHandleLoginHash(w http.ResponseWriter, r *http.Request) {
 // remoteLoginOK issues the login JWT, marks it live and answers with it.
 func (a *App) remoteLoginOK(w http.ResponseWriter) {
 	conf := a.remoteConf()
-	token := remoteSignJWT(conf.Token, time.Now())
+	token := remote.SignJWT(conf.Token, time.Now())
 	remoteLiveMu.Lock()
 	remoteLiveTokens[token] = struct{}{}
 	remoteLiveMu.Unlock()
-	remoteOK(w, map[string]string{"token": token})
-}
-
-// remoteReadJSON decodes a small JSON request body.
-func remoteReadJSON(r *http.Request, v any) error {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(body, v)
+	remote.OK(w, map[string]string{"token": token})
 }
 
 // remoteMeUser is /api/me's payload, in OpenList's field order. A disabled
@@ -93,7 +84,7 @@ type remoteMeUser struct {
 // otherwise a disabled guest.
 func (a *App) remoteHandleMe(w http.ResponseWriter, r *http.Request) {
 	if a.remoteIsAdmin(r) {
-		remoteOK(w, remoteMeUser{
+		remote.OK(w, remoteMeUser{
 			ID:         1,
 			Username:   a.remoteConf().Username,
 			BasePath:   "/",
@@ -102,7 +93,7 @@ func (a *App) remoteHandleMe(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	remoteOK(w, remoteMeUser{
+	remote.OK(w, remoteMeUser{
 		ID:       2,
 		Username: "guest",
 		BasePath: "/",
@@ -119,7 +110,7 @@ func (a *App) remoteHandleLogout(w http.ResponseWriter, r *http.Request) {
 		delete(remoteLiveTokens, token)
 		remoteLiveMu.Unlock()
 	}
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteSettings is the minimum the OpenList web UI needs from
@@ -178,5 +169,5 @@ var remoteSettings = map[string]string{
 
 // remoteHandleSettings implements GET /api/public/settings, on any method.
 func (a *App) remoteHandleSettings(w http.ResponseWriter, r *http.Request) {
-	remoteOK(w, remoteSettings)
+	remote.OK(w, remoteSettings)
 }

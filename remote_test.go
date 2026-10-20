@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // remote_test.go drives the OpenList-compatible remote server through real
@@ -73,7 +75,7 @@ func newRemoteTestEnv(t *testing.T) *remoteTestEnv {
 	a := &App{}
 	rc := *a.remoteConf()
 	rc.Username = "admin"
-	rc.PassHash = remoteHashPassword(remoteTestPass)
+	rc.PassHash = remote.HashPassword(remoteTestPass)
 	a.remoteSaveConf(&rc)
 	e := &remoteTestEnv{t: t, home: home, a: a, conf: &rc}
 	e.srv = httptest.NewServer(a.remoteMux())
@@ -534,31 +536,31 @@ func TestRemoteFSTypeTable(t *testing.T) {
 		name string
 		want int
 	}{
-		{"movie.mp4", remoteFSTypeVideo},
-		{"stream.m3u8", remoteFSTypeVideo},
-		{"clip.rmvb", remoteFSTypeVideo},
-		{"song.mp3", remoteFSTypeAudio},
-		{"sound.m4a", remoteFSTypeAudio},
-		{"photo.jpg", remoteFSTypeImage},
-		{"picture.avif", remoteFSTypeImage},
-		{"animation.swf", remoteFSTypeImage},
-		{"notes.md", remoteFSTypeText},
-		{"main.go", remoteFSTypeText},
-		{"app.tsx", remoteFSTypeText},
-		{"sub.srt", remoteFSTypeText},
-		{"danmu.ASS", remoteFSTypeText},
-		{"vars.properties", remoteFSTypeText},
-		{"page.htm", remoteFSTypeText},
-		{"data.bin", remoteFSTypeUnknown},
-		{"archive.zip", remoteFSTypeUnknown},
+		{"movie.mp4", remote.FSTypeVideo},
+		{"stream.m3u8", remote.FSTypeVideo},
+		{"clip.rmvb", remote.FSTypeVideo},
+		{"song.mp3", remote.FSTypeAudio},
+		{"sound.m4a", remote.FSTypeAudio},
+		{"photo.jpg", remote.FSTypeImage},
+		{"picture.avif", remote.FSTypeImage},
+		{"animation.swf", remote.FSTypeImage},
+		{"notes.md", remote.FSTypeText},
+		{"main.go", remote.FSTypeText},
+		{"app.tsx", remote.FSTypeText},
+		{"sub.srt", remote.FSTypeText},
+		{"danmu.ASS", remote.FSTypeText},
+		{"vars.properties", remote.FSTypeText},
+		{"page.htm", remote.FSTypeText},
+		{"data.bin", remote.FSTypeUnknown},
+		{"archive.zip", remote.FSTypeUnknown},
 	}
 	for _, c := range cases {
-		if got := remoteFSType(c.name, false); got != c.want {
+		if got := remote.FSType(c.name, false); got != c.want {
 			t.Errorf("remoteFSType(%q) = %d, want %d", c.name, got, c.want)
 		}
 	}
-	if got := remoteFSType("folder.mp4", true); got != remoteFSTypeFolder {
-		t.Fatalf("a folder named like a video = %d, want %d", got, remoteFSTypeFolder)
+	if got := remote.FSType("folder.mp4", true); got != remote.FSTypeFolder {
+		t.Fatalf("a folder named like a video = %d, want %d", got, remote.FSTypeFolder)
 	}
 }
 
@@ -671,7 +673,7 @@ func TestRemoteFSGetRootAndRelated(t *testing.T) {
 
 	// A video brings its same-prefix siblings; another stem stays out.
 	clip := get("/media/clip.mp4")
-	if clip.Type != remoteFSTypeVideo {
+	if clip.Type != remote.FSTypeVideo {
 		t.Fatalf("clip.mp4 type = %d, want video", clip.Type)
 	}
 	names := make([]string, 0, len(clip.Related))
@@ -798,7 +800,7 @@ func TestRemoteFSSearch(t *testing.T) {
 	if len(hits) != 1 {
 		t.Fatalf("notes: %d hits, want 1 (%v)", len(hits), hits)
 	}
-	if it := hits["notes.txt"]; it.Parent != "/Documents" || it.IsDir || it.Type != remoteFSTypeText {
+	if it := hits["notes.txt"]; it.Parent != "/Documents" || it.IsDir || it.Type != remote.FSTypeText {
 		t.Fatalf("notes.txt hit = %+v", it)
 	}
 
@@ -843,7 +845,7 @@ func TestRemoteRealPortSmoke(t *testing.T) {
 	a := &App{}
 	rc := *a.remoteConf()
 	rc.Username = "admin"
-	rc.PassHash = remoteHashPassword(remoteTestPass)
+	rc.PassHash = remote.HashPassword(remoteTestPass)
 	a.remoteSaveConf(&rc)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:15244")

@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"sunvale/internal/fsops"
 )
 
 // 归档支持：zip 与 tar 家族（含 gz/bz2）用标准库纯 Go 解压；xz 的
@@ -391,7 +393,7 @@ func uniqueFreeName(dir, name string, isDir bool) (string, error) {
 	} else if err != nil {
 		return "", err
 	}
-	candidate := copyName(name, isDir, 1)
+	candidate := fsops.CopyName(name, isDir, 1)
 	for n := 2; n < 10000; n++ {
 		_, err := os.Lstat(filepath.Join(dir, candidate))
 		if errors.Is(err, os.ErrNotExist) {
@@ -400,7 +402,7 @@ func uniqueFreeName(dir, name string, isDir bool) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		candidate = copyName(name, isDir, n)
+		candidate = fsops.CopyName(name, isDir, n)
 	}
 	return "", errors.New("无法生成不冲突的名称")
 }

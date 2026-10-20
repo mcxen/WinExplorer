@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"sunvale/internal/remote"
 )
 
 // remote_ext.go is the manage console's shell extension surface: the
@@ -67,17 +69,17 @@ func remoteExtEntry(name, disk string, st os.FileInfo) Entry {
 func (a *App) remoteExtTarget(w http.ResponseWriter, vpath, name string) (Entry, []shellExt, bool) {
 	disk, ok := a.remoteExtDiskPath(vpath)
 	if !ok {
-		remoteErr(w, 400, "invalid path")
+		remote.Err(w, 400, "invalid path")
 		return Entry{}, nil, false
 	}
 	st, err := os.Stat(disk)
 	if err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return Entry{}, nil, false
 	}
 	exts, _, err := loadShellExtensions()
 	if err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return Entry{}, nil, false
 	}
 	return remoteExtEntry(name, disk, st), exts, true
@@ -88,19 +90,19 @@ func (a *App) remoteExtTarget(w http.ResponseWriter, vpath, name string) (Entry,
 // right-click menu wants them.
 func (a *App) remoteHandleExtList(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
 		Path string `json:"path"`
 		Name string `json:"name"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if req.Path == "" {
-		remoteErr(w, 400, "path is required")
+		remote.Err(w, 400, "path is required")
 		return
 	}
 	e, exts, ok := a.remoteExtTarget(w, req.Path, req.Name)
@@ -116,7 +118,7 @@ func (a *App) remoteHandleExtList(w http.ResponseWriter, r *http.Request) {
 			out = append(out, remoteExtItem{Name: x.Name, Terminal: x.Terminal})
 		}
 	}
-	remoteOK(w, remoteExtListData{Exts: out})
+	remote.OK(w, remoteExtListData{Exts: out})
 }
 
 // remoteHandleExtRun answers POST /api/fs/ext/run: one shell extension run
@@ -125,7 +127,7 @@ func (a *App) remoteHandleExtList(w http.ResponseWriter, r *http.Request) {
 // starts in a goroutine and the reply never waits for a slow tool.
 func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
@@ -133,16 +135,16 @@ func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 		Name    string `json:"name"`
 		ExtName string `json:"ext_name"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if req.Path == "" {
-		remoteErr(w, 400, "path is required")
+		remote.Err(w, 400, "path is required")
 		return
 	}
 	if strings.TrimSpace(req.ExtName) == "" {
-		remoteErr(w, 400, "ext_name is required")
+		remote.Err(w, 400, "ext_name is required")
 		return
 	}
 	e, exts, ok := a.remoteExtTarget(w, req.Path, req.Name)
@@ -157,12 +159,12 @@ func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if chosen == nil {
-		remoteErr(w, 500, "extension not found")
+		remote.Err(w, 500, "extension not found")
 		return
 	}
 	x := *chosen
 	go func() { _ = x.run(e) }()
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteHandleTerminal answers POST /api/fs/terminal: the system terminal
@@ -171,34 +173,34 @@ func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 // does not wait for the window.
 func (a *App) remoteHandleTerminal(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
 		Path string `json:"path"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if req.Path == "" {
-		remoteErr(w, 400, "path is required")
+		remote.Err(w, 400, "path is required")
 		return
 	}
 	disk, ok := a.remoteExtDiskPath(req.Path)
 	if !ok {
-		remoteErr(w, 400, "invalid path")
+		remote.Err(w, 400, "invalid path")
 		return
 	}
 	st, err := os.Stat(disk)
 	if err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	if !st.IsDir() {
-		remoteErr(w, 400, "not a folder")
+		remote.Err(w, 400, "not a folder")
 		return
 	}
 	go func() { _ = sysTerminal(disk) }()
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }

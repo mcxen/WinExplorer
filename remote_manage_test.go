@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // remote_manage_test.go drives the management round's server surface over
@@ -1306,7 +1308,7 @@ func TestRemoteManageSmoke(t *testing.T) {
 	a := &App{store: &persistedState{}, homePath: home}
 	rc := *a.remoteConf()
 	rc.Username = "admin"
-	rc.PassHash = remoteHashPassword(remoteTestPass)
+	rc.PassHash = remote.HashPassword(remoteTestPass)
 	a.remoteSaveConf(&rc)
 
 	probe, err := net.Listen("tcp", "127.0.0.1:0")

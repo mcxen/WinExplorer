@@ -330,7 +330,7 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 	case tile.Hovered():
 		tile.Background(colorHover())
 	}
-	aiFxRow(c, tile, aiFx.look(p.path), 0, 4)
+	aiFxRow(c, tile, p.path, 0, 4)
 	tile.Children(func() {
 		ui.Column(c).Fill().Gap(3).Children(func() { a.galleryTileBody(c, p) })
 	})

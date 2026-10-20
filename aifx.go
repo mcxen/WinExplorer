@@ -126,8 +126,10 @@ type aiFxLook struct {
 	gone        bool
 	// flash fades 1 to 0 over a fresh name.
 	flash float32
-	// live is a look still changing, which needs another frame.
-	live bool
+	// live is a look still changing, which needs another frame; moving is
+	// one whose layout changes (a slide, a fold, a flash, a slide about to
+	// start), which needs the view built again rather than only painted.
+	live, moving bool
 }
 
 func (l aiFxLook) any() bool { return l.live || l.gone }
@@ -155,7 +157,7 @@ func (s *aiFxStore) look(path string) aiFxLook {
 		default:
 			return aiFxLook{gone: true}
 		}
-		l.live = true
+		l.live, l.moving = true, true
 	}
 	if lit, ok := s.busy[k]; ok && l.slide == 0 {
 		l.glow = breath(now.Sub(lit))
@@ -168,7 +170,7 @@ func (s *aiFxStore) look(path string) aiFxLook {
 		}
 		if d := now.Sub(at); d < aiFxFlash {
 			l.flash = 1 - float32(d)/float32(aiFxFlash)
-			l.live = true
+			l.live, l.moving = true, true
 		} else {
 			delete(s.renamed, k)
 		}
@@ -218,16 +220,22 @@ func breath(d time.Duration) float32 {
 func easeIn(t float32) float32  { return t * t }
 func easeOut(t float32) float32 { return 1 - (1-t)*(1-t) }
 
-// aiFxRow applies a look to a row or tile: the slide and fade, the fold of
-// its height (full is its resting height, 0 for a tile that keeps its
-// box), and the glow under its children. It asks for the next frame while
-// anything moves, and the desktop's reduce-motion preference leaves only
-// the steady states: a still glow and a row that is gone.
-func aiFxRow(c *ui.Context, el ui.Element, l aiFxLook, full float32, radius float32) {
+// aiFxRow applies path's look to its row or tile: the slide and fade, the
+// fold of its height (full is its resting height, 0 for a tile that keeps
+// its box), and the glow under its children. The glow breathes at paint
+// time, so a frame that only repaints keeps it moving; a slide, fold or
+// flash changes the layout and asks for the view to be built again. The
+// desktop's reduce-motion preference leaves only the steady states: a
+// still glow, and a row that is gone once its time is up.
+func aiFxRow(c *ui.Context, el ui.Element, path string, full, radius float32) aiFxLook {
+	l := aiFx.look(path)
 	if !l.any() {
-		return
+		return l
 	}
 	calm := c.Preferences().ReduceMotion
+	if l.moving {
+		c.After(16 * time.Millisecond)
+	}
 	if l.slide > 0 && !calm {
 		w := el.Bounds().W
 		if w <= 0 {
@@ -238,18 +246,22 @@ func aiFxRow(c *ui.Context, el ui.Element, l aiFxLook, full float32, radius floa
 			el.Height(full * (1 - l.fold)).Clip()
 		}
 	}
-	glow := l.glow
-	if calm && glow > 0 {
-		glow = 0.8
+	if l.glow > 0 || l.live {
+		el.Draw(func(p *ui.Painter, r ui.Rect) {
+			now := aiFx.look(path)
+			glow := now.glow
+			if calm && glow > 0 {
+				glow = 0.8
+			}
+			if glow > 0 {
+				paintAIGlow(p, r, glow, radius)
+			}
+			if now.live && !calm {
+				p.AnimationFrame()
+			}
+		})
 	}
-	el.Draw(func(p *ui.Painter, r ui.Rect) {
-		if glow > 0 {
-			paintAIGlow(p, r, glow, radius)
-		}
-		if l.live && !calm {
-			p.AnimationFrame()
-		}
-	})
+	return l
 }
 
 // paintAIGlow is the breathing light: clear on the left, gathering into
@@ -265,7 +277,7 @@ func paintAIGlow(p *ui.Painter, r ui.Rect, strength, radius float32) {
 	band := ui.Rect{X: r.X + start, Y: r.Y, W: r.W - start, H: r.H}
 	p.FillGradient(band, ui.LinearGradient{
 		From:  acc.Alpha(0),
-		To:    tip.Alpha(0.34 * strength),
+		To:    tip.Alpha(0.42 * strength),
 		Angle: 90,
 	}, radius)
 }

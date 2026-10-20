@@ -525,7 +525,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 		AlignItems(ui.Center).Justify(ui.Start).Margin(0, rowInset).
 		MinWidth(a.detailsWidth()).Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
-	aiFxRow(c, row, aiFx.look(e.Path), a.detailsRowH(), 4)
+	aiFxRow(c, row, e.Path, a.detailsRowH(), 4)
 	row.Children(func() {
 		name := ui.Row(c).Height(a.detailsRowH()).Padding(0, 8).Gap(8).
 			AlignItems(ui.Center)
@@ -681,7 +681,7 @@ func (a *App) listRow(c *ui.Context, e Entry) {
 		Padding(0, 8).Gap(8).AlignItems(ui.Center).Margin(0, rowInset).
 		Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
-	aiFxRow(c, row, aiFx.look(e.Path), a.listRowH(), 4)
+	aiFxRow(c, row, e.Path, a.listRowH(), 4)
 	row.Children(func() {
 		a.nameCell(c, e, 16, 12)
 	})
@@ -874,8 +874,7 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 		tile.Padding(4, 6).Gap(8).AlignItems(ui.Center).Justify(ui.Start)
 	}
 	a.paintSelect(tile, e.Path)
-	look := aiFx.look(e.Path)
-	aiFxRow(c, tile, look, 0, 4)
+	look := aiFxRow(c, tile, e.Path, 0, 4)
 	// A network tile decodes its picture for the first rows of the folder and
 	// for a tile under the pointer or in the selection; the rest keep the
 	// drawn glyph until someone looks, so opening a share does not download

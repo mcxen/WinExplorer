@@ -245,7 +245,7 @@ func TestIndexFlushesBuildInFlight(t *testing.T) {
 }
 
 func TestIndexRootsPreferHome(t *testing.T) {
-	ix := testIndex(t)
+	ix := NewIndex(IndexConfig{CacheFile: filepath.Join(t.TempDir(), "index.json"), PreferHome: true})
 	first, rest := ix.roots([]string{t.TempDir()})
 	if len(first) == 0 {
 		t.Skip("no home directory")

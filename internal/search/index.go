@@ -22,6 +22,7 @@ type IndexConfig struct {
 	Timeout    time.Duration
 	Refresh    time.Duration
 	Walkers    int
+	PreferHome bool
 }
 
 // Status is one atomic view of the index for progress and fallback decisions.
@@ -45,6 +46,7 @@ type Index struct {
 	timeout    time.Duration
 	refresh    time.Duration
 	walkers    int
+	preferHome bool
 
 	items    map[string]indexEntry
 	built    time.Time
@@ -69,6 +71,7 @@ func NewIndex(config IndexConfig) *Index {
 		timeout:    config.Timeout,
 		refresh:    config.Refresh,
 		walkers:    config.Walkers,
+		preferHome: config.PreferHome,
 	}
 	if ix.maxEntries <= 0 {
 		ix.maxEntries = 200000
@@ -206,9 +209,11 @@ func (ix *Index) Rebuild(roots []string) {
 // roots orders the user's home first, then the caller's volume roots. The cap
 // therefore cuts system trees before it cuts the folders a person uses.
 func (ix *Index) roots(roots []string) (first []string, rest []string) {
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		if st, err := os.Stat(home); err == nil && st.IsDir() {
-			first = append(first, filepath.Clean(home))
+	if ix.preferHome {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			if st, err := os.Stat(home); err == nil && st.IsDir() {
+				first = append(first, filepath.Clean(home))
+			}
 		}
 	}
 	for _, root := range roots {

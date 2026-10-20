@@ -154,7 +154,17 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 		if run.autopilot && !failed && !asked && ctx.Err() == nil {
 			plans = sunvaleToolState.plansSince(before)
 		}
+		lv := &a.assist.live
+		lv.mu.Lock()
+		tail := lv.pending
+		lv.pending = nil
+		lv.mu.Unlock()
 		a.postAssist(func() {
+			// The last partial of a stopped reply lands before the run
+			// closes its live line, not after as a second copy.
+			if tail != nil {
+				a.applyAssistLive(tail)
+			}
 			a.assist.passwords = append(a.assist.passwords, saved...)
 			if len(a.assist.passwords) > assistMaxArchivePasswords {
 				a.assist.passwords = a.assist.passwords[len(a.assist.passwords)-assistMaxArchivePasswords:]
@@ -311,7 +321,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 				if reasoning != "" && strings.TrimSpace(full) == "" && run.onStatus != nil {
 					run.onStatus(reasoningLabel(reasoning))
 				}
-				shown := streamShown(full)
+				shown := streamLive(full)
 				if strings.TrimSpace(shown) == "" {
 					return
 				}
@@ -446,6 +456,23 @@ func readMessageStream(ctx context.Context, stream *schema.StreamReader[*schema.
 		return msg, errAssistantStopped
 	}
 	return msg, nil
+}
+
+// streamLive is what a reply shows while it streams: a half-written choice
+// block is hidden, as streamShown does, but an OpenUI program is kept so the
+// pane can hold its place with a placeholder until it closes.
+func streamLive(text string) string {
+	cut, hide := len(text), false
+	if i := strings.Index(text, choiceOpen); i >= 0 && !strings.Contains(text[i:], choiceClose) {
+		cut, hide = i, true
+	}
+	if i := strings.Index(text, "```choices"); i >= 0 && strings.Count(text[i:], "```") < 2 && i < cut {
+		cut, hide = i, true
+	}
+	if hide {
+		return strings.TrimSpace(text[:cut])
+	}
+	return text
 }
 
 // streamShown hides an unfinished choice or OpenUI block so the markers do
@@ -634,20 +661,95 @@ func (a *App) failAssist(err error) {
 	})
 }
 
+// assistLiveEvery is how often a growing reply repaints: a model sends
+// tokens far faster than a person reads, and each repaint is a hop to the
+// main thread and a frame.
+const assistLiveEvery = 33 * time.Millisecond
+
+// assistLive coalesces the growing line of a reply: the latest partial
+// waits up to assistLiveEvery and replaces any before it. seq orders every
+// update, so a partial landing after the finished line it led to is
+// dropped instead of reopening it.
+type assistLive struct {
+	mu      sync.Mutex
+	pending *assistLiveUpdate
+	armed   bool
+	seq     uint64
+	applied uint64
+}
+
+type assistLiveUpdate struct {
+	seq     uint64
+	id      int
+	turn    aiTurn
+	partial bool
+}
+
 func (a *App) noteAssistLive(id int, turn aiTurn, partial bool) {
+	lv := &a.assist.live
+	lv.mu.Lock()
+	lv.seq++
+	up := &assistLiveUpdate{seq: lv.seq, id: id, turn: turn, partial: partial}
+	if partial && mygo.App.IsReady() {
+		lv.pending = up
+		if !lv.armed {
+			lv.armed = true
+			time.AfterFunc(assistLiveEvery, a.flushAssistLive)
+		}
+		lv.mu.Unlock()
+		return
+	}
+	// A finished line replaces whatever partial of it is waiting; another
+	// line's partial goes first, so the transcript keeps its order.
+	prev := lv.pending
+	lv.pending = nil
+	lv.mu.Unlock()
+	if prev != nil && prev.id == id {
+		prev = nil
+	}
 	a.postAssist(func() {
-		follow := a.assist.scroll.AtLatest()
-		a.assist.applyLive(id, turn, partial)
-		if turn.Role == "tool" && !partial {
-			a.assist.pending = ""
+		if prev != nil {
+			a.applyAssistLive(prev)
 		}
-		if !partial {
-			a.assist.persistSession(a.assist.folder)
-		}
-		if follow {
-			a.assist.scroll.JumpToLatest()
-		}
+		a.applyAssistLive(up)
 	})
+}
+
+func (a *App) flushAssistLive() {
+	lv := &a.assist.live
+	lv.mu.Lock()
+	up := lv.pending
+	lv.pending = nil
+	lv.armed = false
+	lv.mu.Unlock()
+	if up != nil {
+		a.postAssist(func() { a.applyAssistLive(up) })
+	}
+}
+
+// applyAssistLive runs on the main thread.
+func (a *App) applyAssistLive(up *assistLiveUpdate) {
+	lv := &a.assist.live
+	lv.mu.Lock()
+	stale := up.seq <= lv.applied
+	if !stale {
+		lv.applied = up.seq
+	}
+	lv.mu.Unlock()
+	if stale {
+		return
+	}
+	follow := a.assist.scroll.AtLatest()
+	a.assist.applyLive(up.id, up.turn, up.partial)
+	if up.turn.Role == "tool" && !up.partial {
+		a.assist.pending = ""
+	}
+	if !up.partial {
+		a.assist.persistSession(a.assist.folder)
+	}
+	if follow {
+		a.assist.scroll.JumpToLatest()
+	}
 }
 
 func (a *App) noteAssistStatus(status string) {

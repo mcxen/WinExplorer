@@ -88,6 +88,7 @@ type assistantUI struct {
 	modelLists map[string][]string
 	modelBusy  map[string]bool
 	paint      map[int]*assistPaint
+	live       assistLive
 	// form fields for adding a provider, a password or a memory.
 	pName, pURL, pModel, pKey string
 	pwName, pwSecret          string
@@ -389,6 +390,7 @@ type assistPaint struct {
 	turn  chat.TurnState
 	group chat.GroupState
 	acts  map[int]*chat.ActivityState
+	md    *assistMD
 }
 
 func (u *assistantUI) paintFor(i int) *assistPaint {
@@ -434,7 +436,7 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 	paint := a.assist.paintFor(key)
 	var tools []int
 	var answer strings.Builder
-	var openBlocks []openPiece
+	var replies []int
 	for _, i := range ex.Rest {
 		t := turns[i]
 		switch t.Role {
@@ -445,15 +447,14 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			if t.Choice != nil && strings.TrimSpace(text) == t.Choice.Prompt {
 				text = ""
 			}
-			prose, blocks := splitOpenUI(text)
-			if strings.TrimSpace(prose) != "" {
+			// OpenUI programs stay in the text: the Markdown view draws them
+			// where the model put them.
+			if strings.TrimSpace(text) != "" {
 				if answer.Len() > 0 {
 					answer.WriteString("\n\n")
 				}
-				answer.WriteString(prose)
-			}
-			for _, block := range blocks {
-				openBlocks = append(openBlocks, openPiece{turn: i, src: block})
+				answer.WriteString(strings.TrimSpace(text))
+				replies = append(replies, i)
 			}
 		}
 	}
@@ -548,15 +549,11 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		}}
 	}
 	var finalView chat.View
-	if final != "" || len(openBlocks) > 0 {
+	if final != "" {
+		streaming := last && a.assist.running
 		finalView = func(c *ui.Context) {
-			ui.Column(c).FillWidth().MinWidth(0).Gap(8).Children(func() {
-				if final != "" {
-					ui.Text(c, final).FontSize(13.5).TextColor(colorText()).Wrap()
-				}
-				for n, block := range openBlocks {
-					a.paintOpenBlock(c.Key("openui-"+itoa(block.turn)+"-"+itoa(n)), block.src, block.turn)
-				}
+			ui.Column(c.Key("md")).FillWidth().MinWidth(0).Children(func() {
+				a.assistMarkdown(c, paint, final, replies, streaming)
 			})
 		}
 	}

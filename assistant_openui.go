@@ -52,7 +52,10 @@ type ouiView struct {
 	Label    string
 	Action   string
 	Children []*ouiView
+	Items    []*ouiView
 	Cols     []ouiCol
+	Path     string
+	Extra    int
 	// Name, Placeholder, Options, Required and Multiline are a form
 	// field's: Input, TextArea and Select inside a Form.
 	Name        string
@@ -542,6 +545,34 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 			return nil
 		}
 		return &ouiView{Kind: "table", Cols: cols}
+	case "Tree":
+		items := openTreeItems(env, openArg(e.args, 0), stack)
+		if len(items) == 0 {
+			return nil
+		}
+		tree := &ouiView{Kind: "tree", Items: items}
+		trimOpenTree(tree, 6, 200)
+		return tree
+	case "TreeItem":
+		label, _ := openText(env, openArg(e.args, 0), stack)
+		label = strings.TrimSpace(label)
+		if label == "" {
+			return nil
+		}
+		pathArg := openArg(e.args, 1)
+		path, pathOK := openText(env, pathArg, stack)
+		childrenArg := openArg(e.args, 2)
+		// With path optional, TreeItem(label, children) is the compact form;
+		// an explicit null keeps children in the third position.
+		if !pathOK && childrenArg.kind == "" && pathArg.kind != "null" {
+			childrenArg = pathArg
+		}
+		return &ouiView{
+			Kind:  "treeitem",
+			Text:  label,
+			Path:  strings.TrimSpace(path),
+			Items: openTreeItems(env, childrenArg, stack),
+		}
 	case "Buttons":
 		kids := openButtons(env, openArg(e.args, 0), stack)
 		if len(kids) == 0 {
@@ -626,6 +657,56 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 	default:
 		return nil
 	}
+}
+
+// openTreeItems realizes TreeItem children, ignoring unrelated entries so a
+// malformed tree still shows the nodes that are valid.
+func openTreeItems(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) []*ouiView {
+	var out []*ouiView
+	for _, item := range openList(env, e, stack) {
+		if v := realizeOpen(env, item, stack); v != nil && v.Kind == "treeitem" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// trimOpenTree bounds what a reply can ask the pane to draw. The first 200
+// nodes and six levels stay visible; the remainder is reported on the last
+// kept branch instead of silently disappearing.
+func trimOpenTree(tree *ouiView, maxDepth, maxNodes int) {
+	if tree == nil {
+		return
+	}
+	kept := 0
+	var walk func(parent *ouiView, depth int)
+	walk = func(parent *ouiView, depth int) {
+		old := parent.Items
+		items := make([]*ouiView, 0, len(old))
+		for _, item := range old {
+			size := openTreeSize(item)
+			if depth > maxDepth || kept >= maxNodes {
+				parent.Extra += size
+				continue
+			}
+			kept++
+			items = append(items, item)
+			walk(item, depth+1)
+		}
+		parent.Items = items
+	}
+	walk(tree, 1)
+}
+
+func openTreeSize(v *ouiView) int {
+	if v == nil {
+		return 0
+	}
+	n := 1
+	for _, ch := range v.Items {
+		n += openTreeSize(ch)
+	}
+	return n
 }
 
 func openIsField(kind string) bool { return kind == "input" || kind == "select" }

@@ -140,10 +140,18 @@ func TestNavTreeRowFollowsTheWindow(t *testing.T) {
 		t.Fatalf("the row at %v is not marked selected", chev)
 	}
 	// Clicking a tree row navigates there: the folder beside the current one,
-	// which the centered reveal leaves in sight. The click lands past the row's
+	// scrolled into sight first, since the reveal scrolls only as far as the
+	// current row needs. The click lands past the row's
 	// twist — the name's end — since the row's own middle is where the chevron
 	// sits on an indented folder.
 	sibling := filepath.Join(dir, "B-sub")
+	for i, r := range a.navRows() {
+		if r.path == sibling {
+			a.navTree.list.ScrollIntoView(i)
+		}
+	}
+	tt.Frame()
+	tt.Frame()
 	row, ok := tt.Find("B-sub")
 	if !ok {
 		t.Fatalf("no tree row for the sibling folder: %v", tt.Texts())

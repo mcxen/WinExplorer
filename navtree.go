@@ -40,6 +40,29 @@ type navTree struct {
 	reveal string
 	row    int
 	list   ui.ListState
+	// clicked is the key of the pane row the user clicked, and clickedPath
+	// where it went: that row, not a twin elsewhere in the pane, is the one
+	// selected while the tab stays there. noSync is a place reached from
+	// a row above the tree, which the tree does not open itself up to.
+	clicked     string
+	clickedPath string
+	noSync      string
+	// recent is 最近位置 in the order it holds for this window, and
+	// recentIn the same set for lookups (sidebar.go recentPlaceRows).
+	recent   []string
+	recentIn map[string]bool
+}
+
+// navFromPane notes that a click on the pane row key is taking the tab to
+// path. tree says whether the row is one of the tree's: a pinned or recent
+// row does not open the tree down to its folder.
+func (a *App) navFromPane(key, path string, tree bool) {
+	a.navTree.clicked = key
+	a.navTree.clickedPath = cleanNav(path)
+	a.navTree.noSync = ""
+	if !tree {
+		a.navTree.noSync = cleanNav(path)
+	}
 }
 
 // navIndent is a tree row's left padding, a step per level.
@@ -153,6 +176,17 @@ func (a *App) navTreeFollow() {
 		return
 	}
 	a.navTree.synced = path
+	if path != a.navTree.clickedPath {
+		// Somewhere else took the tab here — the file pane, the address bar,
+		// history — so no pane row is the one it came from.
+		a.navTree.clicked, a.navTree.clickedPath = "", ""
+	}
+	if path == a.navTree.noSync {
+		a.navTree.noSync = ""
+		a.navTree.reveal = ""
+		return
+	}
+	a.navTree.noSync = ""
 	if specialPath(path) {
 		a.navTree.reveal = ""
 		return
@@ -163,8 +197,8 @@ func (a *App) navTreeFollow() {
 
 // navTreeReveal shows the current folder's row when the tab moved there: the
 // pane's list keeps only what shows, so a row at the end of a long tree is
-// scrolled to by its place in that list — centered, the way a tree usually puts
-// the place you are at. The request stands until the row is in sight: the pane
+// scrolled to by its place in that list — as little as brings it in, so the
+// rows the user was looking at move no further than they must. The request stands until the row is in sight: the pane
 // may not list this place yet (此电脑 collapsed, or the list without a layout
 // in its first frame), and it becomes showable — and shown — as soon as it does.
 func (a *App) navTreeReveal() {
@@ -179,7 +213,7 @@ func (a *App) navTreeReveal() {
 		a.navTree.reveal = "" // in sight: the reveal is done
 		return
 	}
-	a.navTree.list.ScrollTo(a.navTree.row, ui.Center)
+	a.navTree.list.ScrollIntoView(a.navTree.row)
 }
 
 // underKnownFolder reports whether path is 主文件夹 or one of the known

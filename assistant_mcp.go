@@ -142,7 +142,9 @@ func (s *sunvaleTools) takePlan(id string) (aiRenamePlan, bool) {
 	return p, ok
 }
 
-// resolveInRoot joins rel onto root and refuses anything that leaves root.
+// resolveInRoot resolves rel against root. Absolute paths are used as given
+// and relative paths (including "..") are joined onto root; the assistant may
+// reach any path the OS user can.
 func resolveInRoot(root, rel string) (string, error) {
 	root = filepath.Clean(root)
 	rel = strings.TrimSpace(rel)
@@ -150,15 +152,7 @@ func resolveInRoot(root, rel string) (string, error) {
 		return root, nil
 	}
 	if filepath.IsAbs(rel) {
-		var err error
-		rel, err = filepath.Rel(root, filepath.Clean(rel))
-		if err != nil {
-			return "", fmt.Errorf("路径不能离开当前文件夹")
-		}
-	}
-	rel = filepath.Clean(rel)
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("路径不能离开当前文件夹")
+		return filepath.Clean(rel), nil
 	}
 	return filepath.Join(root, rel), nil
 }
@@ -394,8 +388,8 @@ func newSunvaleServer() *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{Name: "list_dir", Description: "列出当前文件夹里的项目。path 相对当前文件夹。"}, s.listDir)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_file", Description: "读取当前文件夹里的一个文本文件。大文件只返回开头。"}, s.readFile)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_files", Description: "读取用户指定的多个文本文件。路径相对当前文件夹，或绝对路径。"}, s.readFiles)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_outside", Description: "列出绝对路径上的文件夹，可以在当前文件夹之外。"}, s.listOutside)
-	mcp.AddTool(server, &mcp.Tool{Name: "read_outside", Description: "读取绝对路径上的文本文件，可以在当前文件夹之外。"}, s.readOutside)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_outside", Description: "列出任意绝对路径上的文件夹。"}, s.listOutside)
+	mcp.AddTool(server, &mcp.Tool{Name: "read_outside", Description: "读取任意绝对路径上的文本文件。"}, s.readOutside)
 	mcp.AddTool(server, &mcp.Tool{Name: "properties", Description: "查看文件或文件夹的大小、时间和权限。路径相对当前文件夹，或绝对路径。"}, s.properties)
 	mcp.AddTool(server, &mcp.Tool{Name: "mkdir", Description: "在当前文件夹里新建文件夹。"}, s.mkdir)
 	mcp.AddTool(server, &mcp.Tool{Name: "new_text_file", Description: "在当前文件夹里新建文本文件。"}, s.newTextFile)

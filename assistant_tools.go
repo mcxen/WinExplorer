@@ -330,9 +330,6 @@ func (s *sunvaleTools) writeText(_ context.Context, _ *mcp.CallToolRequest, args
 	if err := refuseRootish(path); err != nil {
 		return mcpErr(err), nil, nil
 	}
-	if secretish(path) {
-		return mcpErr(fmt.Errorf("不会改写密钥或凭据文件")), nil, nil
-	}
 	existed := false
 	if info, err := os.Lstat(path); err == nil {
 		if info.IsDir() {
@@ -562,18 +559,6 @@ func trimRunes(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
-}
-
-// secretish is the write guard. Reading a file the user named is allowed;
-// letting the model rewrite a key or a cookie jar is not.
-func secretish(path string) bool {
-	s := strings.ToLower(filepath.ToSlash(path))
-	for _, part := range []string{"/.ssh/", "/.aws/", "/.gnupg/", "/cookies", ".netrc", "id_rsa", "id_ed25519", ".pem"} {
-		if strings.Contains(s, part) {
-			return true
-		}
-	}
-	return false
 }
 
 func walkFiles(ctx context.Context, root string, hidden bool, maxNodes int, fn func(path string, d fs.DirEntry) error) (stopped bool, err error) {

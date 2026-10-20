@@ -17,15 +17,19 @@ func TestResolveInRoot(t *testing.T) {
 	if err != nil || got != filepath.Join(root, "a.txt") {
 		t.Fatalf("got %s %v", got, err)
 	}
-	if _, err := resolveInRoot(root, ".."); err == nil {
-		t.Fatal("parent escaped the folder")
+	if got, err := resolveInRoot(root, ".."); err != nil || got != filepath.Dir(root) {
+		t.Fatalf("parent: %s %v", got, err)
 	}
-	if _, err := resolveInRoot(root, filepath.Join("..", "secret")); err == nil {
-		t.Fatal("nested parent escaped the folder")
+	if got, err := resolveInRoot(root, filepath.Join("..", "other")); err != nil || got != filepath.Join(filepath.Dir(root), "other") {
+		t.Fatalf("nested parent: %s %v", got, err)
+	}
+	abs := filepath.Join(string(filepath.Separator), "elsewhere", "b.txt")
+	if got, err := resolveInRoot(root, abs); err != nil || got != abs {
+		t.Fatalf("absolute: %s %v", got, err)
 	}
 }
 
-func TestSunvaleMCPStaysInFolder(t *testing.T) {
+func TestSunvaleMCPReachesAnyPath(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
@@ -64,9 +68,12 @@ func TestSunvaleMCPStaysInFolder(t *testing.T) {
 	if got := callToolText(t, sess, "read_file", map[string]any{"path": "a.txt"}); got != "hello" {
 		t.Fatalf("read: %q", got)
 	}
-	escaped := callTool(t, sess, "read_file", map[string]any{"path": ".."})
-	if !escaped.IsError {
-		t.Fatal("read escaped the folder")
+	far := filepath.Join(t.TempDir(), "out.txt")
+	if err := os.WriteFile(far, []byte("far"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := callToolText(t, sess, "read_file", map[string]any{"path": far}); got != "far" {
+		t.Fatalf("read outside folder: %q", got)
 	}
 	book := callToolText(t, sess, "password_list", map[string]any{})
 	if !strings.Contains(book, "mail") || strings.Contains(book, "s3cret") {

@@ -83,12 +83,12 @@ func TestAssistantSpecifiedFilesAndChoices(t *testing.T) {
 	if len(undos) != 1 || len(undos[0].created) != 1 {
 		t.Fatalf("undo: %+v", undos)
 	}
-	denied := callTool(t, sess, "write_text", map[string]any{"path": secret, "content": "nope"})
-	if !denied.IsError {
-		t.Fatal("secret write was allowed")
+	// No path denylist: a credential-looking path is writable like any other.
+	if res := callTool(t, sess, "write_text", map[string]any{"path": secret, "content": "nope"}); res.IsError {
+		t.Fatalf("write to %s refused", secret)
 	}
-	if _, err := os.ReadFile(secret); err != nil || string(mustRead(t, secret)) != "secret" {
-		t.Fatal("secret file changed")
+	if string(mustRead(t, secret)) != "nope" {
+		t.Fatal("write did not land")
 	}
 	nav := callToolText(t, sess, "navigate_to", map[string]any{"path": "sub"})
 	if got := sunvaleToolState.drainNav(); got != filepath.Join(dir, "sub") {

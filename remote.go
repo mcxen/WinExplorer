@@ -329,6 +329,14 @@ func (a *App) remoteMux() http.Handler {
 	mux.HandleFunc("/api/sunvale/reset-token", a.remoteHandleResetToken)
 	mux.HandleFunc("/api/sunvale/port", a.remoteHandlePort)
 	mux.HandleFunc("/api/sunvale/enabled", a.remoteHandleEnabled)
+	// Agent Card discovery is public; execution and task access require the
+	// administrator token. Both protocol aliases share the same handlers.
+	mux.HandleFunc("/.well-known/agent-card.json", a.remoteHandleA2ACard)
+	mux.HandleFunc("/.well-known/agent.json", a.remoteHandleA2ACard)
+	mux.HandleFunc("/a2a", a.remoteHandleA2A)
+	mux.HandleFunc("/a2a/v1", a.remoteHandleA2A)
+	mux.Handle("/mcp", a.assistantHTTPServer())
+	mux.Handle("/mcp/", a.assistantHTTPServer())
 	mux.HandleFunc("/@manage", a.remoteHandleManage)
 	mux.HandleFunc("/@manage/", a.remoteHandleManage)
 	mux.HandleFunc("/", a.remoteHandleIndex)
@@ -411,7 +419,10 @@ func remoteLANIP() string {
 // credentials: the raw config token in the Authorization header, or one of
 // the JWTs this run issued that is still signed and unexpired.
 func (a *App) remoteIsAdmin(r *http.Request) bool {
-	token := r.Header.Get("Authorization")
+	token := strings.TrimSpace(r.Header.Get("Authorization"))
+	if len(token) > 7 && strings.EqualFold(token[:7], "Bearer ") {
+		token = strings.TrimSpace(token[7:])
+	}
 	if token == "" {
 		return false
 	}

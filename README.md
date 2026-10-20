@@ -11,7 +11,7 @@
 ## 目录
 
 - [下载与安装](#下载与安装) · [性能与启动](#性能与启动) · [运行](#运行) · [界面布局](#界面布局)
-- [功能](#功能)：标签页、导航、选择、视图与排序、媒体缩略图、分组、文件夹大小、文件操作、压缩/解压、回收站、撤销、搜索与索引、主页、画廊、打开方式、扩展命令、拖拽、快速预览、预览窗格、属性、此电脑、磁盘健康、设置、托盘
+- [功能](#功能)：标签页、导航、选择、视图与排序、媒体缩略图、分组、文件夹大小、文件操作、压缩/解压、回收站、撤销、搜索与索引、主页、画廊、打开方式、扩展命令、拖拽、快速预览、预览窗格、属性、此电脑、磁盘健康、设置、托盘、助手
 - [自动更新](#自动更新) · [插件](#插件) · [远程访问](#远程访问openlist-兼容) · [快捷键](#快捷键) · [右键菜单](#右键菜单)
 - [配置文件](#配置文件) · [外部命令依赖](#外部命令依赖) · [代码结构](#代码结构) · [测试](#测试) · [实现说明](#实现说明) · [已知限制](#已知限制) · [平台支持](#平台支持) · [许可](#许可)
 
@@ -200,6 +200,28 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 - **显示晴谷 / 新建窗口** —— 恢复现有窗口，或按 `Ctrl+N` 的样子新开一个。
 - **磁盘信息** —— 每块磁盘的「可用 X / 共 Y（占用%）」与整机实时「读 X/s · 写 Y/s」，数据来自磁盘健康插件的后台采样，探测落地（约每 3 秒）即自动刷新菜单；「刷新磁盘信息」立即强制重采。两项各有一个菜单里的勾选开关「显示磁盘容量」「显示读写速度」，与设置对话框 `托盘` 页的开关是同一份设置，双向同步；都关掉时菜单不再采样、不显示磁盘行。
 - **退出晴谷**。
+
+**助手**
+
+命令栏和「查看」菜单里的「助手」打开右侧窗格（Onevra 的对话记录和输入框）。左缘可以拖宽，顶栏的全屏按钮让它占满侧栏右侧的整块区域（侧栏还在，方便换文件夹）；再点一次还原。拖宽、全屏和「全托管」会记住。模型是用户添加的 OpenAI 兼容接口，密钥写在本机 `sunvale/assistant.json`（权限 0600）。输入框左侧可以选择模型：打开列表时读取当前供应商的 `/models`，选中的模型写回该供应商。
+
+文件能力是进程内的 MCP 服务，Eino 只通过这些工具操作：列出、读取、按文件名搜索、在文本里查找、文件夹摘要、磁盘剩余空间、属性、新建文件夹和文本、写入文本、复制、移动、移到回收站、单个重命名、压缩、解压、用系统打开、打开终端、复制路径、让窗口跳转到某个文件夹，以及解压密码库。复制、移动和删除的来源限制在当前标签页的文件夹，目标可以是用户给出的绝对路径。`list_outside` / `read_outside` 用绝对路径查看文件夹以外的位置。`read_files` 一次读用户指定的多个路径（相对当前文件夹或绝对路径），大文件只给开头。输入框可以拖入文件、点回形针多选，或把列表里的选中项带上；粘贴一行已存在的路径也会挂上。批量 `rename_plan` 只出方案，点「应用方案」才改名；单个 `rename_item` 会立刻改名。删除是移到系统回收站，可撤销，没有永久删除。`write_text` 新建的文件可以撤销，覆盖已有文件不会恢复原文，并且不会改密钥、cookie 或私钥。密码本保存的是压缩包解压密码：模型只能看到名称，`unzip` 会在本机按顺序尝试，密码正文不会进入提示词或回复。
+
+输入框左侧的「全托管」打开后，助手自己把说清楚的事做完，不再每一步征求同意；批量重命名方案会在这一轮结束时自动应用。没打开时，改动很多文件或覆盖已有文件之前会先问。需要用户拍板时，助手给出可勾选的做法（默认能多选），点「发送所选」才继续。系统提示词在 `assistant_prompt.go`。
+
+会话会留下来。顶栏「会话」可以新开、切换和删除；关掉窗口或退出后再打开，还是上次那段。记录在用户配置目录的 `sunvale/assistant/sessions/`，列表是同目录的 `index.json`（不是搜索用的 `sunvale/index.json`）。每段只留最近的对话。指定文件时自动附上的正文不写入磁盘，重新打开后要再读。
+
+记忆是跨会话的短事实，和某一段对话分开，存在 `sunvale/assistant/memory.json`。说「记住……」或在「会话」面板里写一句就会记下，说「忘掉……」或点删除就去掉。密码和密钥不要放这里。
+
+远程访问开启后，助手同时提供 HTTP A2A 与 Streamable HTTP MCP。两者都要求远程访问的管理员令牌，支持 `Authorization: <token>` 或 `Authorization: Bearer <token>`：
+
+- `GET /.well-known/agent-card.json`（别名 `/.well-known/agent.json`）是公开的 Agent Card，声明不支持流式、支持任务状态历史。
+- `POST /a2a`（别名 `/a2a/v1`）使用 JSON-RPC 2.0，支持 `message/send`、`tasks/get`、`tasks/cancel`。`message/send` 的 `metadata.folder` 是远程存储的虚拟路径，默认 `/`；`metadata.files` 或 `file://` part 指定要读的文件。任务在后台执行，结果通过 `tasks/get` 获取。
+- `POST /mcp` 是 OAuth 无关的管理员 MCP，工具包括 `assistant_config_list`、`assistant_config_save`、`assistant_config_activate`、`assistant_config_delete`、`assistant_status`、`a2a_info` 和 `assistant_run`。配置列表只返回 `keyConfigured`，不返回 API Key；保存时留空 `apiKey` 会保留原密钥。
+
+`assistant_run` 与 A2A 都走与窗口相同的进程内文件 MCP。调用方可以用 `folder` 选择远程挂载点，用 `files` 点名文件；A2A 的绝对文件路径按助手的既有规则处理。API Key、解压密码正文、远程令牌和私钥内容不会出现在协议响应中。任务表只保存在内存里，重启后清空。
+
+真实供应商验收可显式开启（默认单测不会联网）：设置 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`SUNVALE_LIVE_MODEL` 后，运行 `SUNVALE_LIVE_A2A=1 go test -run TestA2ALiveProviderReadsNamedFile .` 或 `SUNVALE_LIVE_MCP=1 go test -run TestMCPLiveProviderReadsNamedFile .`；测试会在临时远程根目录写文件，分别经 A2A 和 MCP 让模型读取，并检查回复中不含 API Key。
 
 ## 自动更新
 
@@ -437,6 +459,17 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `propsdialog.go` | 属性对话框：后台读取文件夹事实、文件复用预览管线、底部在 Finder 中显示 / 打开 / 确定 |
 | `uikit.go` | 对话框按钮原型：次要按钮（描边）/ 主要按钮（强调色）、同一行等宽 |
 | `settingsdialog.go` | 设置对话框：分类与搜索用 Onevra `components.Settings`，各页只声明行（外观/查看/托盘/扩展/插件/更新） |
+| `assistant.go` | 右侧助手窗格：对话、多选回复、全托管、指定文件、拖宽与全屏 |
+| `assistant_choice.go` | 多选回复的选项块：模型、工具和窗格共用的格式 |
+| `assistant_mcp.go` | 进程内 MCP：当前文件夹的列出、读取、重命名方案、压缩、自动试用解压密码库的解压 |
+| `archive_password.go` | 解压密码候选与重试：ZIP/7z/RAR 走 `7zz`/`unar`，失败后清理目标目录 |
+| `assistant_run.go` | 用 Eino ChatModelAgent 调用上面的 MCP 工具；全托管时自动应用重命名方案 |
+| `assistant_config.go` | 助手配置的无界面读写：供应商、激活项和偏好；HTTP 层不返回密钥 |
+| `assistant_http.go` | 管理员 A2A 与 Streamable HTTP MCP：Agent Card、任务、供应商配置和文件助手调用 |
+| `assistant_fm.go` | 文件管理器动作：越界查看、属性、新建、复制、移动、回收站、打开、终端 |
+| `assistant_tools.go` | 指定文件、搜索、写入、目录摘要、磁盘空间、跳转和多选提问 |
+| `assistant_prompt.go` | 助手的系统提示词 |
+| `assistant_memory.go` | 会话记录和跨会话记忆：落在 `sunvale/assistant/`，和密钥分开 |
 | `media.go` | 媒体：MyGo `audio` 播放器封装（句柄生命周期、播放节拍器）、`ffmpeg` 视频海报帧 |
 | `tray.go` | 系统托盘：最小化隐藏、左键单击或「显示晴谷」恢复窗口（无存活窗口则新开主窗口）、「退出晴谷」 |
 | `statestore.go` | 持久化状态：固定项、最近文件、回收站还原日志、设置与插件开关（JSON），旧目录名迁移 |

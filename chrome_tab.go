@@ -200,6 +200,7 @@ func (a *App) commandBar(c *ui.Context) {
 
 		a.commandMenu(c, lucide.ArrowDownWideNarrow, "排序", "排序", a.sortMenu)
 		a.commandMenu(c, lucide.LayoutGrid, "查看", "查看", a.viewMenu)
+		a.commandIconButton(c, lucide.Bot, "助手", true, a.toggleAssistant)
 
 		a.moreButton(c)
 	})
@@ -244,6 +245,9 @@ func (a *App) moreButton(c *ui.Context) {
 	btn.Menu(func(m *ui.Menu) {
 		if m.Item("预览窗格").Checked(a.previewOpen).Chosen() {
 			a.togglePreview()
+		}
+		if m.Item("助手").Checked(a.assistantOpen).Chosen() {
+			a.toggleAssistant()
 		}
 		m.Separator()
 		// The plugins' overflow items — remote's 远程访问 and 复制远程地址.
@@ -308,6 +312,10 @@ func (a *App) viewMenu(m *ui.Menu) {
 	}
 	if m.Item("紧凑视图").Checked(a.compact).Chosen() {
 		a.compact = !a.compact
+	}
+	m.Separator()
+	if m.Item("助手").Checked(a.assistantOpen).Chosen() {
+		a.toggleAssistant()
 	}
 	m.Separator()
 	if m.Item("放大图标").Disabled(!a.canZoomIn()).Chosen() {

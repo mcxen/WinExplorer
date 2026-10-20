@@ -122,6 +122,12 @@ type App struct {
 	navWidth    float32
 	previewOpen bool    // Windows preview pane toggle
 	previewW    float32 // pane width, 220–460
+	// assistantOpen is the right-hand AI pane (assistant.go).
+	assistantOpen bool
+	assist        assistantUI
+	// lastArchivePassword is the candidate that opened the previous
+	// encrypted archive. It is memory only and is tried first next time.
+	lastArchivePassword string
 
 	// colWidths are the details view's user-adjusted column widths
 	// (files.go); zero keeps the column's default.

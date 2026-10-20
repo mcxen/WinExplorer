@@ -74,14 +74,26 @@ func (a *App) doCompress() {
 	a.statusMsg = "已创建 " + name
 }
 
-// doExtract 解压选中的每个归档到以其基础名命名的子文件夹。
+// doExtract 解压选中的每个归档到以其基础名命名的子文件夹。加密归档
+// 会按密码本顺序重试；最后一个候选密码留在内存里给下一次解压优先试。
 func (a *App) doExtract() {
 	sel := a.selectedEntries()
 	if len(sel) == 0 || specialPath(a.cur().path) {
 		return
 	}
+	a.assist.ensure()
 	var failed []string
 	var extracted []string
+	candidates := archivePasswordCandidates(a.assist.passwords)
+	if a.lastArchivePassword != "" {
+		ordered := []string{a.lastArchivePassword}
+		for _, p := range candidates {
+			if p != a.lastArchivePassword {
+				ordered = append(ordered, p)
+			}
+		}
+		candidates = ordered
+	}
 	for _, e := range sel {
 		if e.IsDir || !isArchive(e.Name) {
 			continue
@@ -92,10 +104,14 @@ func (a *App) doExtract() {
 			continue
 		}
 		dst := filepath.Join(a.cur().path, base)
-		if err := extractArchive(e.Path, dst); err != nil {
+		password, err := extractWithPasswords(e.Path, dst, candidates)
+		if err != nil {
 			_ = os.RemoveAll(dst)
 			failed = append(failed, e.Name)
 			continue
+		}
+		if password != "" {
+			a.lastArchivePassword = password
 		}
 		extracted = append(extracted, dst)
 	}

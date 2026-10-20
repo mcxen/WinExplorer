@@ -140,6 +140,7 @@ func main() {
 		flushDirStats()
 		flushSearchIndex()
 		app.remoteStop()
+		closeAssistantMCP()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
@@ -339,12 +340,23 @@ func (a *App) bodyRow(c *ui.Context) {
 }
 
 // contentPanes is the room right of the navigation pane: the file pane, with
-// the preview pane beside it while Alt+P has it open.
+// the preview pane beside it while Alt+P has it open, and the assistant when
+// it is open. Full screen gives that pane the whole room; the sidebar stays,
+// so the folder list is one click away when the chat is closed or restored.
 func (a *App) contentPanes(c *ui.Context) {
+	if a.assistantOpen && a.assist.full {
+		ui.Row(c).FillWidth().FillHeight().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+			a.assistantPane(c)
+		})
+		return
+	}
 	ui.Row(c).FillWidth().FillHeight().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		a.filePane(c)
 		if a.previewOpen {
 			a.previewPane(c)
+		}
+		if a.assistantOpen {
+			a.assistantPane(c)
 		}
 	})
 }

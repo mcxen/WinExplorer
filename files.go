@@ -198,6 +198,39 @@ func sameDay(a, b time.Time) bool {
 	return ay == by && am == bm && ad == bd
 }
 
+// groupRowKey is a list row's identity: the entry's path, or the group
+// band's label. A refresh that inserts or drops rows keeps the scroll
+// anchored to those identities instead of to a row number that moved.
+func groupRowKey(rows []groupRow) func(int) any {
+	return func(i int) any {
+		if i < 0 || i >= len(rows) {
+			return i
+		}
+		if rows[i].header != "" {
+			return "group:" + rows[i].header
+		}
+		if rows[i].e.Path != "" {
+			return rows[i].e.Path
+		}
+		return i
+	}
+}
+
+// scrollToReveal raises the pending row into view and drops the request,
+// so the next frame — a wheel scroll, a refresh — keeps the place the user
+// is at. A request whose row is not in this listing is dropped too: it
+// belonged to a folder that is no longer on screen.
+func (a *App) scrollToReveal(rows []groupRow, scroll func(int)) {
+	t := a.cur()
+	if t.reveal == "" {
+		return
+	}
+	if i := rowIndexOf(rows, t.reveal); i >= 0 {
+		scroll(i)
+	}
+	t.reveal = ""
+}
+
 // rowIndexOf is the render row showing the entry at path, or -1: 分组依据
 // inserts header rows, so an entry sits below its listing index.
 func rowIndexOf(rows []groupRow, path string) int {
@@ -270,9 +303,12 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 
 	rows := a.groupedRows(entries)
 	t := a.cur()
-	if i := rowIndexOf(rows, t.reveal); i >= 0 {
-		t.details.ScrollIntoView(i)
-	}
+	// The row's identity is its path, and the scroll offset stays put when
+	// rows above it come or go: a delete or a paste refreshes the listing
+	// without throwing the pane back to the top.
+	t.details.KeepOffset = true
+	t.details.Key = groupRowKey(rows)
+	a.scrollToReveal(rows, t.details.ScrollIntoView)
 	list := ui.List(c, &t.details, len(rows), func(i int) {
 		if i < 0 || i >= len(rows) {
 			return
@@ -563,9 +599,9 @@ func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
 func (a *App) listView(c *ui.Context, entries []Entry) {
 	rows := a.groupedRows(entries)
 	t := a.cur()
-	if i := rowIndexOf(rows, t.reveal); i >= 0 {
-		t.list.ScrollIntoView(i)
-	}
+	t.list.KeepOffset = true
+	t.list.Key = groupRowKey(rows)
+	a.scrollToReveal(rows, t.list.ScrollIntoView)
 	list := ui.List(c, &t.list, len(rows), func(i int) {
 		if i < 0 || i >= len(rows) {
 			return
@@ -647,11 +683,24 @@ func (a *App) iconView(c *ui.Context, entries []Entry) {
 		// many tiles a row takes.
 		a.measureGrid(c, scroll, minW, height, iconGridPad)
 		a.bindPaneMenu(c, scroll)
+		// The grouped icon view scrolls as one column of grids, which has no
+		// row index to reveal. Drop the request so a later switch of view does
+		// not jump to it.
+		a.cur().reveal = ""
 		return
 	}
 	t := a.cur()
+	t.grid.Key = func(i int) any {
+		if i < 0 || i >= len(entries) || entries[i].Path == "" {
+			return i
+		}
+		return entries[i].Path
+	}
 	if i := entryIndexOf(entries, t.reveal); i >= 0 {
 		t.grid.ScrollIntoView(i)
+		t.reveal = ""
+	} else if t.reveal != "" {
+		t.reveal = ""
 	}
 	grid := ui.GridView(c, &t.grid, len(entries), minW, height, func(i int) {
 		if i < 0 || i >= len(entries) {

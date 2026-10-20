@@ -455,6 +455,7 @@ func (a *App) commitRename() {
 	a.pushUndo(undoOp{desc: "重命名", moved: []undoMove{{From: oldPath, To: newPath}}})
 	a.reload()
 	a.selectOnly(newPath)
+	a.cur().reveal = newPath
 }
 
 func (a *App) cancelRename() {
@@ -480,6 +481,7 @@ func (a *App) doNewFolder() {
 	a.pushUndo(undoOp{desc: "新建文件夹", created: []string{dir}})
 	a.reload()
 	a.selectOnly(dir)
+	a.cur().reveal = dir
 	a.cur().renaming = name
 	a.cur().renameBuf = name
 }
@@ -548,6 +550,7 @@ func (a *App) doNewTextFile() {
 	a.pushUndo(undoOp{desc: "新建文本文档", created: []string{path}})
 	a.reload()
 	a.selectOnly(path)
+	a.cur().reveal = path
 	a.cur().renaming = name
 	a.cur().renameBuf = name
 }

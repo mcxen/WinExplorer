@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -144,6 +147,14 @@ func (a *App) commitPathEdit(text string) {
 	}
 	if text == "磁盘健康" || text == pathDisks {
 		a.navigate(pathDisks)
+		return
+	}
+	// A file opens as its folder with that file selected and raised into
+	// view, the way the address bar of Explorer does. A folder is entered.
+	if info, err := os.Stat(text); err == nil && !info.IsDir() {
+		a.navigate(filepath.Dir(text))
+		a.selectOnly(text)
+		a.cur().reveal = text
 		return
 	}
 	a.navigate(text)

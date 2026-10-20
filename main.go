@@ -339,10 +339,11 @@ func (a *App) contentPanes(c *ui.Context) {
 // own editing keys before Context.Shortcut sees them, so Escape and Enter
 // stay with the rename field and the path editor.
 func (a *App) handleKeys(c *ui.Context) {
-	// The row a keyboard move went to scrolls into view in the frame that
-	// moved it: clear the request first, so a wheel scroll right after a
-	// move keeps the user's place.
-	a.cur().reveal = ""
+	// reveal is not cleared here. A keyboard move sets it before the pane
+	// builds, and the pane scrolls to it and clears it. A navigation that
+	// happens while the pane is already built — the search box, which is
+	// drawn after the list — leaves the request for the next frame, which
+	// would never see it if this ran first and dropped it.
 	if a.cur().renaming != "" {
 		// The inline rename's editor (components.Text) owns only its caret:
 		// Escape goes to the shortcuts, and cancels the edit.

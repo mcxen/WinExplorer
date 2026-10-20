@@ -650,6 +650,7 @@ const ADDR_KEY='sunvale_addr_hist';
 let addrHist=[],addrItems=[],addrSel=-1,addrCache=new Map(),addrTimer=0,addrToken=0;
 let view='details',sortKey='name',sortAsc=true;
 let showHidden=false,itemCheckboxes=false,compact=false,paneOpen=false;
+let loadSeq=0;
 let clip=null,filter='',anchor=-1,hist=[],histIdx=-1,rootDirs=null,archiveExts=[];
 // 全局搜索：开启后文件区显示 /api/fs/search 的结果而不是当前文件夹
 let globalSearch=false,searchResults=null,searchSeq=0,searchTimer=null;
@@ -1232,6 +1233,12 @@ function selectOnly(name){
  anchor=visibleItems().findIndex(i=>i.name===name);
  paintSelection();
 }
+// revealName scrolls the named row into sight, as little as it takes.
+// A refresh that does not name a row leaves the pane where it was.
+function revealName(name){
+ const elm=rowEls.get(name);
+ if(elm&&elm.scrollIntoView)elm.scrollIntoView({block:'nearest'});
+}
 function clickRow(ev,it,idx){
  const vis=visibleItems();
  if(ev.shiftKey&&anchor>=0){
@@ -1300,18 +1307,24 @@ function openItem(it){
 async function loadDir(path,keepSel){
  path=path||'/';
  if(path[0]!=='/')path='/'+path;
+ // keepSel 为 true 时是原地刷新（不改历史）。对象还可带 select：
+ // 加载后选中这个名字并滚到它所在的行。
+ const opt=keepSel===true?{keep:true}:(keepSel||{});
+ const seq=++loadSeq;
  // 换目录即退出全局搜索、失效扩展命令缓存
  if(globalSearch)exitGlobalSearch();
  extCacheKey=null;extCacheList=null;
- // 换目录才收地址编辑框：刷新（keepSel）不该抢走正在输入的地址
- if(!keepSel&&addrEditing())endAddrEdit();
+ // 换目录才收地址编辑框：刷新（keep）不该抢走正在输入的地址
+ if(!opt.keep&&addrEditing())endAddrEdit();
  const changed=path!==curPath;
  curPath=path;
- if(!keepSel&&changed){
-  if(histIdx<0||hist[histIdx]!==path){
-   hist=hist.slice(0,histIdx+1);
-   hist.push(path);
-   histIdx=hist.length-1;
+ if(changed){
+  if(!opt.keep){
+   if(histIdx<0||hist[histIdx]!==path){
+    hist=hist.slice(0,histIdx+1);
+    hist.push(path);
+    histIdx=hist.length-1;
+   }
   }
   selected.clear();
   anchor=-1;
@@ -1321,9 +1334,13 @@ async function loadDir(path,keepSel){
  renderCrumbs();
  updateCmdbar();
  const zone=$('fzone');
+ // 同一文件夹里的删除、复制、粘贴只换列表内容：记住滚动位置，
+ // 画完再放回去，不要每次都弹回最上面。
+ const scroll=changed?0:zone.scrollTop;
  zone.textContent='';
  for(let i=0;i<5;i++)zone.append(el('div','skel'));
  const j=await api('/api/fs/list','POST',{path:curPath,page:1,per_page:0});
+ if(seq!==loadSeq||path!==curPath)return;
  if(!j||j.code!==200){
   zone.textContent='';
   zone.append(el('div','empty','加载失败：'+(j&&j.message||'网络错误')));
@@ -1337,6 +1354,12 @@ async function loadDir(path,keepSel){
   [...selected].forEach(n=>{if(!names.has(n))selected.delete(n)});
  }
  render();
+ if(opt.select){
+  const it=items.find(i=>i.name===opt.select);
+  if(it){selectOnly(it.name);revealName(it.name)}
+ }else if(!changed){
+  zone.scrollTop=scroll;
+ }
  renderNavtree();
 }
 // ---------- 地址栏：可编辑路径、历史记录、补全 ----------
@@ -1566,12 +1589,9 @@ async function addrCommit(){
  const i=clean.lastIndexOf('/');
  const parent=i<=0?'/':clean.slice(0,i);
  const name=clean.slice(i+1);
- await loadDir(parent);
+ await loadDir(parent,{select:name});
  const it=items.find(x=>x.name===name);
- if(it){
-  selectOnly(it.name);
-  previewFile(it);
- }
+ if(it)previewFile(it);
 }
 function addrKey(e){
  const d=$('addrDrop');
@@ -1606,13 +1626,22 @@ function addrKey(e){
 function histGo(delta){
  const i=histIdx+delta;
  if(i<0||i>=hist.length)return;
+ const from=curPath;
  histIdx=i;
- loadDir(hist[i],true);
+ const to=hist[i];
+ // 回到上一层时选中刚离开的那一项，并滚到它。
+ let select='';
+ const prefix=to==='/'?'/':to+'/';
+ if(from!==to&&from.startsWith(prefix)){
+  select=from.slice(prefix.length).split('/')[0];
+ }
+ loadDir(to,{keep:true,select:select});
 }
 function goUp(){
  if(curPath==='/')return;
+ const name=curPath.slice(curPath.lastIndexOf('/')+1);
  const p=curPath.replace(/\/[^/]+$/,'');
- loadDir(p||'/');
+ loadDir(p||'/',{select:name});
 }
 function doRefresh(){
  rootDirs=null;
@@ -1656,14 +1685,9 @@ async function runGlobalSearch(kw){
 }
 // 点击结果行：落到其所在文件夹并选中它，文件再打开预览
 async function goToResult(it){
- await loadDir(it.parent||'/');
+ await loadDir(it.parent||'/',{select:it.name});
  const hit=items.find(i=>i.name===it.name);
- if(!hit)return;
- selected.clear();
- selected.add(hit.name);
- anchor=items.findIndex(i=>i.name===hit.name);
- paintSelection();
- if(!hit.is_dir)previewFile(hit);
+ if(hit&&!hit.is_dir)previewFile(hit);
 }
 function navRow(label,ic,path,isCur){
  const b=btn('','nav-item');
@@ -1993,7 +2017,7 @@ function newFolder(){
   const j=await api('/api/fs/mkdir','POST',{path:joinPath(curPath,n)});
   if(!j||j.code!==200){toast('新建失败：'+(j&&j.message||'网络错误'),0);return}
   toast('已创建 '+n,1);
-  loadDir(curPath,true);
+  loadDir(curPath,{keep:true,select:n});
  });
 }
 function newTextFile(){
@@ -2001,7 +2025,7 @@ function newTextFile(){
   const j=await putEmpty(joinPath(curPath,n));
   if(!j||j.code!==200){toast('新建失败：'+(j&&j.message||'网络错误'),0);return}
   toast('已创建 '+n,1);
-  loadDir(curPath,true);
+  loadDir(curPath,{keep:true,select:n});
  });
 }
 async function putEmpty(path){
@@ -2454,7 +2478,7 @@ function renameOne(it){
   const j=await api('/api/fs/rename','POST',{path:joinPath(curPath,it.name),name:v,overwrite:false});
   if(!j||j.code!==200){toast('重命名失败：'+(j&&j.message||'网络错误'),0);return}
   toast('已重命名',1);
-  loadDir(curPath);
+  loadDir(curPath,{keep:true,select:v});
  });
 }
 async function confirmDelete(names){
@@ -2463,7 +2487,7 @@ async function confirmDelete(names){
  const j=await api('/api/fs/remove','POST',{dir:curPath,names:names});
  if(!j||j.code!==200){toast('删除失败：'+(j&&j.message||'网络错误'),0);return}
  toast('已移入回收站',1);
- loadDir(curPath);
+ loadDir(curPath,{keep:true});
 }
 // batchOp 跑一批移动/复制：names 取自 src（默认当前文件夹），
 // 落到 dst。剪贴板粘贴由此入，src 可能是另一个文件夹。

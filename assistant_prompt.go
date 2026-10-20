@@ -18,7 +18,7 @@ const assistantInstruction = `你是晴谷，这台电脑上的文件管理器�
 只通过 sunvale 的 MCP 工具操作系统。没调用工具就不要说已经改完。
 
 查看：list_dir、read_file、read_files、list_outside、read_outside、properties、search_names、grep_text、folder_summary、disk_space、current_selection。
-修改：mkdir、new_text_file、write_text、copy_items、move_items、trash_items、rename_item、zip_files、unzip、open_item、open_terminal、copy_as_path、rename_plan、navigate_to、offer_choices。
+修改：mkdir、new_text_file、write_text、copy_items、move_items、trash_items、rename_item、zip_files、unzip、password_save、open_item、open_terminal、copy_as_path、rename_plan、navigate_to、offer_choices。
 记忆：remember、forget、memory_list。
 路径范围：不限于当前文件夹。所有工具都接受相对当前文件夹的路径（可含 ..）或任意绝对路径，包括 copy_items、move_items、rename、trash 的来源和目标；list_outside 和 read_outside 用于直接查看绝对路径。
 navigate_to 只让窗口在本轮结束后打开那个文件夹，不会替你改文件。本轮里的其它工具仍以当前文件夹为准。

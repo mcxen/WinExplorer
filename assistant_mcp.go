@@ -38,6 +38,9 @@ type sunvaleTools struct {
 	memory    []aiMemory
 	memAdd    []aiMemory
 	memDrop   []string
+	// onToolCall is an optional test hook. Production leaves it nil; the
+	// real-model regression uses it to record the exact tool sequence.
+	onToolCall func(string)
 }
 
 var sunvaleToolState = &sunvaleTools{plans: map[string]aiRenamePlan{}}
@@ -94,6 +97,23 @@ func (s *sunvaleTools) bind(root string, showHidden bool, book []archivePassword
 	s.undos = nil
 	s.nav = ""
 	s.mu.Unlock()
+}
+
+// setToolCallHook installs the test-only observer without exposing the
+// callback to the model or persisted state.
+func (s *sunvaleTools) setToolCallHook(fn func(string)) {
+	s.mu.Lock()
+	s.onToolCall = fn
+	s.mu.Unlock()
+}
+
+func (s *sunvaleTools) noteToolCall(name string) {
+	s.mu.Lock()
+	fn := s.onToolCall
+	s.mu.Unlock()
+	if fn != nil {
+		fn(name)
+	}
 }
 
 func (s *sunvaleTools) drainPending() []archivePassword {
@@ -385,36 +405,47 @@ type pwSaveArgs struct {
 func newSunvaleServer() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "sunvale", Version: "0.1.0"}, nil)
 	s := sunvaleToolState
-	mcp.AddTool(server, &mcp.Tool{Name: "list_dir", Description: "列出当前文件夹里的项目。path 相对当前文件夹。"}, s.listDir)
-	mcp.AddTool(server, &mcp.Tool{Name: "read_file", Description: "读取当前文件夹里的一个文本文件。大文件只返回开头。"}, s.readFile)
-	mcp.AddTool(server, &mcp.Tool{Name: "read_files", Description: "读取用户指定的多个文本文件。路径相对当前文件夹，或绝对路径。"}, s.readFiles)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_outside", Description: "列出任意绝对路径上的文件夹。"}, s.listOutside)
-	mcp.AddTool(server, &mcp.Tool{Name: "read_outside", Description: "读取任意绝对路径上的文本文件。"}, s.readOutside)
-	mcp.AddTool(server, &mcp.Tool{Name: "properties", Description: "查看文件或文件夹的大小、时间和权限。路径相对当前文件夹，或绝对路径。"}, s.properties)
-	mcp.AddTool(server, &mcp.Tool{Name: "mkdir", Description: "在当前文件夹里新建文件夹。"}, s.mkdir)
-	mcp.AddTool(server, &mcp.Tool{Name: "new_text_file", Description: "在当前文件夹里新建文本文件。"}, s.newTextFile)
-	mcp.AddTool(server, &mcp.Tool{Name: "copy_items", Description: "把当前文件夹里的项目复制到目标文件夹。"}, s.copyItems)
-	mcp.AddTool(server, &mcp.Tool{Name: "move_items", Description: "把当前文件夹里的项目移动到目标文件夹。"}, s.moveItems)
-	mcp.AddTool(server, &mcp.Tool{Name: "trash_items", Description: "把当前文件夹里的项目移到系统回收站，不是永久删除。"}, s.trashItems)
-	mcp.AddTool(server, &mcp.Tool{Name: "rename_item", Description: "立刻重命名当前文件夹里的一个项目。"}, s.renameItem)
-	mcp.AddTool(server, &mcp.Tool{Name: "open_item", Description: "用系统默认程序打开一个文件或文件夹。"}, s.openItem)
-	mcp.AddTool(server, &mcp.Tool{Name: "open_terminal", Description: "在该文件夹打开系统终端。"}, s.openTerminal)
-	mcp.AddTool(server, &mcp.Tool{Name: "copy_as_path", Description: "把项目的绝对路径复制到剪贴板，并在结果里返回路径。"}, s.copyAsPath)
-	mcp.AddTool(server, &mcp.Tool{Name: "rename_plan", Description: "为当前文件夹生成批量重命名方案，不会真正改名。"}, s.renamePlan)
-	mcp.AddTool(server, &mcp.Tool{Name: "zip_files", Description: "把当前文件夹里的若干项目打成一个 zip。"}, s.zipFiles)
-	mcp.AddTool(server, &mcp.Tool{Name: "unzip", Description: "把归档解压到新文件夹，自动按顺序尝试解压密码库。需要密码却没命中时，请用户到助手「密码本」添加。"}, s.unzip)
-	mcp.AddTool(server, &mcp.Tool{Name: "password_list", Description: "列出解压密码库的名称，不含密码正文。仅用于排查加密归档。"}, s.passwordList)
-	mcp.AddTool(server, &mcp.Tool{Name: "password_save", Description: "把用户刚提供的解压密码记入密码库，回复里不要复述密码。"}, s.passwordSave)
-	mcp.AddTool(server, &mcp.Tool{Name: "search_names", Description: "按文件名在文件夹里搜索。query 用搜索框的语法。"}, s.searchNames)
-	mcp.AddTool(server, &mcp.Tool{Name: "grep_text", Description: "在文本文件里查找一段文字。path 可以是文件或文件夹。"}, s.grepText)
-	mcp.AddTool(server, &mcp.Tool{Name: "write_text", Description: "把文本写入文件。append 为 true 时追加，否则覆盖。新建可以撤销，覆盖不会恢复原文。"}, s.writeText)
-	mcp.AddTool(server, &mcp.Tool{Name: "folder_summary", Description: "统计文件夹里的文件数、文件夹数、总大小和常见扩展名。"}, s.folderSummary)
-	mcp.AddTool(server, &mcp.Tool{Name: "disk_space", Description: "查看路径所在磁盘还剩多少空间。"}, s.diskSpace)
-	mcp.AddTool(server, &mcp.Tool{Name: "current_selection", Description: "这次发送时用户选中的路径，不含之后新点的项目。"}, s.currentSelection)
-	mcp.AddTool(server, &mcp.Tool{Name: "navigate_to", Description: "本轮结束后让窗口打开一个文件夹，本轮里的工具仍用原来的文件夹。"}, s.navigateTo)
-	mcp.AddTool(server, &mcp.Tool{Name: "offer_choices", Description: "把可多选的做法交给用户。调用后停止本轮，等用户勾选。"}, s.offerChoices)
-	mcp.AddTool(server, &mcp.Tool{Name: "remember", Description: "记住一句用户明确要求留下的事实，供以后的会话使用。不要记密码、密钥或文件内容。"}, s.remember)
-	mcp.AddTool(server, &mcp.Tool{Name: "forget", Description: "按原文忘掉一条记忆。有多条相似时先让用户说完整的一句。"}, s.forget)
-	mcp.AddTool(server, &mcp.Tool{Name: "memory_list", Description: "列出已经记住的短事实。"}, s.memoryList)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "list_dir", Description: "列出当前文件夹里的项目。path 相对当前文件夹。"}, s.listDir)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "read_file", Description: "读取当前文件夹里的一个文本文件。大文件只返回开头。"}, s.readFile)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "read_files", Description: "读取用户指定的多个文本文件。路径相对当前文件夹，或绝对路径。"}, s.readFiles)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "list_outside", Description: "列出任意绝对路径上的文件夹。"}, s.listOutside)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "read_outside", Description: "读取任意绝对路径上的文本文件。"}, s.readOutside)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "properties", Description: "查看文件或文件夹的大小、时间和权限。路径相对当前文件夹，或绝对路径。"}, s.properties)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "mkdir", Description: "在当前文件夹里新建文件夹。"}, s.mkdir)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "new_text_file", Description: "在当前文件夹里新建文本文件。"}, s.newTextFile)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "copy_items", Description: "把当前文件夹里的项目复制到目标文件夹。"}, s.copyItems)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "move_items", Description: "把当前文件夹里的项目移动到目标文件夹。"}, s.moveItems)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "trash_items", Description: "把当前文件夹里的项目移到系统回收站，不是永久删除。"}, s.trashItems)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "rename_item", Description: "立刻重命名当前文件夹里的一个项目。"}, s.renameItem)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "open_item", Description: "用系统默认程序打开一个文件或文件夹。"}, s.openItem)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "open_terminal", Description: "在该文件夹打开系统终端。"}, s.openTerminal)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "copy_as_path", Description: "把项目的绝对路径复制到剪贴板，并在结果里返回路径。"}, s.copyAsPath)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "rename_plan", Description: "为当前文件夹生成批量重命名方案，不会真正改名。"}, s.renamePlan)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "zip_files", Description: "把当前文件夹里的若干项目打成一个 zip。"}, s.zipFiles)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "unzip", Description: "把归档解压到新文件夹，自动按顺序尝试解压密码库。需要密码却没命中时，请用户到助手「密码本」添加。"}, s.unzip)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "password_list", Description: "列出解压密码库的名称，不含密码正文。仅用于排查加密归档。"}, s.passwordList)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "password_save", Description: "把用户刚提供的解压密码记入密码库，回复里不要复述密码。"}, s.passwordSave)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "search_names", Description: "按文件名在文件夹里搜索。query 用搜索框的语法。"}, s.searchNames)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "grep_text", Description: "在文本文件里查找一段文字。path 可以是文件或文件夹。"}, s.grepText)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "write_text", Description: "把文本写入文件。append 为 true 时追加，否则覆盖。新建可以撤销，覆盖不会恢复原文。"}, s.writeText)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "folder_summary", Description: "统计文件夹里的文件数、文件夹数、总大小和常见扩展名。"}, s.folderSummary)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "disk_space", Description: "查看路径所在磁盘还剩多少空间。"}, s.diskSpace)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "current_selection", Description: "这次发送时用户选中的路径，不含之后新点的项目。"}, s.currentSelection)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "navigate_to", Description: "本轮结束后让窗口打开一个文件夹，本轮里的工具仍用原来的文件夹。"}, s.navigateTo)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "offer_choices", Description: "把可多选的做法交给用户。调用后停止本轮，等用户勾选。"}, s.offerChoices)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "remember", Description: "记住一句用户明确要求留下的事实，供以后的会话使用。不要记密码、密钥或文件内容。"}, s.remember)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "forget", Description: "按原文忘掉一条记忆。有多条相似时先让用户说完整的一句。"}, s.forget)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "memory_list", Description: "列出已经记住的短事实。"}, s.memoryList)
 	return server
+}
+
+// addSunvaleTool wraps a registered handler with the test-only call
+// recorder. Keeping the wrapper here means every current and future tool is
+// observed by the regression without changing its implementation.
+func addSunvaleTool[In, Out any](s *sunvaleTools, server *mcp.Server, tool *mcp.Tool, handler mcp.ToolHandlerFor[In, Out]) {
+	name := tool.Name
+	mcp.AddTool(server, tool, func(ctx context.Context, req *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
+		s.noteToolCall(name)
+		return handler(ctx, req, input)
+	})
 }

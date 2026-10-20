@@ -495,6 +495,17 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 go test ./...
 ```
 
+### 助手回归
+
+默认测试不访问网络。需要验证真实模型时，显式提供 OpenAI 兼容接口配置并运行：
+
+```bash
+SUNVALE_EVAL_BASEURL=... SUNVALE_EVAL_MODEL=... SUNVALE_EVAL_KEY=... \
+  go test -tags assistanteval -run TestAssistantEval -count=1 -v .
+```
+
+评测只从环境变量读取密钥，覆盖工具选择、重命名确认/全托管、回收站、选项、读文件、危险请求和 OpenUI 语法共 8 条，并输出每条耗时与工具序列；`TestPromptListsAllTools` 随默认测试运行，确保 MCP 新工具同步写入系统提示词。
+
 无界面回归测试（不启动 `mygo.App`；`keynav_ui_test.go`、`searchbox_test.go`、`glass_test.go` 等用 MyGo 的 `ui.NewTester` 跑真实窗口视图）共 47 个测试文件：
 
 - `archive_drop_test.go` —— 压缩→解压 ZIP 回环、tar.gz（系统 tar）、zip-slip 拒绝、唯一命名、拖拽移动/复制/边界情形。

@@ -371,6 +371,7 @@ func (a *App) checkboxCell(c *ui.Context, e Entry) {
 		}
 	})
 	if box.Clicked() {
+		a.navTree.focused = false
 		t := a.cur()
 		if len(t.selected) == 0 {
 			t.selected = map[string]bool{}
@@ -411,6 +412,9 @@ func (a *App) bindItemInput(c *ui.Context, el ui.Element, e Entry) {
 	}
 	t.itemBounds[e.Path] = el.Bounds()
 	el.HandleInput(a.paneCommand)
+	if el.Pressed() || el.Clicked() {
+		a.navTree.focused = false
+	}
 	if el.Clicked() {
 		a.clickEntry(e.Path, el.ClickModifiers())
 	}

@@ -32,6 +32,15 @@ const (
 type navTree struct {
 	open map[string]bool
 	kids map[string][]Entry
+	// focused and cursor are the keyboard's place in the pane. cursor is a
+	// row key rather than a path because fixed places can name the same path
+	// as a tree folder.
+	focused bool
+	cursor  string
+	// hover and activeDepth drive the indent guides' fade and their active
+	// ancestor chain.
+	hover       bool
+	activeDepth int
 	// synced is the path the tree last expanded to, and reveal that path's row
 	// is to be scrolled into view. row is where the current location sits in the
 	// pane's list — the pane is virtualized, so its place in the list is all it
@@ -57,12 +66,20 @@ type navTree struct {
 // path. tree says whether the row is one of the tree's: a pinned or recent
 // row does not open the tree down to its folder.
 func (a *App) navFromPane(key, path string, tree bool) {
+	a.navTreeFocus(key)
 	a.navTree.clicked = key
 	a.navTree.clickedPath = cleanNav(path)
 	a.navTree.noSync = ""
 	if !tree {
 		a.navTree.noSync = cleanNav(path)
 	}
+}
+
+// navTreeFocus gives the pane's keyboard cursor to a clicked row. The row is
+// focused without changing the tab; navigation remains an explicit action.
+func (a *App) navTreeFocus(key string) {
+	a.navTree.focused = true
+	a.navTree.cursor = key
 }
 
 // navIndent is a tree row's left padding, a step per level.

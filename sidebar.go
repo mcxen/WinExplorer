@@ -54,6 +54,9 @@ type navRow struct {
 	// indent is the row's extra left padding past navRowPad: the tree's depth,
 	// and 此电脑's own rows, which sit one step in.
 	indent float32
+	// depth is the tree's logical level. Indent may stop growing on a deep
+	// tree, but the guide lines still know which ancestors a row belongs to.
+	depth int
 	// act replaces navigation, for a plugin's page.
 	act func()
 	// open and hasKids are the folder's twist: whether it shows the folders
@@ -69,6 +72,9 @@ type navRow struct {
 	// sel marks the one row that shows where the tab is. A folder can be
 	// listed twice (pinned and in the tree); only one row lights up.
 	sel bool
+	// focus is the keyboard cursor's row. It is separate from sel: moving
+	// around the tree must not navigate the tab behind it.
+	focus bool
 }
 
 // navCurrentRow is the row standing for path: the row the user clicked to
@@ -100,11 +106,13 @@ func navCurrentRow(rows []navRow, path, clicked string) int {
 // pane when dragged, so the pane itself only fills the room it is given.
 func (a *App) sidebar(c *ui.Context) {
 	pane := windowBG(c, ui.Column(c).FillHeight().FillWidth().Shrink(0)).Clip()
+	a.navTree.hover = pane.Hovered()
 	pane.Children(func() {
 		// The tab may have moved since the last frame: open what it takes for
 		// the tree to show where it is, before the rows are gathered.
 		a.navTreeFollow()
 		rows := a.navRows()
+		a.navTree.list.Key = func(i int) any { return rows[i].key }
 		ui.List(c, &a.navTree.list, len(rows), func(i int) {
 			a.navPaneRow(c, rows[i])
 		}).Grow(1).FillWidth().MinHeight(0).Padding(8, 0, 12, 0)
@@ -263,7 +271,7 @@ func (a *App) navRows() []navRow {
 	}
 	rows = append(rows, navRow{
 		kind: navRowThisPC, key: "nav-thispc", label: "此电脑", icon: "thispc",
-		path: pathThisPC, open: a.navPCExpanded,
+		path: pathThisPC, depth: -1, open: a.navPCExpanded, hasKids: true,
 	})
 	if a.navPCExpanded {
 		for _, p := range a.thisPCPlaces() {
@@ -281,8 +289,13 @@ func (a *App) navRows() []navRow {
 		})
 	}
 	a.navTree.row = navCurrentRow(rows, a.cur().path, a.navTree.clicked)
+	a.navTree.activeDepth = -1
 	if a.navTree.row >= 0 {
 		rows[a.navTree.row].sel = true
+		a.navTree.activeDepth = rows[a.navTree.row].depth
+	}
+	for i := range rows {
+		rows[i].focus = a.navTree.focused && rows[i].key == a.navTree.cursor
 	}
 	return rows
 }
@@ -295,7 +308,7 @@ func (a *App) navTreeRows(rows []navRow, name, path, kind string, depth int) []n
 	open := a.navTree.open[path]
 	rows = append(rows, navRow{
 		kind: navRowFolder, key: "navtree-" + path, label: name, icon: kind, path: path,
-		indent: navIndent(depth), open: open, hasKids: !read || len(kids) > 0,
+		indent: navIndent(depth), depth: depth, open: open, hasKids: !read || len(kids) > 0,
 	})
 	if !open {
 		return rows
@@ -326,10 +339,14 @@ func (a *App) navPaneRow(c *ui.Context, r navRow) {
 func (a *App) navSectionRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
 		Radius(4).Padding(0, 8).AlignItems(ui.Center).Justify(ui.Start).Label(r.label)
+	a.paintNavRow(row, r)
 	row.Children(func() {
 		ui.Text(c, r.label).FontSize(11).FontWeight(600).TextColor(colorMuted()).
 			SingleLine()
 	})
+	if row.Clicked() {
+		a.navTreeFocus(r.key)
+	}
 	if r.pinDrop {
 		a.bindPinDrop(row)
 	}
@@ -349,6 +366,7 @@ func (a *App) navPlaceRow(c *ui.Context, r navRow) {
 			SingleLine().Grow(1).MinWidth(0)
 	})
 	if row.Clicked() {
+		a.navTreeFocus(r.key)
 		if r.act != nil {
 			r.act()
 			return
@@ -395,6 +413,7 @@ func (a *App) navThisPCRow(c *ui.Context, r navRow) {
 			SingleLine().Grow(1).MinWidth(0)
 	})
 	if row.Clicked() {
+		a.navFromPane(r.key, r.path, false)
 		a.navigate(pathThisPC)
 	}
 }
@@ -408,7 +427,7 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 	a.paintNavRow(row, r)
 	row.Children(func() {
 		if gutter := r.indent - navIndent(0); gutter > 0 {
-			ui.Box(c).Width(gutter).Height(navRowH).Shrink(0)
+			navIndentGuides(c, gutter, r.depth, a.navTree.hover, a.navTree.activeDepth)
 		}
 		if r.hasKids {
 			chev := a.navTwist(c, r, "展开 "+r.label)
@@ -446,9 +465,40 @@ func (a *App) navTwist(c *ui.Context, r navRow, label string) ui.Element {
 		chev.Background(colorHover())
 	}
 	chev.Children(func() {
-		chevronIcon(c, r.open, 12)
+		chevronIconAnimated(c, "navtwist-"+r.path, r.open, 12)
 	})
+	if chev.Clicked() {
+		a.navTreeFocus(r.key)
+	}
 	return chev
+}
+
+// navIndentGuides draws the tree's VS Code-style indent guides in the gutter
+// before a folder label. The line of each ancestor is muted along the active
+// path; the whole set fades with the pane's hover state.
+func navIndentGuides(c *ui.Context, width float32, depth int, hovered bool, active int) {
+	gutter := ui.Box(c).Width(width).Height(navRowH).Shrink(0)
+	// The indent stops at navTreeMaxIndent, so a deep branch must not keep
+	// painting guides into the folder label beside the compressed gutter.
+	lines := min(depth, int(width/navTreeStep))
+	colors := make([]ui.Color, lines)
+	for i := range colors {
+		target := colorDivider().Alpha(0)
+		if hovered {
+			target = colorDivider()
+			if i < active {
+				target = colorMuted()
+			}
+		}
+		colors[i] = gutter.AnimateColor("guide-"+itoa(i), target,
+			ui.Animation{Duration: 120 * time.Millisecond, Ease: ui.EaseOut})
+	}
+	gutter.Draw(func(p *ui.Painter, r ui.Rect) {
+		for i, ink := range colors {
+			x := r.X + 7 + float32(i)*navTreeStep
+			p.Fill(ui.Rect{X: x, Y: r.Y, W: 1, H: r.H}, ink, 0)
+		}
+	})
 }
 
 // navTwistSlot is the room a twist would take, for a folder with none.
@@ -481,6 +531,15 @@ func (a *App) paintNavRow(row ui.Element, r navRow) {
 		row.Background(colorSelected())
 	case row.Hovered():
 		row.Background(colorHover())
+	}
+	if r.focus && a.navTree.focused {
+		// Keep the toolkit's focus on the row the logical cursor names. Its
+		// Enter/Space activation is then the same one-shot action as a click;
+		// without this, a previously clicked twist would keep the key.
+		row.Focus()
+		row.FocusRing(false).DrawOver(func(p *ui.Painter, rect ui.Rect) {
+			p.FocusRing(rect, [4]float32{4, 4, 4, 4})
+		})
 	}
 }
 

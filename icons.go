@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -62,6 +64,19 @@ func chevronIcon(c *ui.Context, open bool, px float32) ui.Element {
 		icon = lucide.ChevronDown
 	}
 	return components.Icon(c, icon).Size(px, px).TextColor(colorMuted())
+}
+
+// chevronIconAnimated keeps one right-facing glyph and rotates it through the
+// disclosure transition. The key belongs to the row path so a virtualized
+// tree row keeps its phase when it scrolls out and back.
+func chevronIconAnimated(c *ui.Context, key string, open bool, px float32) ui.Element {
+	target := float32(0)
+	if open {
+		target = 90
+	}
+	icon := components.Icon(c, lucide.ChevronRight).Size(px, px).TextColor(colorMuted())
+	angle := icon.AnimateWith(key, target, 150*time.Millisecond, ui.EaseOut)
+	return icon.Rotate(angle)
 }
 
 // chevronUpDown names the details header's sort direction: up when ascending.

@@ -54,6 +54,9 @@ func (a *App) bindMarquee(c *ui.Context, el ui.Element) {
 	// The press's origin, kept in window DIPs on the frame it went down. A
 	// press on a row or tile is a drag-and-drop of it, not a band: the
 	// itemBounds the frame before recorded say which the point is on.
+	if el.Pressed() {
+		a.navTree.focused = false
+	}
 	if el.Pressed() && !t.marquee.on {
 		if lx, ly, ok := el.PointerPosition(); ok {
 			wx, wy := b.X+lx, b.Y+ly

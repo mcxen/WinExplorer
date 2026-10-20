@@ -386,6 +386,11 @@ func (a *App) handleKeys(c *ui.Context) {
 	if a.cur().editingPath {
 		return
 	}
+	// The navigation pane owns its cursor after a row click. Its arrows move
+	// that cursor; Enter/Space is the explicit navigation action.
+	if a.navTreeKeys(c) {
+		return
+	}
 	// The quick preview's Space-close and ←/→ keys live inside the modal
 	// (quicklook.go): Context.Shortcut is inert behind a dialog, so
 	// bindings here never fire while it is open. Outside it ←/→ belong to

@@ -56,7 +56,7 @@
 | S7 | 搜索：右侧预览 | 中 | 已完成 | 01 阶段 7 | S1 | `feat/search-p7` |
 | S8 | 搜索：页脚索引进度 | 低 | 已完成 | 01 阶段 8 | S1 | `feat/search-p8` |
 | W1 | Windows 隐藏属性用于地址栏补全 | 中 | 已完成 | 本文 | — | `fix/win-hidden` |
-| T1 | 侧栏目录树打磨 | 中 | 待开发 | [02](docs/specs/02-tree-polish.md) | — | `feat/tree-polish` |
+| T1 | 侧栏目录树润色 | 中 | 已完成 | [02](docs/specs/02-tree-polish.md) | — | `feat/tree-polish` |
 | TB1 | 拖动文件悬停标签自动切换 | 中 | 待开发 | [04 A](docs/specs/04-tabs-followups.md) | — | `feat/tab-drag-hover` |
 | TB2 | 会话恢复后退/前进历史 | 中 | 待开发 | 04 B | — | `feat/session-history` |
 | TB3 | 切换标签时保存进行中的重命名 | 高 | 待开发 | 04 C | — | `fix/rename-on-tab-switch` |

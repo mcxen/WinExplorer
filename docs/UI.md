@@ -105,7 +105,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 标签页（`tabkeys.go`）：Ctrl+T 新建、Ctrl+W 关闭、Ctrl+Tab/Ctrl+Shift+Tab 切换、Ctrl+Shift+T 重新打开、Ctrl+1–9。
 - 地址栏编辑（`addressbar.go:pathEditorKey`）：↑↓ 选建议、Tab/→ 接受、Enter 前往、Esc 取消；失焦即退出编辑。
 - 快速搜索（`searchbox.go:searchBoxKeys`）：↑↓、PageUp/PageDown、Enter 打开、Ctrl+Enter 定位、Esc 关闭。
-- 侧栏方向键导航：规划中（`docs/specs/02-tree-polish.md`）。
+- 侧栏方向键导航（`navkeys.go`）：点击侧栏后 `↑`/`↓`、`Home`/`End` 移动焦点，`→` 展开或进入子级，`←` 折叠或回到父级，`Enter`/空格导航，`Tab` 交还焦点；移动不改变当前标签（`docs/specs/02-tree-polish.md` C）。
 
 ## 4. 中文文案
 
@@ -144,6 +144,8 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 地址建议下拉 | 编辑地址时有建议或错误 | 即时出现 | — | 浮层圆角 8、阴影 (0,8,16) α0.14、上边距 4 | `addressbar.go:pathDropdown` |
 | GIF 播放 | 预览/缩略图中的 GIF | 按帧延时，默认 100ms，最小 10ms | — | — | `gifplay.go` |
 | 搜索索引进度条 | 索引正在构建 | 不定进度 1.4s 往返 | 余弦往返 | 80×4、`colorAccent()` 填充；有估计时定值填充并显示百分比；`ReduceMotion` 下静止 | `searchbox.go:searchIndexProgress`、Onevra `components.Progress` |
+| 树展开箭头旋转 | 展开/折叠目录树节点 | 150ms | easeOut | 始终使用右箭头，0°→90°；`ReduceMotion` 直接到终值 | `icons.go:chevronIconAnimated`、`sidebar.go:navTwist` |
+| 树缩进引导线淡入淡出 | 鼠标进入/离开导航窗格 | 120ms | easeOut | 每级 1px `colorDivider()`；当前选中行祖先链用 `colorMuted()`；`ReduceMotion` 直接到终值 | `sidebar.go:navIndentGuides` |
 
 ![呼吸光](assets/ui/motion-glow.png) ![移出](assets/ui/motion-slideout.png) ![改名高亮](assets/ui/motion-rename-flash.png)
 
@@ -153,9 +155,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 | 动效 | 时长/数值 | 规格 |
 | --- | --- | --- |
-| 树展开箭头旋转 | 150ms，0°→90°，easeOut | `docs/specs/02-tree-polish.md` A |
-| 树缩进引导线淡入淡出 | 120ms | 同上 B |
-| 树平滑滚动到当前位置 | 180ms（视 mygo 能力） | 同上 D |
+| 树平滑滚动到当前位置 | 跳过 | mygo v0.5.5 `ListState` 只有 `ScrollTo/ScrollIntoView/ScrollToEnd`，没有当前偏移读写 API，无法在不 fork 依赖的情况下插值；按规格 D 记录并保留瞬时滚动 |
 | 拖动文件悬停标签自动切换 | 悬停 600ms 后切换 | `docs/specs/04-tabs-followups.md` A |
 
 ## 7. 反模式 / 禁止

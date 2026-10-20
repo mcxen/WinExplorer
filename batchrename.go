@@ -180,7 +180,7 @@ func (a *App) commitBatchRename() {
 		for i, m := range moved {
 			undo[i] = undoMove{From: m.From, To: m.To}
 		}
-		a.pushUndo(undoOp{desc: desc, moved: undo})
+		a.pushUndo(undoOp{Desc: desc, Moved: undo})
 		a.statusMsg = fmt.Sprintf("已重命名 %d 个项目", n)
 	}
 	if len(failed) > 0 {

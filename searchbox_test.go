@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -224,5 +225,34 @@ func TestSearchCapNote(t *testing.T) {
 	}
 	if note := searchCapNote(searchMaxResults); !strings.Contains(note, itoa(searchMaxResults)) {
 		t.Fatalf("the cap note is %q, want the cap in it", note)
+	}
+}
+
+// TestSearchHotkeyChord pins what the settings recorder stores and what
+// the row then shows: a bare letter is refused, a chord round-trips, and
+// the default reads as Command on macOS and Control elsewhere.
+func TestSearchHotkeyChord(t *testing.T) {
+	if _, ok := accelFromKey(0, ui.KeyK); ok {
+		t.Fatal("a bare letter was accepted as a shortcut")
+	}
+	acc, ok := accelFromKey(ui.Ctrl|ui.Shift, ui.KeyK)
+	if !ok || acc != "Ctrl+Shift+K" {
+		t.Fatalf("chord = %q, ok %v", acc, ok)
+	}
+	mods, key, ok := parseSearchAccel(acc)
+	if !ok || mods != ui.Ctrl|ui.Shift || key != ui.KeyK {
+		t.Fatalf("parsed %q as mods %v key %v", acc, mods, key)
+	}
+	f, ok := accelFromKey(0, ui.KeyF5)
+	if !ok || f != "F5" {
+		t.Fatalf("function key = %q, ok %v", f, ok)
+	}
+	label := shortcutLabel("")
+	if runtime.GOOS == "darwin" {
+		if label != "⌘K" {
+			t.Fatalf("default label = %q, want ⌘K", label)
+		}
+	} else if label != "Ctrl+K" {
+		t.Fatalf("default label = %q, want Ctrl+K", label)
 	}
 }

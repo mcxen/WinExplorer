@@ -176,6 +176,8 @@ type App struct {
 	batch batchRenameState
 	// settingsOpen is the 设置 dialog modal.
 	settingsOpen bool
+	// hotkeyCapture is the 托盘 page waiting for a new 快速搜索 shortcut.
+	hotkeyCapture bool
 	// settingsTab is the dialog's active page (外观/查看/扩展/插件/更新,
 	// settingsdialog.go); each window remembers its own.
 	settingsTab int

@@ -88,6 +88,12 @@ type appSettings struct {
 	NoTrayDiskCap   bool `json:"noTrayDiskCap,omitempty"`
 	NoTrayDiskSpeed bool `json:"noTrayDiskSpeed,omitempty"`
 
+	// SearchHotkey is the global 快速搜索 accelerator, in Electron form
+	// ("Ctrl+Shift+K", "Super+Space"). Empty means CmdOrCtrl+K, the
+	// default, so a state file from before the shortcut was editable keeps
+	// Ctrl+K / ⌘K.
+	SearchHotkey string `json:"searchHotkey,omitempty"`
+
 	ColName float32 `json:"colName,omitempty"`
 	ColDate float32 `json:"colDate,omitempty"`
 	ColType float32 `json:"colType,omitempty"`

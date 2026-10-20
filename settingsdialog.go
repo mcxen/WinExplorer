@@ -82,6 +82,7 @@ var settingsPages = []struct {
 // settingsModal shows the dialog while it is open. Called from view.
 func (a *App) settingsModal(c *ui.Context) {
 	if !a.settingsOpen {
+		a.hotkeyCapture = false
 		return
 	}
 	floatDialog(c, &a.settingsOpen, "设置", 580, false, func() {
@@ -497,13 +498,67 @@ func (a *App) settingsTray(c *ui.Context) {
 	})
 	settingsSection(c, "快速搜索", func(first *bool) {
 		settingsSectionRow(c, first, func() {
-			settingsInfo(c, "打开方式", "托盘菜单 → 快速搜索…（或 Ctrl+K）")
+			a.settingsSearchHotkey(c)
 		})
 		settingsSectionRow(c, first, func() {
 			settingsInfo(c, "搜索范围", "全部磁盘，索引即时应答、后台遍历补全")
 		})
 		settingsSectionRow(c, first, func() {
 			settingsInfo(c, "结果排序", "Everything 式按名称排序，支持查询语法")
+		})
+	})
+}
+
+// settingsSearchHotkey is the 快速搜索 shortcut row. The button shows the
+// chord that summons the panel; clicking it listens for the next chord.
+// Escape cancels, Backspace puts Ctrl+K / ⌘K back.
+func (a *App) settingsSearchHotkey(c *ui.Context) {
+	acc := a.store.settings().SearchHotkey
+	label := shortcutLabel(acc)
+	desc := "在任意应用中唤起快速搜索"
+	if a.hotkeyCapture {
+		label = "请按键…"
+		desc = "按下新快捷键，Backspace 恢复默认，Esc 取消"
+	}
+	settingsRow(c, "快捷键", desc, func() {
+		btn := ui.ButtonBase(c.Key("search-hotkey")).Focusable().Height(30).
+			Padding(0, 10).MinWidth(108).Radius(4).
+			Background(colorAddress()).Border(1, colorDivider()).Label(label)
+		if a.hotkeyCapture {
+			btn.Border(1, colorAccent())
+			btn.Focus()
+		}
+		btn.Children(func() {
+			ui.Text(c, label).FontSize(12).TextColor(colorText()).SingleLine()
+		})
+		if btn.Clicked() {
+			a.hotkeyCapture = true
+		}
+		if !a.hotkeyCapture {
+			return
+		}
+		btn.HandleInput(func(ev ui.InputEvent) bool {
+			if ev.Kind != ui.InputKeyDown || ev.Repeat {
+				return ev.Kind == ui.InputKeyDown
+			}
+			switch ev.Key {
+			case ui.KeyEscape:
+				a.hotkeyCapture = false
+				return true
+			case ui.KeyBackspace:
+				if ev.Mods == 0 {
+					a.hotkeyCapture = false
+					a.setSearchHotkey("")
+					return true
+				}
+			}
+			chord, ok := accelFromKey(ev.Mods, ev.Key)
+			if !ok {
+				return true
+			}
+			a.hotkeyCapture = false
+			a.setSearchHotkey(chord)
+			return true
 		})
 	})
 }

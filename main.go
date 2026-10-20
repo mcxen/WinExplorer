@@ -122,7 +122,7 @@ func main() {
 		}
 		// Ctrl+K summons the search panel from any app, not only from a
 		// focused file window. A bind that fails leaves the window shortcut.
-		registerSearchHotkey()
+		registerSearchHotkey(app.store.settings().SearchHotkey)
 	})
 	// remoteStop waits for the requests in flight, so it runs once the
 	// windows are gone and the event loop is about to stop, not per window.
@@ -411,10 +411,11 @@ func (a *App) handleKeys(c *ui.Context) {
 	case c.Shortcut(ui.Cmd, ui.KeyE), c.Shortcut(ui.Ctrl, ui.KeyE),
 		c.Shortcut(ui.Ctrl, ui.KeyF), c.Shortcut(ui.Cmd, ui.KeyF), c.Shortcut(0, ui.KeyF3):
 		a.focusSearch = true
-	case c.Shortcut(ui.Ctrl, ui.KeyK), c.Shortcut(ui.Cmd, ui.KeyK):
+	case a.searchShortcutDown(c):
 		// The global bind already toggles the panel, and it is delivered
 		// even while this window is focused. Handling it here as well would
-		// open and close on the one key.
+		// open and close on the one key. With no global bind — a headless
+		// test, or a desktop that refused the shortcut — the window takes it.
 		if !searchHotkey {
 			a.openSearchBox()
 		}

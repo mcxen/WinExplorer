@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	assistant "sunvale/internal/assistant"
 	"sync"
 )
 
@@ -82,17 +83,8 @@ func assistantConfigPath() string {
 
 func readAssistantDisk(path string) (assistantDisk, bool, error) {
 	var disk assistantDisk
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return disk, true, nil
-	}
-	if err != nil {
-		return disk, false, err
-	}
-	if err := json.Unmarshal(data, &disk); err != nil {
-		return disk, false, err
-	}
-	return disk, false, nil
+	absent, err := assistant.ReadJSON(path, &disk)
+	return disk, absent, err
 }
 
 func writeAssistantDisk(path string, disk assistantDisk) error {
@@ -100,7 +92,7 @@ func writeAssistantDisk(path string, disk assistantDisk) error {
 	if err != nil {
 		return err
 	}
-	return writePrivate(path, data)
+	return assistant.WritePrivate(path, data)
 }
 
 // loadAssistantConfig returns the provider list and preferences without

@@ -66,6 +66,27 @@ type navRow struct {
 	// pinDrop is the 快速访问 heading: a drop pins paths instead of moving
 	// them. The heading is not itself a place.
 	pinDrop bool
+	// sel marks the one row that shows where the tab is. A folder can be
+	// listed twice (pinned and in the tree); only one row lights up.
+	sel bool
+}
+
+// navCurrentRow is the row standing for path: the row the user clicked to
+// get there when it still lists path, else the first that does.
+func navCurrentRow(rows []navRow, path, clicked string) int {
+	first := -1
+	for i, r := range rows {
+		if r.path == "" || r.path != path {
+			continue
+		}
+		if clicked != "" && r.key == clicked {
+			return i
+		}
+		if first < 0 {
+			first = i
+		}
+	}
+	return first
 }
 
 // sidebar is the navigation pane: 主文件夹, the plugins' pages, 快速访问
@@ -130,29 +151,52 @@ func dirExists(dir string) bool {
 	return ok
 }
 
-// recentPlaceRows are the sidebar's 最近位置 rows: the folders the user was
-// in lately, newest first, minus the ones the pane already shows as rows —
-// a pinned place, the folder the tab is in, and any folder the tree has
-// expanded — capped at recentPlacesLimit. A row duplicating one above it
-// reads as a glitch, and a click on it would land on the wrong line. A
-// folder that no longer exists is dropped from the store as it is found,
-// so the list heals itself instead of offering rows that fail on click.
+// recentPlaceRows are the sidebar's 最近位置 rows. The list holds still
+// while the window is open: a folder joins it, at the end, once the user
+// has left it, and then keeps its place — current or not — until 刷新 or
+// a restart sorts it newest first again. A click on a recent row therefore
+// leaves every row above and below where it was, rather than taking the row
+// away and pushing the tree up under the pointer. A pinned place has its
+// own row and is left out; a folder the tree shows when it would join is
+// not added. A folder that no longer exists leaves the list, and the store.
 func (a *App) recentPlaceRows() []navRow {
-	shown := map[string]bool{a.cur().path: true}
+	pinned := map[string]bool{}
 	for _, p := range a.pinnedPlaces() {
-		shown[p.Path] = true
+		pinned[p.Path] = true
 	}
-	a.navTreeShown(shown)
-	var rows []navRow
+	cur := a.cur().path
+	t := &a.navTree
+	if t.recentIn == nil {
+		t.recentIn = map[string]bool{}
+	}
+	var shown map[string]bool
 	for _, dir := range a.store.visitList(maxVisited) {
-		if len(rows) >= recentPlacesLimit {
+		if len(t.recent) >= recentPlacesLimit {
 			break
+		}
+		if t.recentIn[dir] || dir == cur || pinned[dir] {
+			continue
+		}
+		if shown == nil {
+			shown = map[string]bool{}
+			a.navTreeShown(shown)
 		}
 		if shown[dir] {
 			continue
 		}
+		t.recent = append(t.recent, dir)
+		t.recentIn[dir] = true
+	}
+	var rows []navRow
+	kept := t.recent[:0]
+	for _, dir := range t.recent {
 		if !dirExists(dir) {
 			a.store.forgetVisit(dir)
+			delete(t.recentIn, dir)
+			continue
+		}
+		kept = append(kept, dir)
+		if pinned[dir] {
 			continue
 		}
 		rows = append(rows, navRow{
@@ -160,7 +204,14 @@ func (a *App) recentPlaceRows() []navRow {
 			label: filepath.Base(dir), icon: "folder", path: dir,
 		})
 	}
+	t.recent = kept
 	return rows
+}
+
+// navRecentReset lets 最近位置 sort itself newest first again.
+func (a *App) navRecentReset() {
+	a.navTree.recent = nil
+	a.navTree.recentIn = nil
 }
 
 // navTreeShown adds the folders the tree draws to shown: the volumes' tree
@@ -229,12 +280,9 @@ func (a *App) navRows() []navRow {
 			path: pathTrash, indent: navIndent(0),
 		})
 	}
-	a.navTree.row = -1
-	for i, r := range rows {
-		if r.path != "" && r.path == a.cur().path {
-			a.navTree.row = i
-			break
-		}
+	a.navTree.row = navCurrentRow(rows, a.cur().path, a.navTree.clicked)
+	if a.navTree.row >= 0 {
+		rows[a.navTree.row].sel = true
 	}
 	return rows
 }
@@ -293,7 +341,7 @@ func (a *App) navSectionRow(c *ui.Context, r navRow) {
 func (a *App) navPlaceRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
 		Radius(4).Padding(0, 4, 0, r.indent).Gap(8).AlignItems(ui.Center).
-		Label(r.label).Selected(a.cur().path == r.path)
+		Label(r.label).Selected(r.sel)
 	a.paintNavRow(row, r)
 	row.Children(func() {
 		a.navRowGlyph(c, r)
@@ -305,6 +353,9 @@ func (a *App) navPlaceRow(c *ui.Context, r navRow) {
 			r.act()
 			return
 		}
+		// A place row is already in sight: the tree is left as it is, and
+		// this row stays the one that lights up.
+		a.navFromPane(r.key, r.path, false)
 		a.openPinned(r.path, !r.file)
 	}
 	// A pinned file is not a directory, so a drop on it must not try to
@@ -353,7 +404,7 @@ func (a *App) navThisPCRow(c *ui.Context, r navRow) {
 func (a *App) navFolderRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
 		Radius(4).Padding(0, 2).Gap(4).AlignItems(ui.Center).
-		Label(r.label).Selected(a.cur().path == r.path)
+		Label(r.label).Selected(r.sel)
 	a.paintNavRow(row, r)
 	row.Children(func() {
 		if gutter := r.indent - navIndent(0); gutter > 0 {
@@ -376,6 +427,7 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 			SingleLine().Grow(1).MinWidth(0)
 	})
 	if row.Clicked() {
+		a.navFromPane(r.key, r.path, true)
 		a.navigate(r.path)
 	}
 	a.bindDropFolder(c, row, r.path)
@@ -425,7 +477,7 @@ func (a *App) navRowGlyph(c *ui.Context, r navRow) {
 // app lists places.
 func (a *App) paintNavRow(row ui.Element, r navRow) {
 	switch {
-	case a.cur().path == r.path:
+	case r.sel:
 		row.Background(colorSelected())
 	case row.Hovered():
 		row.Background(colorHover())

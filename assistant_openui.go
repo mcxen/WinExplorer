@@ -6,7 +6,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 )
 
@@ -54,6 +53,13 @@ type ouiView struct {
 	Action   string
 	Children []*ouiView
 	Cols     []ouiCol
+	// Name, Placeholder, Options, Required and Multiline are a form
+	// field's: Input, TextArea and Select inside a Form.
+	Name        string
+	Placeholder string
+	Options     []string
+	Required    bool
+	Multiline   bool
 }
 
 // ouiCol is one Table column. Cells line up by index with the other columns.
@@ -253,10 +259,11 @@ func (p *ouiParser) parseTerm() (ouiExpr, bool) {
 		}
 		return ouiExpr{kind: "array", items: items}, true
 	case '{':
-		if !p.parseObject() {
+		fields, ok := p.parseObject()
+		if !ok {
 			return ouiExpr{}, false
 		}
-		return ouiExpr{kind: "object"}, true
+		return ouiExpr{kind: "object", items: fields}, true
 	case '@':
 		p.i++
 		name, ok := p.parseIdent()
@@ -334,41 +341,54 @@ func (p *ouiParser) parseList(end byte) ([]ouiExpr, bool) {
 	}
 }
 
-func (p *ouiParser) parseObject() bool {
+// parseObject reads {key: value, …}. Each value comes back with its key
+// as its name, for the rules of a form field ({required: true}).
+func (p *ouiParser) parseObject() ([]ouiExpr, bool) {
 	if p.peek() != '{' {
-		return false
+		return nil, false
 	}
 	p.i++
+	var out []ouiExpr
 	for {
 		p.skip()
 		if p.peek() == '}' {
 			p.i++
-			return true
+			return out, true
 		}
+		var key string
+		var ok bool
 		if p.peek() == '"' {
-			if _, ok := p.parseString(); !ok {
-				return false
-			}
-		} else if _, ok := p.parseIdent(); !ok {
-			return false
+			key, ok = p.parseString()
+		} else {
+			key, ok = p.parseIdent()
+		}
+		if !ok {
+			return nil, false
 		}
 		p.skip()
 		if p.peek() != ':' {
-			return false
+			return nil, false
 		}
 		p.i++
-		if _, ok := p.parseExpr(); !ok {
-			return false
+		v, ok := p.parseExpr()
+		if !ok {
+			return nil, false
 		}
+		if v.kind != "ref" && v.kind != "call" {
+			v.name = key
+		} else {
+			v = ouiExpr{kind: "field", name: key, items: []ouiExpr{v}}
+		}
+		out = append(out, v)
 		p.skip()
 		switch p.peek() {
 		case ',':
 			p.i++
 		case '}':
 			p.i++
-			return true
+			return out, true
 		default:
-			return false
+			return nil, false
 		}
 	}
 }
@@ -540,9 +560,111 @@ func realizeOpen(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) *ouiV
 			action = label
 		}
 		return &ouiView{Kind: "button", Label: label, Action: action, Variant: variant}
+	case "Form":
+		// Form(name, buttons, fields) as OpenUI writes it; the two lists
+		// are told apart by what they hold, so either order draws.
+		var fields, buttons []*ouiView
+		for _, arg := range e.args[min(1, len(e.args)):] {
+			for _, v := range openChildren(env, arg, stack) {
+				if v.Kind == "button" || (v.Kind == "stack" && openAllButtons(v)) {
+					buttons = append(buttons, v)
+				} else {
+					fields = append(fields, v)
+				}
+			}
+		}
+		if len(fields) == 0 && len(buttons) == 0 {
+			return nil
+		}
+		name, _ := openText(env, openArg(e.args, 0), stack)
+		return &ouiView{Kind: "form", Name: name, Children: append(fields, buttons...)}
+	case "FormControl":
+		label, _ := openText(env, openArg(e.args, 0), stack)
+		field := realizeOpen(env, openArg(e.args, 1), stack)
+		if field == nil || !openIsField(field.Kind) {
+			return nil
+		}
+		field.Label = strings.TrimSpace(label)
+		return field
+	case "Input", "TextArea":
+		name, _ := openText(env, openArg(e.args, 0), stack)
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil
+		}
+		ph, _ := openText(env, openArg(e.args, 1), stack)
+		v := &ouiView{Kind: "input", Name: name, Placeholder: ph, Multiline: e.name == "TextArea"}
+		for _, arg := range e.args[min(2, len(e.args)):] {
+			if (arg.kind == "object" || arg.kind == "string") && openRequired(arg) {
+				v.Required = true
+			}
+		}
+		return v
+	case "Select":
+		name, _ := openText(env, openArg(e.args, 0), stack)
+		name = strings.TrimSpace(name)
+		var opts []string
+		for _, item := range openList(env, openArg(e.args, 1), stack) {
+			if text, ok := openOption(env, item, stack); ok && text != "" {
+				opts = append(opts, text)
+			}
+			if len(opts) >= openUIMaxCells {
+				break
+			}
+		}
+		if name == "" || len(opts) == 0 {
+			return nil
+		}
+		ph, _ := openText(env, openArg(e.args, 2), stack)
+		v := &ouiView{Kind: "select", Name: name, Options: opts, Placeholder: ph}
+		for _, arg := range e.args[min(2, len(e.args)):] {
+			if (arg.kind == "object" || arg.kind == "string") && openRequired(arg) {
+				v.Required = true
+			}
+		}
+		return v
 	default:
 		return nil
 	}
+}
+
+func openIsField(kind string) bool { return kind == "input" || kind == "select" }
+
+func openAllButtons(v *ouiView) bool {
+	for _, ch := range v.Children {
+		if ch.Kind != "button" {
+			return false
+		}
+	}
+	return len(v.Children) > 0
+}
+
+// openRequired reads a field's rule: {required: true}, or the word
+// "required" among its trailing arguments (the system prompt cannot show
+// braces, which its formatter takes for placeholders).
+func openRequired(obj ouiExpr) bool {
+	if obj.kind == "string" {
+		v := strings.ToLower(strings.TrimSpace(obj.s))
+		return v == "required" || v == "必填"
+	}
+	for _, f := range obj.items {
+		if strings.EqualFold(f.name, "required") && f.kind == "bool" && f.yes {
+			return true
+		}
+	}
+	return false
+}
+
+// openOption is one entry of a Select: a string, or SelectItem(value, label)
+// read by its label.
+func openOption(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) (string, bool) {
+	if e.kind == "call" && e.name == "SelectItem" {
+		if label, ok := openText(env, openArg(e.args, 1), stack); ok && label != "" {
+			return label, true
+		}
+		return openText(env, openArg(e.args, 0), stack)
+	}
+	return openText(env, e, stack)
 }
 
 func openArg(args []ouiExpr, i int) ouiExpr {
@@ -773,8 +895,12 @@ func openAction(env map[string]ouiExpr, e ouiExpr, stack map[string]bool) string
 
 func openButtonVariant(v string) components.ButtonVariant {
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "primary", "danger", "destructive":
+	case "primary":
 		return components.ButtonPrimary
+	case "danger", "destructive":
+		// Not the accent: a step that removes things should not read as
+		// the card's main action. It asks again before it sends.
+		return components.ButtonOutline
 	case "ghost", "link":
 		return components.ButtonGhost
 	case "outline":
@@ -792,98 +918,6 @@ func openShort(s string, n int) string {
 	return string(rs[:n]) + "…"
 }
 
-func (a *App) paintOpenBlock(c *ui.Context, src string, turn int) {
-	view := parseOpenUI(src)
-	if view == nil {
-		ui.Text(c, "这块界面没能画出来").FontSize(12).TextColor(colorMuted()).Wrap()
-		return
-	}
-	a.paintOpenView(c, view, turn, 0)
-}
-
-func (a *App) paintOpenView(c *ui.Context, v *ouiView, turn, depth int) {
-	if v == nil || depth > 12 {
-		return
-	}
-	switch v.Kind {
-	case "stack":
-		var box ui.Element
-		if v.Row {
-			box = ui.Row(c).FillWidth().MinWidth(0).Wrap().Gap(v.Gap).AlignItems(ui.Center)
-		} else {
-			box = ui.Column(c).FillWidth().MinWidth(0).Gap(v.Gap)
-		}
-		box.Children(func() {
-			for i, ch := range v.Children {
-				a.paintOpenView(c.Key(i), ch, turn, depth+1)
-			}
-		})
-	case "card":
-		ui.Column(c).FillWidth().MinWidth(0).Padding(8).Gap(6).Radius(6).Background(colorHover()).Children(func() {
-			for i, ch := range v.Children {
-				a.paintOpenView(c.Key(i), ch, turn, depth+1)
-			}
-		})
-	case "header":
-		ui.Column(c).FillWidth().MinWidth(0).Gap(2).Children(func() {
-			if v.Text != "" {
-				ui.Text(c.Key("title"), v.Text).FontSize(14).FontWeight(600).TextColor(colorText()).Wrap()
-			}
-			if v.Sub != "" {
-				ui.Text(c.Key("sub"), v.Sub).FontSize(12).TextColor(colorMuted()).Wrap()
-			}
-		})
-	case "text":
-		size, heavy, muted := openTextStyle(v.Size)
-		el := ui.Text(c, v.Text).FontSize(size).TextColor(colorText()).Wrap()
-		if muted {
-			el.TextColor(colorMuted())
-		}
-		if heavy {
-			el.FontWeight(600)
-		}
-	case "table":
-		cols := make([]ui.TableColumn, len(v.Cols))
-		for i, col := range v.Cols {
-			cols[i] = ui.TableColumn{Title: col.Label, ID: itoa(i), MinWidth: 56}
-		}
-		components.Table(c, nil, cols, func() {
-			n := 0
-			for _, col := range v.Cols {
-				if len(col.Cells) > n {
-					n = len(col.Cells)
-				}
-			}
-			for r := 0; r < n; r++ {
-				components.TableRow(c, r, "第 "+itoa(r+1)+" 行", false, func(ci int) {
-					cell := ""
-					if ci >= 0 && ci < len(v.Cols) && r < len(v.Cols[ci].Cells) {
-						cell = v.Cols[ci].Cells[r]
-					}
-					ui.Text(c.Key(ci), cell).FontSize(12).TextColor(colorText()).SingleLine()
-				})
-			}
-		})
-	case "button":
-		sent := false
-		if turn >= 0 && turn < len(a.assist.turns) {
-			for _, item := range a.assist.turns[turn].OpenSent {
-				if item == v.Action {
-					sent = true
-					break
-				}
-			}
-		}
-		btn := components.Button(c, openShort(v.Label, 48), openButtonVariant(v.Variant))
-		if sent {
-			btn.Disabled(true)
-		}
-		if !sent && btn.Clicked() {
-			a.assistantSendOpen(turn, v.Action)
-		}
-	}
-}
-
 func openTextStyle(size string) (font float32, heavy, muted bool) {
 	switch strings.ToLower(strings.TrimSpace(size)) {
 	case "small", "sm":
@@ -895,29 +929,4 @@ func openTextStyle(size string) (font float32, heavy, muted bool) {
 	default:
 		return 13.5, false, false
 	}
-}
-
-// assistantSendOpen posts the button's @ToAssistant text as the next user
-// message. The click does not touch files; the following turn does, under
-// the same confirmation rules as anything typed into the composer.
-func (a *App) assistantSendOpen(i int, action string) {
-	action = strings.TrimSpace(limitRunes(action, 2000))
-	if action == "" || a.assist.running {
-		return
-	}
-	if i >= 0 && i < len(a.assist.turns) {
-		for _, sent := range a.assist.turns[i].OpenSent {
-			if sent == action {
-				return
-			}
-		}
-	}
-	before := len(a.assist.turns)
-	a.assist.draft = action
-	a.assistantSubmit()
-	if len(a.assist.turns) == before || i < 0 || i >= before {
-		return
-	}
-	a.assist.turns[i].OpenSent = append(a.assist.turns[i].OpenSent, action)
-	a.assist.persistSession(a.assist.folder)
 }

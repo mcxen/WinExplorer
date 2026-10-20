@@ -506,6 +506,7 @@ func (a *App) doRefresh() {
 	// 刷新 asks for the world as it is now: every folder the tree has read is
 	// forgotten, not just the one being shown.
 	a.navChildrenClear()
+	a.navRecentReset()
 	a.reload()
 }
 

@@ -272,63 +272,223 @@ func (a *App) zoomOut() {
 
 func (a *App) toggleHidden() { a.showHidden = !a.showHidden }
 
-// openTab opens path in a new tab and makes it active, mirroring Windows 11
-// Explorer's Ctrl+T.
-func (a *App) openTab(path string) {
-	t := newTab(cleanNav(path))
-	a.tabs = append(a.tabs, t)
-	a.activeTab = len(a.tabs) - 1
-	a.reload()
+// maxClosedTabs is how many closed tabs 重新打开关闭的标签页 (Ctrl+Shift+T)
+// can bring back, newest first.
+const maxClosedTabs = 20
+
+// closedTab is what reopening a tab needs: where it was in the strip, the
+// folder it showed and its 后退/前进 history.
+type closedTab struct {
+	index   int
+	history []string
+	histIdx int
+	path    string
 }
 
-// closeTab removes the tab at i. The active index moves to a neighbour so the
-// window never shows a nil tab.
+// openTab opens path in a new tab at the strip's end and makes it active,
+// mirroring Windows 11 Explorer's Ctrl+T.
+func (a *App) openTab(path string) {
+	a.insertTab(len(a.tabs), newTab(cleanNav(path)))
+}
+
+// duplicateTab opens a copy of the tab at i right after it, with its
+// history, as Explorer's 复制标签页: 后退 in the copy goes where the
+// original's did.
+func (a *App) duplicateTab(i int) {
+	if i < 0 || i >= len(a.tabs) {
+		return
+	}
+	src := a.tabs[i]
+	t := newTab(src.path)
+	t.history = slices.Clone(src.history)
+	t.histIdx = src.histIdx
+	a.insertTab(i+1, t)
+}
+
+// insertTab puts t into the strip at i and brings it to the front.
+func (a *App) insertTab(i int, t *tabState) {
+	i = min(max(i, 0), len(a.tabs))
+	a.tabs = slices.Insert(a.tabs, i, t)
+	if a.activeTab >= i && len(a.tabs) > 1 {
+		a.activeTab++ // the old front tab moved one place right
+	}
+	a.activate(i)
+}
+
+// activate makes the tab at i the front one. Whatever the tab that was in
+// front had half done — an inline rename, the address bar's edit — is
+// dropped, so it does not come back as a stale editor later; the new front
+// tab's listing is read again, since a tab in the back can go stale (a drop
+// onto its tab, an operation in another tab) and a restored tab has never
+// been listed at all.
+func (a *App) activate(i int) {
+	if i < 0 || i >= len(a.tabs) {
+		return
+	}
+	if a.activeTab >= 0 && a.activeTab < len(a.tabs) && a.activeTab != i {
+		a.leaveTab(a.tabs[a.activeTab])
+	}
+	a.activeTab = i
+	a.tabReveal = true
+	if a.cur().path != pathDisks {
+		a.disksUnwatch()
+	}
+	sel := a.cur().selected
+	a.reload()
+	// reload keeps the selection map, but a selected file that is gone
+	// meanwhile must not stay selected out of sight.
+	a.pruneSelection(sel)
+	a.requestPreview()
+}
+
+// leaveTab drops the transient editors of a tab going to the back.
+func (a *App) leaveTab(t *tabState) {
+	t.renaming, t.renameBuf = "", ""
+	t.editingPath, t.pathDraft = false, ""
+	t.marquee = marqueeState{}
+}
+
+// pruneSelection keeps only the selected paths the fresh listing still has.
+func (a *App) pruneSelection(sel map[string]bool) {
+	t := a.cur()
+	if len(sel) == 0 || specialPath(t.path) {
+		return
+	}
+	have := make(map[string]bool, len(t.entries))
+	for _, e := range t.entries {
+		have[e.Path] = true
+	}
+	for p := range sel {
+		if !have[p] {
+			delete(sel, p)
+		}
+	}
+	if !have[t.anchor] {
+		t.anchor = ""
+	}
+}
+
+// rememberClosed pushes the tab at i onto the reopen stack.
+func (a *App) rememberClosed(i int) {
+	t := a.tabs[i]
+	a.closedTabs = append(a.closedTabs, closedTab{
+		index: i, path: t.path, history: slices.Clone(t.history), histIdx: t.histIdx,
+	})
+	if n := len(a.closedTabs); n > maxClosedTabs {
+		a.closedTabs = slices.Delete(a.closedTabs, 0, n-maxClosedTabs)
+	}
+}
+
+// closeTab removes the tab at i. Closing the front tab brings forward the
+// one that slides into its place — its right neighbour, or its left one
+// when it was the last — as Explorer and the browsers do. The last tab
+// stays: a window always shows a folder.
 func (a *App) closeTab(i int) {
 	if i < 0 || i >= len(a.tabs) || len(a.tabs) <= 1 {
 		return
 	}
+	a.rememberClosed(i)
+	wasActive := i == a.activeTab
 	a.tabs = slices.Delete(a.tabs, i, i+1)
-	if a.activeTab >= len(a.tabs) {
-		a.activeTab = len(a.tabs) - 1
-	} else if a.activeTab > i {
+	switch {
+	case wasActive:
+		a.activeTab = -1 // the tab left; nothing to tidy on it
+		a.activate(min(i, len(a.tabs)-1))
+	case a.activeTab > i:
 		a.activeTab--
 	}
-	if a.cur().path != pathDisks {
-		a.disksUnwatch()
+}
+
+// closeTabByID closes the tab t, wherever it sits now: input handlers run
+// outside the frame's index loop, so they name the tab rather than a place.
+func (a *App) closeTabByID(id int) {
+	if i := a.tabIndex(id); i >= 0 {
+		a.closeTab(i)
 	}
-	a.requestPreview()
+}
+
+// tabIndex is where the tab with id sits, or -1.
+func (a *App) tabIndex(id int) int {
+	for i, t := range a.tabs {
+		if t.id == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// reopenClosedTab brings back the most recently closed tab where it was,
+// with its history, as Ctrl+Shift+T. A folder that is gone meanwhile
+// opens 主文件夹, as a restored session's tab does.
+func (a *App) reopenClosedTab() {
+	n := len(a.closedTabs)
+	if n == 0 {
+		return
+	}
+	ct := a.closedTabs[n-1]
+	a.closedTabs = a.closedTabs[:n-1]
+	t := newTab(restoreTabPath(ct.path))
+	if t.path == ct.path && len(ct.history) > 0 {
+		t.history = ct.history
+		t.histIdx = min(max(ct.histIdx, 0), len(ct.history)-1)
+	}
+	a.insertTab(ct.index, t)
 }
 
 func (a *App) switchTo(i int) {
 	if i >= 0 && i < len(a.tabs) && i != a.activeTab {
-		a.activeTab = i
-		if a.cur().path != pathDisks {
-			a.disksUnwatch()
-		}
-		a.requestPreview()
+		a.activate(i)
 	}
 }
 
 // closeOthers keeps only the tab at i and makes it active, as Explorer's
-// tab menu's 关闭其他标签页.
+// tab menu's 关闭其他标签页. The closed tabs can be reopened one by one.
 func (a *App) closeOthers(keep int) {
 	if keep < 0 || keep >= len(a.tabs) || len(a.tabs) <= 1 {
 		return
 	}
+	// Pushed right to left, so reopening one by one puts each back in its
+	// own place.
+	for i := len(a.tabs) - 1; i >= 0; i-- {
+		if i != keep {
+			a.rememberClosed(i)
+		}
+	}
+	front := keep == a.activeTab
 	a.tabs = []*tabState{a.tabs[keep]}
-	a.activeTab = 0
-	a.requestPreview()
+	if front {
+		a.activeTab = 0
+		return
+	}
+	a.activeTab = -1
+	a.activate(0)
 }
 
-// closeRight removes every tab after i, clamping the active index, as
-// Explorer's tab menu's 关闭右侧标签页.
+// closeRight removes every tab after i, as Explorer's tab menu's
+// 关闭右侧标签页. When the front tab was among them, tab i comes forward.
 func (a *App) closeRight(from int) {
 	if from < 0 || from >= len(a.tabs)-1 {
 		return
 	}
+	for i := len(a.tabs) - 1; i > from; i-- {
+		a.rememberClosed(i)
+	}
 	a.tabs = a.tabs[:from+1]
 	if a.activeTab > from {
-		a.activeTab = from
-		a.requestPreview()
+		a.activeTab = -1
+		a.activate(from)
 	}
+}
+
+// moveTab moves the tab at from to the place to, the front tab staying the
+// front tab wherever it ends up, as dragging a tab along the strip does.
+func (a *App) moveTab(from, to int) {
+	if from < 0 || from >= len(a.tabs) || to < 0 || to >= len(a.tabs) || from == to {
+		return
+	}
+	front := a.tabs[a.activeTab]
+	t := a.tabs[from]
+	a.tabs = slices.Delete(a.tabs, from, from+1)
+	a.tabs = slices.Insert(a.tabs, to, t)
+	a.activeTab = slices.Index(a.tabs, front)
 }

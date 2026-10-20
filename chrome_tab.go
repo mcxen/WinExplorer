@@ -1,26 +1,59 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
+// Tab widths: a tab is tabMaxW wide while there is room, and shares the
+// strip below that down to tabMinW, as the browsers' tabs shrink; past that
+// the strip scrolls sideways and keeps the front tab in view.
+const (
+	tabMaxW = 220
+	tabMinW = 96
+	// tabChromeW is what the title bar holds besides the tabs: the left
+	// padding, the 新建标签页 button and the strip's tail, the window's drag
+	// area and the three caption buttons.
+	tabChromeW = 8 + 30 + 24 + tabDragMinW + 3*46
+	// tabDragMinW keeps a piece of title bar to move the window by however
+	// many tabs there are.
+	tabDragMinW = 48
+)
+
 // tabStrip is the Windows 11 title bar: the tab strip and the caption
 // buttons share one row, and the window is frameless, so this bar is the
-// topmost chrome. The row drags the window; a double click on it maximizes.
-// There is no rule under it — the command bar sits on the same mica, as in
-// Explorer.
+// topmost chrome. The bar right of the strip drags the window; a double
+// click there maximizes. A double click on the strip's own empty space —
+// between the tabs and past the last one — opens a new tab. There is no rule
+// under it — the command bar sits on the same mica, as in Explorer.
 func (a *App) tabStrip(c *ui.Context) {
-	bar := windowBG(c, ui.Row(c).Height(40).FillWidth().Shrink(0).
-		AlignItems(ui.Center).Padding(0, 0, 0, 8).Gap(2).
+	bar := windowBG(c, ui.Row(c.Key("title-bar")).Height(40).FillWidth().Shrink(0).
+		AlignItems(ui.Center).Padding(0, 0, 0, 8).
 		DragWindow())
+	tabW := a.tabWidth(bar.Bounds().W)
 	bar.Children(func() {
-		for i := range a.tabs {
-			a.tabItem(c, i)
+		// The strip's bar runs along the top edge, above the tabs, where it
+		// covers no title.
+		strip := ui.ScrollHorizontal(c.Key("tab-strip")).Height(40).Shrink(1).MinWidth(0).
+			AlignItems(ui.Center).Gap(2).Padding(0, 24, 0, 0).Label("标签页").
+			ScrollbarInsets(0, 0, 35, 0)
+		strip.Children(func() {
+			// A snapshot: a drag or a close in this frame reshapes a.tabs
+			// under the loop, which must still build each tab once.
+			for _, t := range slices.Clone(a.tabs) {
+				a.tabItem(c, t, tabW)
+			}
+		})
+		if strip.DoubleClicked() {
+			a.openTab(a.cur().path)
 		}
+		// 新建标签页 sits outside the strip, so it stays in reach however far
+		// the strip scrolls.
 		plus := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).
 			Label("新建标签页").Tooltip("新建标签页 (Ctrl+T)")
 		if plus.Hovered() || plus.Pressed() {
@@ -36,25 +69,51 @@ func (a *App) tabStrip(c *ui.Context) {
 	})
 }
 
+// tabWidth is each tab's width for a title bar barW wide (the frame
+// before's; zero on the first frame, which takes the full width).
+func tabWidth(barW float32, n int) float32 {
+	if barW <= 0 || n <= 0 {
+		return tabMaxW
+	}
+	w := (barW-tabChromeW)/float32(n) - 2
+	return min(max(w, tabMinW), tabMaxW)
+}
+
+func (a *App) tabWidth(barW float32) float32 { return tabWidth(barW, len(a.tabs)) }
+
 // tabItem draws the tab at index i: its title and a close button. The
 // active tab takes the content surface and rounds its top corners, as the
-// Windows 11 active tab does.
-func (a *App) tabItem(c *ui.Context, i int) {
+// Windows 11 active tab does. The tooltip carries the full path the short
+// title leaves out. A middle click closes the tab; dragging it along the
+// strip moves it.
+func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
+	id := t.id
+	i := a.tabIndex(id)
+	if i < 0 {
+		return // closed earlier in this frame
+	}
 	active := i == a.activeTab
-	title := tabTitle(a.tabs[i].path)
-	tab := ui.Row(c).Key("tab-"+string(rune(i))).Height(32).MaxWidth(220).MinWidth(72).
+	title := tabTitle(t.path)
+	tab := ui.Row(c.Key(fmt.Sprintf("tab-%d", id))).Height(32).Width(w).
 		Padding(0, 8, 0, 8).Gap(6).Radius(4, 4, 0, 0).Shrink(0).
-		AlignItems(ui.Center).Role(ui.RoleTab).Label(title)
+		AlignItems(ui.Center).Role(ui.RoleTab).Label(title).
+		Tooltip(tabTooltip(t.path))
 	if active {
 		tab.Background(colorContent())
+		if a.tabReveal {
+			a.tabReveal = false
+			tab.ScrollIntoView()
+		}
 	} else if tab.Hovered() {
 		tab.Background(colorHover())
 	}
+	tab.HandleInput(func(ev ui.InputEvent) bool { return a.tabPointer(id, ev) })
+	closed := false
 	tab.Children(func() {
 		ui.Text(c, title).FontSize(12).SingleLine().Grow(1).MinWidth(0).
 			TextColor(colorText()).MaxLines(1)
 		close := ui.ButtonBase(c).Size(20, 20).Radius(4).Shrink(0).
-			Label("关闭标签").Tooltip("关闭标签")
+			Label("关闭标签页").Tooltip("关闭标签页 (Ctrl+W)")
 		if close.Hovered() || close.Pressed() {
 			close.Background(colorHover())
 		}
@@ -62,39 +121,122 @@ func (a *App) tabItem(c *ui.Context, i int) {
 			components.Icon(c, lucide.X).Size(12, 12).TextColor(colorMuted())
 		})
 		if close.Clicked() {
-			a.closeTab(i)
-			return
+			closed = true
 		}
 	})
+	if closed {
+		a.closeTabByID(id)
+		return
+	}
+	a.tabDragFrame(tab, id, w)
+	if i = a.tabIndex(id); i < 0 {
+		return
+	}
 	if tab.Clicked() {
 		a.switchTo(i)
 	}
 	// Dropping files on a tab moves them into that tab's folder, as
 	// Explorer's tabs take drops.
-	a.bindDropFolder(c, tab, a.tabs[i].path)
-	// The tab's own menu, as Explorer's tab context menu.
+	a.bindDropFolder(c, tab, t.path)
+	// The tab's own menu, as Explorer's tab context menu. The items name
+	// the tab by id: the menu outlives the frame that built it.
 	tab.ContextMenu(func(m *ui.Menu) {
+		at := a.tabIndex(id)
+		if at < 0 {
+			return
+		}
+		if m.Item("新建标签页").Chosen() {
+			a.openTab(a.cur().path)
+		}
 		if m.Item("复制标签页").Chosen() {
-			a.openTab(a.tabs[i].path)
+			a.duplicateTab(at)
 		}
 		m.Separator()
 		if m.Item("关闭标签页").Disabled(len(a.tabs) <= 1).Chosen() {
-			a.closeTab(i)
+			a.closeTab(at)
 		}
 		if m.Item("关闭其他标签页").Disabled(len(a.tabs) <= 1).Chosen() {
-			a.closeOthers(i)
+			a.closeOthers(at)
 		}
-		if m.Item("关闭右侧标签页").Disabled(i >= len(a.tabs)-1).Chosen() {
-			a.closeRight(i)
+		if m.Item("关闭右侧标签页").Disabled(at >= len(a.tabs)-1).Chosen() {
+			a.closeRight(at)
+		}
+		m.Separator()
+		if m.Item("重新打开关闭的标签页").Disabled(len(a.closedTabs) == 0).Chosen() {
+			a.reopenClosedTab()
 		}
 	})
+}
+
+// tabPointer is a tab's raw pointer input: the middle button closes it on
+// release, as in every tabbed browser and Explorer. The other buttons go on
+// to the tab's click and drag handling.
+func (a *App) tabPointer(id int, ev ui.InputEvent) bool {
+	if ev.Button != 2 {
+		return false
+	}
+	switch ev.Kind {
+	case ui.InputPointerDown:
+		return true
+	case ui.InputPointerUp:
+		a.closeTabByID(id)
+		repaint()
+		return true
+	}
+	return false
+}
+
+// tabDragFrame moves a pressed tab along the strip as the pointer drags
+// it: once the pointer has gone half a tab past the tab's place, the tab
+// swaps with its neighbour that way.
+func (a *App) tabDragFrame(tab ui.Element, id int, w float32) {
+	// Asked every frame, so the tab claims its drags before the strip, which
+	// scrolls by dragging, would take them.
+	// Dragged's ok is the press itself, which Pressed is not: Pressed goes
+	// false as the pointer leaves the tab, as it does mid-drag.
+	dx, _, held := tab.Dragged()
+	if !held {
+		if a.tabDrag.id == id {
+			a.tabDrag.id, a.tabDrag.acc = 0, 0
+		}
+		return
+	}
+	if a.tabDrag.id != id {
+		a.tabDrag.id, a.tabDrag.acc = id, 0
+	}
+	a.tabDrag.acc += dx
+	step := w + 2
+	for {
+		i := a.tabIndex(id)
+		switch {
+		case a.tabDrag.acc > step/2 && i+1 < len(a.tabs):
+			a.moveTab(i, i+1)
+			a.tabDrag.acc -= step
+		case a.tabDrag.acc < -step/2 && i > 0:
+			a.moveTab(i, i-1)
+			a.tabDrag.acc += step
+		default:
+			return
+		}
+	}
+}
+
+// tabTooltip is the full place a tab shows, for its tooltip: the path, or
+// the page's name for the pages that are no folder.
+func tabTooltip(path string) string {
+	if specialPath(path) {
+		return tabTitle(path)
+	}
+	return path
 }
 
 // windowControls ends the title bar: the empty strip that drags, then the
 // three caption buttons Windows 11 puts at the right end — minimize,
 // maximize, close — each a 46×40 flat target. Close hovers red.
 func (a *App) windowControls(c *ui.Context) {
-	ui.Box(c).Grow(1).Height(1).DragWindow()
+	// The bar itself drags; this filler only claims the room, and keeps a
+	// piece of it however many tabs the strip holds.
+	ui.Box(c).Grow(1).MinWidth(tabDragMinW).Height(40).DragWindow()
 	a.winControl(c, "最小化", drawWinMin, false, func() {
 		if a.win != nil {
 			a.win.Minimize()

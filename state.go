@@ -17,6 +17,11 @@ import (
 // state a.path, a.entries, a.selected, ... used to belong to the app; moving
 // them here lets several tabs share the window.
 type tabState struct {
+	// id names the tab for as long as it lives, whatever place it moves to
+	// in the strip: the tab's widgets are keyed by it, so a tab dragged or
+	// a neighbour closed does not hand its hover, press or editor state to
+	// the tab that took its place.
+	id      int
 	path    string
 	entries []Entry
 	loadErr string
@@ -102,6 +107,17 @@ type marqueeState struct {
 type App struct {
 	tabs      []*tabState
 	activeTab int
+	// closedTabs is the reopen stack of 重新打开关闭的标签页, newest last.
+	closedTabs []closedTab
+	// tabReveal asks the strip to scroll the front tab into view in the
+	// next frame: set whenever a tab comes forward.
+	tabReveal bool
+	// tabDrag is the tab being dragged along the strip and how far the
+	// pointer went since it last changed places (chrome_tab.go).
+	tabDrag struct {
+		id  int
+		acc float32
+	}
 
 	sortKey        SortKey
 	sortAsc        bool
@@ -283,8 +299,13 @@ const (
 	pathDisks   = "::{disks}"
 )
 
+// tabSeq hands out tab ids. Tabs are only made on the UI thread.
+var tabSeq int
+
 func newTab(path string) *tabState {
+	tabSeq++
 	return &tabState{
+		id:       tabSeq,
 		path:     path,
 		selected: map[string]bool{},
 		history:  []string{path},
@@ -294,18 +315,6 @@ func newTab(path string) *tabState {
 
 // cur returns the active tab.
 func (a *App) cur() *tabState { return a.tabs[a.activeTab] }
-
-// allSelected gathers the selection across every tab, so a copy or cut made
-// in one tab can be pasted after switching.
-func (a *App) allSelected() []string {
-	var out []string
-	for _, t := range a.tabs {
-		for p := range t.selected {
-			out = append(out, p)
-		}
-	}
-	return out
-}
 
 // colWidths are the details view's user-adjusted column widths; zero
 // keeps the column's default (files.go's col*W constants), the name

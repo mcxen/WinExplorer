@@ -378,6 +378,11 @@ func (a *App) handleKeys(c *ui.Context) {
 		}
 		return
 	}
+	// The tab keys work from the address bar's edit too, as Explorer's:
+	// bringing another tab forward drops the edit.
+	if a.handleTabKeys(c) {
+		return
+	}
 	if a.cur().editingPath {
 		return
 	}
@@ -460,17 +465,7 @@ func (a *App) handleKeys(c *ui.Context) {
 		a.togglePreview()
 	case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyN), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyN):
 		a.doNewFolder()
-	case c.Shortcut(ui.Cmd, ui.KeyT), c.Shortcut(ui.Ctrl, ui.KeyT):
-		a.openTab(a.cur().path)
-	case c.Shortcut(ui.Cmd, ui.KeyW), c.Shortcut(ui.Ctrl, ui.KeyW):
-		a.closeTab(a.activeTab)
-	case c.Shortcut(ui.Cmd, ui.KeyBracketRight), c.Shortcut(ui.Ctrl, ui.KeyTab):
-		a.switchTo((a.activeTab + 1) % len(a.tabs))
-	case c.Shortcut(ui.Cmd, ui.KeyBracketLeft), c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyTab):
-		a.switchTo((a.activeTab + len(a.tabs) - 1) % len(a.tabs))
 	}
-	// Ctrl/Cmd+1..8 goes to that tab, +9 to the last, as Explorer's tab
-	// shortcuts.
 	// Ctrl+Shift+1..6: view styles, as Explorer's.
 	styles := []struct {
 		key  ui.Key
@@ -488,20 +483,6 @@ func (a *App) handleKeys(c *ui.Context) {
 			a.setMode(st.mode)
 			return
 		}
-	}
-	digits := []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4,
-		ui.Key5, ui.Key6, ui.Key7, ui.Key8}
-	for i, key := range digits {
-		if i >= len(a.tabs) {
-			break
-		}
-		if c.Shortcut(ui.Ctrl, key) || c.Shortcut(ui.Cmd, key) {
-			a.switchTo(i)
-			return
-		}
-	}
-	if c.Shortcut(ui.Ctrl, ui.Key9) || c.Shortcut(ui.Cmd, ui.Key9) {
-		a.switchTo(len(a.tabs) - 1)
 	}
 	// The pane's keyboard navigation: the arrows step the selection, Home
 	// and End go to its ends, Page Up and Page Down by a screenful, and

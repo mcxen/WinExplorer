@@ -163,7 +163,13 @@ func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	x := *chosen
-	go func() { _ = x.run(e) }()
+	go func() {
+		if a.extCommand != nil {
+			_ = x.runWith(a.extCommand, e)
+			return
+		}
+		_ = x.run(e)
+	}()
 	remote.OK(w, nil)
 }
 

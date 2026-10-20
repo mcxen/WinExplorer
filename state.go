@@ -1,10 +1,12 @@
 package main
 
 import (
-	"github.com/oneo-me/onevra/source/components"
-	"github.com/oneo-me/onevra/source/components/chart"
+	"os/exec"
 	"sync/atomic"
 	"time"
+
+	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/components/chart"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
@@ -229,6 +231,9 @@ type App struct {
 	// the settings dialog's 扩展 section until the user fixes the file.
 	shellExts    []shellExt
 	shellExtErrs []shellExtLoadError
+	// extCommand lets tests replace sh so they can wait for an extension's
+	// completion signal instead of sleeping for its side effect.
+	extCommand func(name string, arg ...string) *exec.Cmd
 	// extEdit is the 扩展 editor dialog's state (settingsdialog.go): -1
 	// adds a new extension, otherwise it edits shellExts' index.
 	extEdit extEditState

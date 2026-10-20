@@ -30,9 +30,7 @@
    GOOS=windows go build -o /tmp/x.exe . && GOOS=linux go build -o /tmp/x . && GOOS=darwin go build -o /tmp/x . && GOOS=js GOARCH=wasm go build -o /tmp/x.wasm .
    go test -count=1 ./...
    ```
-7. **已知的既有失败**（与本次改动无关，不要尝试顺手修，也不要因此停工）：
-   
-   除此之外的任何失败都必须修好再提交。
+7. **已知的既有失败**：无。任何失败都必须修好再提交。
 8. **截图验证（离屏渲染）**：UI 改动要附截图。做法与现有 `*_ui_test.go` 一致：用 `ui.NewTester(a.view, 1200, 800)` 建窗口，跑几帧 `tt.Frame()`，再 `png.Encode(f, tt.Image())` 写到 `/tmp` 或 PR 附件。截图用的测试放在 `zz_*_test.go` 里，**不要提交**（看完删除）。参考 `/workspace/winexplorer-demo/search/current/searchshot_test.go.txt`。
 9. **界面文字一律简体中文**，不使用 emoji；颜色只用 `theme.go` 的 `colorXxx()` 函数，不写死色值。
 10. 注释用英文，解释“为什么”；新文件顶部写一段分工说明。

@@ -218,6 +218,12 @@ func (x shellExt) expand(e Entry) string {
 // otherwise it runs through sh detached, so a slow tool never blocks the
 // UI (the goroutine reaps it too).
 func (x shellExt) run(e Entry) error {
+	return x.runWith(exec.Command, e)
+}
+
+// runWith is run with a caller-chosen command constructor, so tests can
+// observe the detached process without depending on a shell's timing.
+func (x shellExt) runWith(command func(string, ...string) *exec.Cmd, e Entry) error {
 	cmd := x.expand(e)
 	if cmd == "" {
 		return nil
@@ -225,7 +231,7 @@ func (x shellExt) run(e Entry) error {
 	if x.Terminal {
 		return sysTerminalRun(cmd)
 	}
-	c := exec.Command("sh", "-c", cmd)
+	c := command("sh", "-c", cmd)
 	if err := c.Start(); err != nil {
 		return err
 	}

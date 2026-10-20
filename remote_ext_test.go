@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -135,8 +137,14 @@ func TestRemoteExtRun(t *testing.T) {
 	e := newRemoteTestEnv(t)
 	e.writeFile("Documents/notes.txt", "N")
 	marker := filepath.Join(t.TempDir(), "marker")
+	started := make(chan struct{})
+	var once sync.Once
+	e.a.extCommand = func(_ string, _ ...string) *exec.Cmd {
+		once.Do(func() { close(started) })
+		return exec.Command("sh", "-c", fmt.Sprintf("touch %q", marker))
+	}
 	remoteSeedExtensions(t, e, []shellExt{
-		{Name: "建标记文件", Match: []string{"*"}, Command: fmt.Sprintf("touch %q", marker)},
+		{Name: "建标记文件", Match: []string{"*"}, Command: "{path}"},
 		{Name: "仅目录", Match: []string{"dir"}, Command: "true"},
 	})
 	tok := e.login()
@@ -158,6 +166,11 @@ func TestRemoteExtRun(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("the marker landed before the reply, the run was not detached")
+	}
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("ext/run never started the extension")
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {

@@ -254,35 +254,67 @@ func trashDir() (string, error) { return sysTrashDir() }
 func moveToTrash(path string) (string, string, error) { return sysTrashMove(path) }
 
 func (a *App) commitRename() {
-	if a.cur().renaming == "" {
-		return
+	if err := a.commitRenameIn(a.cur()); err != nil {
+		a.renameStatus(err)
 	}
-	oldName := a.cur().renaming
-	newName := strings.TrimSpace(a.cur().renameBuf)
-	a.cur().renaming = ""
-	a.cur().renameBuf = ""
+}
+
+// commitRenameIn finishes the editor a tab leaves behind. Tab activation can
+// name a tab other than the one coming forward while it is still current, so
+// the operation works on that state rather than implicitly on a.cur().
+func (a *App) commitRenameIn(t *tabState) error {
+	if t.renaming == "" {
+		return nil
+	}
+	oldName := t.renaming
+	newName := strings.TrimSpace(t.renameBuf)
+	t.renaming = ""
+	t.renameBuf = ""
 	if newName == "" || newName == oldName {
-		return
+		return nil
 	}
 	if newName == "." || newName == ".." || strings.ContainsAny(newName, `/\`) {
-		a.statusMsg = "名称无效"
-		return
+		return fmt.Errorf("名称无效")
 	}
-	if specialPath(a.cur().path) {
-		a.statusMsg = "无法重命名此页面中的项目"
-		return
+	if specialPath(t.path) {
+		return fmt.Errorf("无法重命名此页面中的项目")
 	}
-	oldPath := filepath.Join(a.cur().path, oldName)
-	newPath := filepath.Join(a.cur().path, newName)
+	oldPath := filepath.Join(t.path, oldName)
+	newPath := filepath.Join(t.path, newName)
+	// os.Rename replaces an existing file on Unix. A rename must never turn
+	// a duplicate name into an overwrite; a case-only change is still the
+	// same file and is allowed on case-insensitive filesystems.
+	if info, err := os.Lstat(newPath); err == nil {
+		oldInfo, oldErr := os.Lstat(oldPath)
+		if oldErr != nil || !os.SameFile(oldInfo, info) {
+			return fmt.Errorf("重命名失败：目标名称已存在")
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("重命名失败：%w", err)
+	}
 	if err := os.Rename(oldPath, newPath); err != nil {
-		a.statusMsg = "重命名失败：" + err.Error()
-		a.reload()
-		return
+		if t == a.cur() {
+			a.reload()
+		}
+		return fmt.Errorf("重命名失败：%w", err)
 	}
 	a.pushUndo(undoOp{desc: "重命名", moved: []undoMove{{From: oldPath, To: newPath}}})
-	a.reload()
-	a.selectOnly(newPath)
-	a.cur().reveal = newPath
+	if t == a.cur() {
+		a.reload()
+		a.selectOnly(newPath)
+		t.reveal = newPath
+	}
+	return nil
+}
+
+// renameStatus gives Enter and tab handoff the same visible outcome, including
+// a fresh toast when the same failure happens twice in one window.
+func (a *App) renameStatus(err error) {
+	if err == nil {
+		return
+	}
+	a.statusMsg = err.Error()
+	a.statusToasted = ""
 }
 
 func (a *App) cancelRename() {

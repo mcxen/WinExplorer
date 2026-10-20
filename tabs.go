@@ -315,18 +315,17 @@ func (a *App) insertTab(i int, t *tabState) {
 	a.activate(i)
 }
 
-// activate makes the tab at i the front one. Whatever the tab that was in
-// front had half done — an inline rename, the address bar's edit — is
-// dropped, so it does not come back as a stale editor later; the new front
-// tab's listing is read again, since a tab in the back can go stale (a drop
-// onto its tab, an operation in another tab) and a restored tab has never
-// been listed at all.
+// activate makes the tab at i the front one. The tab going back commits its
+// inline rename and drops its address-bar draft; the new front tab's listing
+// is read again, since a tab in the back can go stale (a drop onto its tab,
+// an operation in another tab) and a restored tab has never been listed.
 func (a *App) activate(i int) {
 	if i < 0 || i >= len(a.tabs) {
 		return
 	}
+	var leaveErr error
 	if a.activeTab >= 0 && a.activeTab < len(a.tabs) && a.activeTab != i {
-		a.leaveTab(a.tabs[a.activeTab])
+		leaveErr = a.leaveTab(a.tabs[a.activeTab])
 	}
 	a.activeTab = i
 	a.tabReveal = true
@@ -339,13 +338,17 @@ func (a *App) activate(i int) {
 	// meanwhile must not stay selected out of sight.
 	a.pruneSelection(sel)
 	a.requestPreview()
+	a.renameStatus(leaveErr)
 }
 
-// leaveTab drops the transient editors of a tab going to the back.
-func (a *App) leaveTab(t *tabState) {
-	t.renaming, t.renameBuf = "", ""
+// leaveTab settles the transient editors of a tab going away. Explorer commits
+// an inline rename when focus leaves it; a bad target reports the same outcome
+// as Enter but never holds up the tab switch or close.
+func (a *App) leaveTab(t *tabState) error {
+	err := a.commitRenameIn(t)
 	t.editingPath, t.pathDraft = false, ""
 	t.marquee = marqueeState{}
+	return err
 }
 
 // pruneSelection keeps only the selected paths the fresh listing still has.
@@ -387,6 +390,7 @@ func (a *App) closeTab(i int) {
 	if i < 0 || i >= len(a.tabs) || len(a.tabs) <= 1 {
 		return
 	}
+	leaveErr := a.leaveTab(a.tabs[i])
 	a.rememberClosed(i)
 	wasActive := i == a.activeTab
 	a.tabs = slices.Delete(a.tabs, i, i+1)
@@ -397,6 +401,7 @@ func (a *App) closeTab(i int) {
 	case a.activeTab > i:
 		a.activeTab--
 	}
+	a.renameStatus(leaveErr)
 }
 
 // closeTabByID closes the tab t, wherever it sits now: input handlers run

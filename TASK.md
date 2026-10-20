@@ -59,7 +59,7 @@
 | T1 | 侧栏目录树润色 | 中 | 已完成 | [02](docs/specs/02-tree-polish.md) | — | `feat/tree-polish` |
 | TB1 | 拖动文件悬停标签自动切换 | 中 | 待开发 | [04 A](docs/specs/04-tabs-followups.md) | — | `feat/tab-drag-hover` |
 | TB2 | 会话恢复后退/前进历史 | 中 | 待开发 | 04 B | — | `feat/session-history` |
-| TB3 | 切换标签时保存进行中的重命名 | 高 | 待开发 | 04 C | — | `fix/rename-on-tab-switch` |
+| TB3 | 切换标签时保存进行中的重命名 | 高 | 已完成 | 04 C | — | `fix/rename-on-tab-switch` |
 | A1 | 提示词与工具同步检查 + 真实模型回归 | 中 | 待开发 | [05 A、C6](docs/specs/05-assistant-followups.md) | — | `feat/assistant-eval` |
 | A2 | OpenUI/Markdown 遗留修复 | 中 | 待开发 | 05 C1–C5 | — | `fix/assistant-render` |
 | A3 | 回复中的目录树组件 | 低 | 待开发 | 05 B | A2 | `feat/assistant-tree` |

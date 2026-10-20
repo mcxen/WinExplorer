@@ -1,9 +1,12 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 // rename_ui_test.go drives the batch rename dialog in a laid-out window: the
@@ -110,4 +113,107 @@ func TestBatchRenameRowEditingTypesAName(t *testing.T) {
 	if _, err := filepath.Glob(filepath.Join(dir, "f000.txt")); err != nil {
 		t.Fatalf("glob: %v", err)
 	}
+}
+
+// TestInlineRenameCommitsWhenTabLeaves covers Explorer's focus rule at both
+// exits: switching commits and records undo, closing commits too, while a
+// duplicate target reports the failure and still lets the switch happen.
+func TestInlineRenameCommitsWhenTabLeaves(t *testing.T) {
+	t.Run("switch", func(t *testing.T) {
+		a, tt, root := tabsWindow(t, 1200, "a", "b")
+		a.openTab(filepath.Join(root, "a"))
+		a.openTab(filepath.Join(root, "b"))
+		a.switchTo(1)
+		dir := filepath.Join(root, "a")
+		oldPath := filepath.Join(dir, "a.txt")
+		newPath := filepath.Join(dir, "renamed.txt")
+		if err := os.WriteFile(filepath.Join(dir, "taken.txt"), []byte("keep"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		a.navigate(dir)
+		a.selectOnly(oldPath)
+		a.doRenameStart()
+		tt.Frame()
+		tt.Key(ui.Cmd, ui.KeyA)
+		tt.Type("renamed.txt")
+		undoBefore := len(a.undo)
+
+		a.switchTo(2)
+		if a.activeTab != 2 {
+			t.Fatalf("the rename blocked the switch: active %d", a.activeTab)
+		}
+		if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+			t.Fatalf("the old file still exists: %v", err)
+		}
+		if _, err := os.Stat(newPath); err != nil {
+			t.Fatalf("the switched-away rename did not land: %v", err)
+		}
+		if len(a.undo) != undoBefore+1 || len(a.undo[len(a.undo)-1].moved) != 1 {
+			t.Fatalf("undo = %+v, want one rename move", a.undo)
+		}
+		if a.tabs[0].renaming != "" || a.tabs[0].renameBuf != "" {
+			t.Fatalf("the finished editor stayed in tab 0: %q %q", a.tabs[0].renaming, a.tabs[0].renameBuf)
+		}
+	})
+
+	t.Run("duplicate", func(t *testing.T) {
+		a, tt, root := tabsWindow(t, 1200, "a", "b")
+		a.openTab(filepath.Join(root, "a"))
+		a.openTab(filepath.Join(root, "b"))
+		a.switchTo(1)
+		dir := filepath.Join(root, "a")
+		source := filepath.Join(dir, "a.txt")
+		taken := filepath.Join(dir, "taken.txt")
+		if err := os.WriteFile(taken, []byte("keep"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		a.navigate(dir)
+		a.selectOnly(source)
+		a.doRenameStart()
+		tt.Frame()
+		tt.Key(ui.Cmd, ui.KeyA)
+		tt.Type("taken.txt")
+		undoBefore := len(a.undo)
+
+		a.switchTo(2)
+		if a.activeTab != 2 {
+			t.Fatalf("the duplicate blocked the switch: active %d", a.activeTab)
+		}
+		if got, want := a.statusMsg, "重命名失败：目标名称已存在"; got != want {
+			t.Fatalf("status = %q, want %q", got, want)
+		}
+		if _, err := os.Stat(source); err != nil {
+			t.Fatalf("the rejected source changed: %v", err)
+		}
+		if data, err := os.ReadFile(taken); err != nil || string(data) != "keep" {
+			t.Fatalf("the duplicate overwrote the target: %q, %v", data, err)
+		}
+		if len(a.undo) != undoBefore {
+			t.Fatalf("a rejected rename added undo: %+v", a.undo)
+		}
+	})
+
+	t.Run("close", func(t *testing.T) {
+		a, tt, root := tabsWindow(t, 1200, "a", "b")
+		a.openTab(filepath.Join(root, "a"))
+		a.openTab(filepath.Join(root, "b"))
+		a.switchTo(1)
+		oldPath := filepath.Join(root, "a", "a.txt")
+		newPath := filepath.Join(root, "a", "closed.txt")
+		a.navigate(filepath.Join(root, "a"))
+		a.selectOnly(oldPath)
+		a.doRenameStart()
+		tt.Frame()
+		tt.Key(ui.Cmd, ui.KeyA)
+		tt.Type("closed.txt")
+		undoBefore := len(a.undo)
+
+		a.closeTab(1)
+		if _, err := os.Stat(newPath); err != nil {
+			t.Fatalf("closing the tab discarded the rename: %v", err)
+		}
+		if len(a.undo) != undoBefore+1 {
+			t.Fatalf("closing the tab lost undo: %+v", a.undo)
+		}
+	})
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"sunvale/diskhealth"
+	"sunvale/internal/fsentry"
 	"sunvale/internal/searchquery"
 )
 
@@ -290,21 +291,7 @@ const (
 // groupNone turns 分组依据 off.
 const groupNone SortKey = -1
 
-type Entry struct {
-	Name    string
-	Path    string
-	IsDir   bool
-	Size    int64
-	ModTime time.Time
-	Ext     string // lower, no dot; empty for dirs
-
-	// Dir is the parent folder's path, shown in the search result's 位置
-	// column; empty for regular listings.
-	Dir string
-	// VolFree/VolTotal carry a drive's capacity for the 此电脑 page's
-	// usage bars; zero otherwise.
-	VolFree, VolTotal int64
-}
+type Entry = fsentry.Entry
 
 type Crumb struct{ Name, Path string }
 type Place struct{ Name, Path, Kind string }

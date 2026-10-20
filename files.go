@@ -475,6 +475,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 		AlignItems(ui.Center).Justify(ui.Start).Margin(0, rowInset).
 		MinWidth(a.detailsWidth()).Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
+	aiFxRow(c, row, aiFx.look(e.Path), a.detailsRowH(), 4)
 	row.Children(func() {
 		name := ui.Row(c).Height(a.detailsRowH()).Padding(0, 8).Gap(8).
 			AlignItems(ui.Center)
@@ -625,6 +626,7 @@ func (a *App) listRow(c *ui.Context, e Entry) {
 		Padding(0, 8).Gap(8).AlignItems(ui.Center).Margin(0, rowInset).
 		Radius(4).Label(e.Name)
 	a.paintSelect(row, e.Path)
+	aiFxRow(c, row, aiFx.look(e.Path), a.listRowH(), 4)
 	row.Children(func() {
 		a.nameCell(c, e, 16, 12)
 	})
@@ -817,6 +819,8 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 		tile.Padding(4, 6).Gap(8).AlignItems(ui.Center).Justify(ui.Start)
 	}
 	a.paintSelect(tile, e.Path)
+	look := aiFx.look(e.Path)
+	aiFxRow(c, tile, look, 0, 4)
 	// A network tile decodes its picture for the first rows of the folder and
 	// for a tile under the pointer or in the selection; the rest keep the
 	// drawn glyph until someone looks, so opening a share does not download
@@ -838,8 +842,11 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 				a.renameField(c, font)
 				return
 			}
-			searchNameText(c, a.activeSearchQuery(), a.displayName(e), font).
+			label := searchNameText(c, a.activeSearchQuery(), a.displayName(e), font).
 				TextAlign(ui.Center).MaxLines(2).FillWidth()
+			if look.flash > 0 {
+				label.TextColor(flashColor(colorText(), look))
+			}
 			if e.VolTotal > 0 {
 				bar := ui.Box(c).Width(box).Height(6).Shrink(0)
 				bar.Draw(func(p *ui.Painter, r ui.Rect) {
@@ -973,8 +980,11 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 	// A live search marks the runs it matched, Everything-style. A query whose
 	// terms all sit in the path (path:docs) marks nothing in a name, and falls
 	// through to the plain text.
-	searchNameText(c, a.activeSearchQuery(), a.displayName(e), font).
+	label := searchNameText(c, a.activeSearchQuery(), a.displayName(e), font).
 		SingleLine().Grow(1).MinWidth(0)
+	if l := aiFx.look(e.Path); l.flash > 0 {
+		label.TextColor(flashColor(colorText(), l))
+	}
 }
 
 // searchNameText is a name with the query's hits marked, Everything's yellow

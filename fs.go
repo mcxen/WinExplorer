@@ -20,6 +20,9 @@ func (a *App) visibleEntries() []Entry {
 		}
 		out := make([]Entry, 0, len(st.photos))
 		for _, ph := range st.photos {
+			if aiFx.look(ph.path).gone {
+				continue
+			}
 			out = append(out, galleryEntry(ph))
 		}
 		return out
@@ -39,6 +42,11 @@ func (a *App) visibleEntries() []Entry {
 			continue
 		}
 		if q != "" && !strings.Contains(strings.ToLower(e.Name), q) {
+			continue
+		}
+		// A row the assistant moved away has slid out and folded shut; the
+		// reload that drops it waits for the others to finish (aifx.go).
+		if aiFx.look(e.Path).gone {
 			continue
 		}
 		out = append(out, e)

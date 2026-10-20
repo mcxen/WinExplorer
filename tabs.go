@@ -132,6 +132,7 @@ func (a *App) canUp() bool {
 // reload lists the active tab's directory or This PC places, and clears the
 // transient status message on success.
 func (a *App) reload() {
+	aiFx.forgetLeft()
 	t := a.cur()
 	// The folder's listing is being read again: the tree's copy of it is stale.
 	a.navChildrenDrop(t.path)

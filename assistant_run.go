@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	officialmcp "github.com/cloudwego/eino-ext/components/tool/mcp/officialmcp"
@@ -169,7 +170,8 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 			a.assist.pending = ""
 			a.assist.resetLive()
 			a.assist.status = ""
-			a.reload()
+			aiFx.endRun()
+			a.reloadAfterFx()
 			for _, id := range plans {
 				a.assistantApplyPlan(id)
 			}
@@ -685,6 +687,9 @@ func (a *App) assistantApplyPlan(id string) {
 		return
 	}
 	moved, failed := rename.Apply(plan.Dir, plan.Rows)
+	for _, m := range moved {
+		aiFx.markRenamed(m.From, m.To)
+	}
 	if a.assist.applied == nil {
 		a.assist.applied = map[string]bool{}
 	}
@@ -702,4 +707,18 @@ func (a *App) assistantApplyPlan(id string) {
 		a.statusMsg = "已应用重命名方案"
 	}
 	a.reload()
+}
+
+// reloadAfterFx is the run's closing reload. Rows the assistant moved away
+// are still sliding out (aifx.go); the reload waits for the last of them,
+// so none of them vanishes mid-slide.
+func (a *App) reloadAfterFx() {
+	d := aiFx.pendingLeave()
+	if d <= 0 {
+		a.reload()
+		return
+	}
+	time.AfterFunc(d+30*time.Millisecond, func() {
+		a.postAssist(a.reload)
+	})
 }

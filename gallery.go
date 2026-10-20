@@ -270,7 +270,12 @@ func (a *App) galleryView(c *ui.Context) {
 			a.paneMessage(c, "正在扫描图片…")
 			return
 		}
-		photos := st.photos
+		photos := make([]galleryPhoto, 0, len(st.photos))
+		for _, ph := range st.photos {
+			if !aiFx.look(ph.path).gone {
+				photos = append(photos, ph)
+			}
+		}
 		if len(photos) == 0 {
 			a.paneMessage(c, "“图片”文件夹中没有图片")
 			return
@@ -324,6 +329,7 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 	default:
 		tile.Background(colorHover().Alpha(0.35))
 	}
+	aiFxRow(c, tile, aiFx.look(p.path), 0, 4)
 	tile.Children(func() {
 		if bm := galleryThumb(p.path); bm != nil {
 			ui.Image(c, bm).Fit(ui.Cover)

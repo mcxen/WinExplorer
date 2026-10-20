@@ -165,10 +165,13 @@ func (s *sunvaleTools) transfer(args transferArgs, move bool) (*mcp.CallToolResu
 			lines = append(lines, src+" 已在目标中")
 			continue
 		}
+		aiFx.markBusy(src)
 		if err := placeItem(src, dst, move); err != nil {
+			aiFx.clearBusy(src)
 			return mcpErr(err), nil, nil
 		}
 		if move {
+			aiFx.markLeaving(src)
 			moved = append(moved, undoMove{From: src, To: dst})
 			lines = append(lines, "已移动到 "+dst)
 		} else {
@@ -199,10 +202,13 @@ func (s *sunvaleTools) trashItems(_ context.Context, _ *mcp.CallToolRequest, arg
 		if err := refuseRootish(path); err != nil {
 			return mcpErr(err), nil, nil
 		}
+		aiFx.markBusy(path)
 		dst, _, err := moveToTrash(path)
 		if err != nil {
+			aiFx.clearBusy(path)
 			return mcpErr(err), nil, nil
 		}
+		aiFx.markLeaving(path)
 		if dst != "" {
 			moved = append(moved, undoMove{From: path, To: dst})
 		}
@@ -228,9 +234,12 @@ func (s *sunvaleTools) renameItem(_ context.Context, _ *mcp.CallToolRequest, arg
 		return mcpErr(fmt.Errorf("不能重命名当前文件夹本身")), nil, nil
 	}
 	dst := filepath.Join(root, strings.TrimSpace(args.To))
+	aiFx.markBusy(src)
 	if err := os.Rename(src, dst); err != nil {
+		aiFx.clearBusy(src)
 		return mcpErr(err), nil, nil
 	}
+	aiFx.markRenamed(src, dst)
 	s.noteUndo(undoOp{desc: "重命名", moved: []undoMove{{From: src, To: dst}}})
 	return mcpText("已重命名为 " + dst), nil, nil
 }

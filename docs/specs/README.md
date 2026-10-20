@@ -31,7 +31,6 @@
    go test -count=1 ./...
    ```
 7. **已知的既有失败**（与本次改动无关，不要尝试顺手修，也不要因此停工）：
-   - `diskhealth` 子包在 Linux 上的 `smartKeys` 相关用例
    
    除此之外的任何失败都必须修好再提交。
 8. **截图验证（离屏渲染）**：UI 改动要附截图。做法与现有 `*_ui_test.go` 一致：用 `ui.NewTester(a.view, 1200, 800)` 建窗口，跑几帧 `tt.Frame()`，再 `png.Encode(f, tt.Image())` 写到 `/tmp` 或 PR 附件。截图用的测试放在 `zz_*_test.go` 里，**不要提交**（看完删除）。参考 `/workspace/winexplorer-demo/search/current/searchshot_test.go.txt`。

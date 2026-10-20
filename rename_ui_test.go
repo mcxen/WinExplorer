@@ -45,11 +45,15 @@ func TestBatchRenameDialogRowsAndDrag(t *testing.T) {
 	if !ok {
 		t.Fatalf("row %q not laid out: %v", to.Name, tt.Texts())
 	}
-	// The drag begins on the row's grip (a press on text would keep the
-	// arrow keys and the pointer moves, as a text field does).
-	t.Logf("from row %v to row %v", rf, rt)
-	// The dialog's rows are 34 tall; a row's target name text sits inside it.
-	y0, y1 := rf.Y+rf.H/2, rt.Y+6
+	// The dialog's rows are 34 tall (batchRow). The target-name text is
+	// centred in them, so its centre is the row's centre; derive the row
+	// edges from that rather than treating the text height as the row.
+	const rowH = 34
+	fromMid := rf.Y + rf.H/2
+	toTop := rt.Y - (rowH-rt.H)/2
+	// Press the last row's centre and release in the first row's upper
+	// half, which is where the list inserts before that row.
+	y0, y1 := fromMid, toTop+rowH/4
 	tt.Press(rf.X+rf.W/2, y0)
 	for k := 1; k <= 4; k++ {
 		f := float32(k) / 4
@@ -58,12 +62,13 @@ func TestBatchRenameDialogRowsAndDrag(t *testing.T) {
 	tt.Release(rt.X+rt.W/2, y1)
 	tt.Frame()
 
-	// The list's reorder drops where the pointer is: it took the row up one
-	// place, and the numbers follow the new order rather than the identity.
-	if a.batch.rows[1].Name != from.Name {
-		t.Fatalf("the drag did not move %q up: %+v", from.Name, a.batch.rows)
+	// The list's reorder drops where the pointer is: the upper half of the
+	// first row puts the dragged row before it, and the numbers follow the
+	// new order rather than the identity.
+	if a.batch.rows[0].Name != from.Name {
+		t.Fatalf("the drag did not move %q to the front: %+v", from.Name, a.batch.rows)
 	}
-	if a.batch.rows[0].To != "1 "+a.batch.rows[0].Name || a.batch.rows[1].To != "2 "+from.Name {
+	if a.batch.rows[0].To != "1 "+from.Name || a.batch.rows[1].To != "2 "+a.batch.rows[1].Name {
 		t.Fatalf("the moved rows kept their old numbers: %+v", a.batch.rows)
 	}
 	_ = dir

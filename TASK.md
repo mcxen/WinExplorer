@@ -22,7 +22,7 @@
    GOOS=darwin go build -o /tmp/sv-mac .        # 涉及平台代码时
    go test -count=1 ./...
    ```
-   **已知的既有失败**（F3–F5 修复前可忽略，但不得新增失败）：`TestBatchRenameDialogRowsAndDrag`、`diskhealth` 子包 Linux 上的 `smartKeys` 用例、偶发失败的 `TestRemoteExtRun`。
+   **已知的既有失败**（F4–F5 修复前可忽略，但不得新增失败）：`diskhealth` 子包 Linux 上的 `smartKeys` 用例、偶发失败的 `TestRemoteExtRun`。
 7. **离屏截图**：UI 改动必须附截图。在包内临时建 `zz_shot_test.go`：
    ```go
    a := newStoreApp(t, dir)
@@ -43,7 +43,7 @@
 | F6 | gofmt gifplay.go | 高 | 已完成 | 本文 | — | `chore/gofmt-gifplay` |
 | F1 | 修复 TestDiskPageRenders | 高 | 已完成 | 本文 | — | `fix/test-diskpage` |
 | F2 | 修复 TestAppDeclaredExtsBundle | 高 | 已完成 | 本文 | — | `fix/test-extsbundle` |
-| F3 | 修复 TestBatchRenameDialogRowsAndDrag | 高 | 待开发 | 本文 | — | `fix/test-batchrename` |
+| F3 | 修复 TestBatchRenameDialogRowsAndDrag | 高 | 已完成 | 本文 | — | `fix/test-batchrename` |
 | F4 | 修复 diskhealth smartKeys（Linux） | 高 | 待开发 | 本文 | — | `fix/test-smartkeys` |
 | F5 | 消除 TestRemoteExtRun 偶发失败 | 中 | 待开发 | 本文 | — | `fix/test-remoteext` |
 | R1 | 拆分 searchbox.go | 高 | 待开发 | [03 §3](docs/specs/03-refactor-next.md) | — | `refactor/searchbox-split` |

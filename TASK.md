@@ -54,7 +54,7 @@
 | S5 | 搜索：筛选条 | 中 | 已完成 | 01 阶段 5 | S3 | `feat/search-p5` |
 | S6 | 搜索：分组切换 | 低 | 已完成 | 01 阶段 6 | S3 | `feat/search-p6` |
 | S7 | 搜索：右侧预览 | 中 | 已完成 | 01 阶段 7 | S1 | `feat/search-p7` |
-| S8 | 搜索：页脚索引进度 | 低 | 待开发 | 01 阶段 8 | S1 | `feat/search-p8` |
+| S8 | 搜索：页脚索引进度 | 低 | 已完成 | 01 阶段 8 | S1 | `feat/search-p8` |
 | W1 | Windows 隐藏属性用于地址栏补全 | 中 | 待开发 | 本文 | — | `fix/win-hidden` |
 | T1 | 侧栏目录树打磨 | 中 | 待开发 | [02](docs/specs/02-tree-polish.md) | — | `feat/tree-polish` |
 | TB1 | 拖动文件悬停标签自动切换 | 中 | 待开发 | [04 A](docs/specs/04-tabs-followups.md) | — | `feat/tab-drag-hover` |

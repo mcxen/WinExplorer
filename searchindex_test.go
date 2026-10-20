@@ -50,6 +50,7 @@ func clearSearchIndex() {
 	searchIndex.complete = false
 	searchIndex.enabled = false
 	searchIndex.building = false
+	searchIndex.estimate = 0
 	searchIndex.dirs = nil
 	searchIndex.mu.Unlock()
 	searchIndex.pendingMu.Lock()
@@ -75,6 +76,7 @@ func buildTestIndex(t *testing.T, roots ...string) {
 	searchIndex.items = items
 	searchIndex.built = time.Now()
 	searchIndex.complete = true
+	searchIndex.estimate = len(items)
 	searchIndex.mu.Unlock()
 }
 
@@ -231,8 +233,9 @@ func TestSearchIndexCacheRoundTrip(t *testing.T) {
 		t.Fatalf("the loaded hit lost a column: %+v", got)
 	}
 	st := searchIndexState()
-	if !st.complete || st.built.IsZero() {
-		t.Fatalf("the cache forgot its own state: complete=%v built=%v", st.complete, st.built)
+	if !st.complete || st.built.IsZero() || st.estimate != st.total {
+		t.Fatalf("the cache forgot its own state: complete=%v built=%v estimate=%d total=%d",
+			st.complete, st.built, st.estimate, st.total)
 	}
 	// A folder the walk saw is in the cache as a folder.
 	if hits, _ := searchIndexQuery([]string{root}, searchquery.Parse("folder:sub"), false); len(hits) != 1 || !hits[0].IsDir {
@@ -421,17 +424,39 @@ func TestSearchIndexSummaryWords(t *testing.T) {
 	searchIndex.built = time.Now().Add(-2 * time.Hour)
 	searchIndex.complete = true
 	searchIndex.mu.Unlock()
-	if got := searchIndexSummary(); !strings.Contains(got, "索引 2 条") || !strings.Contains(got, "小时前的缓存") {
+	if got := searchIndexSummary(); !strings.Contains(got, "索引 2 项") || !strings.Contains(got, "小时前的缓存") {
 		t.Fatalf("the summary is %q", got)
 	}
 	searchIndex.mu.Lock()
 	searchIndex.complete = false
 	searchIndex.building = true
+	searchIndex.estimate = 12
 	searchIndex.mu.Unlock()
 	searchIndex.progress.Store(7)
+	if st := searchIndexState(); st.estimate != 12 || st.progress != 7 {
+		t.Fatalf("build progress = %d/%d, want 7/12", st.progress, st.estimate)
+	}
 	got := searchIndexSummary()
-	if !strings.Contains(got, "未完整") || !strings.Contains(got, "正在重建 7 条") {
-		t.Fatalf("a running, incomplete index says %q", got)
+	if got != "索引 7 项" {
+		t.Fatalf("a running index says %q, want its collected count", got)
+	}
+}
+
+func TestGroupThousands(t *testing.T) {
+	for _, tc := range []struct {
+		n    int
+		want string
+	}{
+		{0, "0"},
+		{12, "12"},
+		{999, "999"},
+		{1000, "1,000"},
+		{1284532, "1,284,532"},
+		{-1234, "-1,234"},
+	} {
+		if got := groupThousands(tc.n); got != tc.want {
+			t.Fatalf("groupThousands(%d) = %q, want %q", tc.n, got, tc.want)
+		}
 	}
 }
 
@@ -479,7 +504,7 @@ func TestSearchBoxAnswersFromTheIndex(t *testing.T) {
 	tt.Frame()
 	// With nothing typed yet the footer is the index's own line: how many
 	// entries it holds — the folder's three files and the folder itself.
-	if !tt.HasText("索引 4 条") {
+	if !tt.HasText("索引 4 项") {
 		t.Fatalf("the footer does not count the index: %v", tt.Texts())
 	}
 	a.searchBox.scope = scopeFolder

@@ -1089,7 +1089,11 @@ func (a *App) searchBoxStatus(c *ui.Context) {
 	keys := "↑↓ 选择   Enter 打开   Ctrl+Enter 定位   Ctrl+C 复制路径   Esc 关闭"
 	text := "输入即搜索"
 	if idx := searchIndexSummary(); idx != "" {
-		text += " · " + idx
+		if searchIndexState().building {
+			text = idx
+		} else {
+			text += " · " + idx
+		}
 	}
 	if strings.TrimSpace(b.query) != "" {
 		secs := ""
@@ -1112,6 +1116,9 @@ func (a *App) searchBoxStatus(c *ui.Context) {
 			components.Spinner(c, components.SpinnerRing)
 		}
 		ui.Text(c, text).FontSize(11).TextColor(colorMuted()).SingleLine().Grow(1).MinWidth(0)
+		if st := searchIndexState(); st.building {
+			searchIndexProgress(c, st)
+		}
 		if searchIndexOn() {
 			btn := ui.ButtonBase(c.Key("search-index-rebuild")).Height(18).Shrink(0).
 				Padding(0, 6).Gap(4).Radius(4).AlignItems(ui.Center).Label("重建索引")
@@ -1128,6 +1135,26 @@ func (a *App) searchBoxStatus(c *ui.Context) {
 			}
 		}
 		ui.Text(c, keys).FontSize(11).TextColor(colorMuted()).SingleLine().Shrink(0)
+	})
+}
+
+// searchIndexProgress is the build's compact meter. Onevra's Progress already
+// owns the indeterminate sweep and leaves it still under ReduceMotion, so the
+// status line only supplies this feature's fixed 80x4 footprint and estimate.
+func searchIndexProgress(c *ui.Context, st searchIndexStatus) {
+	value := -1.0
+	percent := ""
+	if st.estimate > 0 {
+		value = float64(min(st.progress, st.estimate)) / float64(st.estimate)
+		percent = itoa(int(value*100)) + "%"
+	}
+	ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
+		ui.Box(c).Width(80).Height(4).Shrink(0).Children(func() {
+			components.Progress(c, value).FillWidth().Height(4)
+		})
+		if percent != "" {
+			ui.Text(c, percent).FontSize(10).TextColor(colorMuted()).SingleLine()
+		}
 	})
 }
 

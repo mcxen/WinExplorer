@@ -676,3 +676,36 @@ func TestSearchHotkeyChord(t *testing.T) {
 		t.Fatalf("default label = %q, want Ctrl+K", label)
 	}
 }
+
+// TestSearchIndexProgressReduceMotion pins the footer meter's accessibility
+// contract: unknown totals sweep normally, while reduced motion keeps the
+// indeterminate bar still instead of turning the status line into background
+// animation.
+func TestSearchIndexProgressReduceMotion(t *testing.T) {
+	st := searchIndexStatus{building: true, progress: 1, estimate: 2}
+	for _, reduced := range []bool{false, true} {
+		tt := ui.NewTester(func(c *ui.Context) {
+			searchIndexProgress(c, searchIndexStatus{building: true, progress: 1})
+		}, 120, 24)
+		tt.SetPreferences(ui.Preferences{ReduceMotion: reduced})
+		before := string(append([]byte(nil), tt.Image().Pix...))
+		tt.Advance(350 * time.Millisecond)
+		middle := string(append([]byte(nil), tt.Image().Pix...))
+		tt.Advance(350 * time.Millisecond)
+		after := string(append([]byte(nil), tt.Image().Pix...))
+		moved := before != middle || middle != after
+		if reduced && moved {
+			t.Fatal("ReduceMotion left the indeterminate progress bar moving")
+		}
+		if !reduced && !moved {
+			t.Fatal("the indeterminate progress bar did not move")
+		}
+	}
+
+	tt := ui.NewTester(func(c *ui.Context) {
+		searchIndexProgress(c, st)
+	}, 120, 24)
+	if !tt.HasText("50%") {
+		t.Fatalf("progress omitted its percentage: %v", tt.Texts())
+	}
+}

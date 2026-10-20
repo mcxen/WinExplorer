@@ -143,6 +143,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 标签拖动 | 按住标签拖动 | 实时 | 无插值 | 越过半个标签宽（标签宽+2）与相邻标签交换 | `chrome_tab.go:tabDragFrame` |
 | 地址建议下拉 | 编辑地址时有建议或错误 | 即时出现 | — | 浮层圆角 8、阴影 (0,8,16) α0.14、上边距 4 | `addressbar.go:pathDropdown` |
 | GIF 播放 | 预览/缩略图中的 GIF | 按帧延时，默认 100ms，最小 10ms | — | — | `gifplay.go` |
+| 搜索索引进度条 | 索引正在构建 | 不定进度 1.4s 往返 | 余弦往返 | 80×4、`colorAccent()` 填充；有估计时定值填充并显示百分比；`ReduceMotion` 下静止 | `searchbox.go:searchIndexProgress`、Onevra `components.Progress` |
 
 ![呼吸光](assets/ui/motion-glow.png) ![移出](assets/ui/motion-slideout.png) ![改名高亮](assets/ui/motion-rename-flash.png)
 
@@ -156,7 +157,6 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 树缩进引导线淡入淡出 | 120ms | 同上 B |
 | 树平滑滚动到当前位置 | 180ms（视 mygo 能力） | 同上 D |
 | 拖动文件悬停标签自动切换 | 悬停 600ms 后切换 | `docs/specs/04-tabs-followups.md` A |
-| 搜索索引进度条 | 80×4，强调色，不定进度时往返滑动 | `docs/specs/01-global-search.md` 阶段 8 |
 
 ## 7. 反模式 / 禁止
 

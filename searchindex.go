@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -126,6 +127,10 @@ type searchIndexStore struct {
 	complete bool
 	enabled  bool
 	building bool
+	// estimate is the previous build's entry count. A running build uses it
+	// to turn progress into a percentage; zero means the first build has no
+	// honest denominator.
+	estimate int
 
 	// progress counts the entries the running build has collected, which the
 	// footer reads while it walks; it is touched without mu.
@@ -190,6 +195,9 @@ func searchIndexRebuild() {
 		return
 	}
 	searchIndex.building = true
+	if searchIndex.estimate <= 0 {
+		searchIndex.estimate = len(searchIndex.items)
+	}
 	searchIndex.progress.Store(0)
 	searchIndex.pendingMu.Lock()
 	searchIndex.pending = make(map[string]indexEntry, 4096)
@@ -215,6 +223,7 @@ func searchIndexRebuild() {
 		searchIndex.items = items
 		searchIndex.built = time.Now()
 		searchIndex.complete = complete
+		searchIndex.estimate = len(items)
 		searchIndex.mu.Unlock()
 		saveSearchIndex()
 		// The build is over only once its cache is written: while the flag
@@ -467,6 +476,7 @@ type searchIndexStatus struct {
 	complete bool
 	building bool
 	progress int
+	estimate int
 }
 
 // searchIndexState reads the status under the lock.
@@ -480,6 +490,7 @@ func searchIndexState() searchIndexStatus {
 		complete: searchIndex.complete,
 		building: searchIndex.building,
 		progress: int(searchIndex.progress.Load()),
+		estimate: searchIndex.estimate,
 	}
 }
 
@@ -491,12 +502,12 @@ func searchIndexSummary() string {
 	if !st.on {
 		return ""
 	}
+	if st.building {
+		return "索引 " + groupThousands(st.progress) + " 项"
+	}
 	var parts []string
 	if st.total > 0 {
-		parts = append(parts, "索引 "+itoa(st.total)+" 条"+searchIndexAge(st.built)+searchIndexCapNote(st))
-	}
-	if st.building {
-		parts = append(parts, "正在重建 "+itoa(st.progress)+" 条")
+		parts = append(parts, "索引 "+groupThousands(st.total)+" 项"+searchIndexAge(st.built)+searchIndexCapNote(st))
 	}
 	if len(parts) == 0 {
 		return "索引正在建立"
@@ -575,6 +586,7 @@ type indexDiskFile struct {
 	Version  int              `json:"version"`
 	Built    string           `json:"built"`
 	Complete bool             `json:"complete"`
+	Estimate int              `json:"estimate,omitempty"`
 	Entries  []indexDiskEntry `json:"entries"`
 }
 
@@ -614,6 +626,10 @@ func loadSearchIndex() {
 	searchIndex.items = items
 	searchIndex.built = built
 	searchIndex.complete = f.Complete
+	searchIndex.estimate = f.Estimate
+	if searchIndex.estimate <= 0 {
+		searchIndex.estimate = len(items)
+	}
 	searchIndex.mu.Unlock()
 }
 
@@ -635,6 +651,7 @@ func saveSearchIndex() {
 		Version:  searchIndexVersion,
 		Built:    searchIndex.built.Format(time.RFC3339),
 		Complete: searchIndex.complete,
+		Estimate: searchIndex.estimate,
 	}
 	searchIndex.mu.RUnlock()
 	// By path, so the file is the same for the same index: a repack of the
@@ -653,4 +670,22 @@ func saveSearchIndex() {
 		return
 	}
 	_ = os.Rename(tmp, searchIndexCacheFile)
+}
+
+// groupThousands keeps large index counts readable without pulling a number
+// formatter into the status line's small vocabulary.
+func groupThousands(n int) string {
+	s := strconv.Itoa(n)
+	sign := ""
+	if strings.HasPrefix(s, "-") {
+		sign, s = "-", strings.TrimPrefix(s, "-")
+	}
+	var b strings.Builder
+	for i, r := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteRune(r)
+	}
+	return sign + b.String()
 }

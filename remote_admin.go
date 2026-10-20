@@ -2,6 +2,8 @@ package main
 
 import (
 	"net/http"
+
+	"sunvale/internal/remote"
 )
 
 // This file is Sunvale's own management API, the /api/sunvale/* endpoints
@@ -57,7 +59,7 @@ type remoteAdminEnabled struct {
 // volume's capacity and the number of live shares.
 func (a *App) remoteHandleStatus(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	conf := a.remoteConf()
@@ -69,7 +71,7 @@ func (a *App) remoteHandleStatus(w http.ResponseWriter, r *http.Request) {
 	if a.store != nil {
 		shares = len(a.store.shareAll())
 	}
-	remoteOK(w, remoteAdminStatus{
+	remote.OK(w, remoteAdminStatus{
 		Enabled:  conf.Enabled,
 		Port:     conf.Port,
 		URL:      a.remoteLANURL(),
@@ -87,23 +89,23 @@ func (a *App) remoteHandleStatus(w http.ResponseWriter, r *http.Request) {
 // token keeps working.
 func (a *App) remoteHandleAccount(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := remoteReadJSON(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadJSON(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if req.Username == "" && req.Password == "" {
-		remoteErr(w, 400, "nothing to change")
+		remote.Err(w, 400, "nothing to change")
 		return
 	}
-	if req.Username != "" && !remoteValidAccountName(req.Username) {
-		remoteErr(w, 400, "invalid username")
+	if req.Username != "" && !remote.ValidAccountName(req.Username) {
+		remote.Err(w, 400, "invalid username")
 		return
 	}
 	conf := a.remoteConf()
@@ -112,7 +114,7 @@ func (a *App) remoteHandleAccount(w http.ResponseWriter, r *http.Request) {
 		nc.Username = req.Username
 	}
 	if req.Password != "" {
-		nc.PassHash = remoteHashPassword(req.Password)
+		nc.PassHash = remote.HashPassword(req.Password)
 	}
 	a.remoteSaveConf(&nc)
 	if req.Password != "" {
@@ -121,7 +123,7 @@ func (a *App) remoteHandleAccount(w http.ResponseWriter, r *http.Request) {
 		remoteConfMu.Unlock()
 		remoteInvalidateLogins()
 	}
-	remoteOK(w, remoteAdminAccount{Username: nc.Username})
+	remote.OK(w, remoteAdminAccount{Username: nc.Username})
 }
 
 // remoteHandleResetToken implements POST /api/sunvale/reset-token: replace
@@ -130,15 +132,15 @@ func (a *App) remoteHandleAccount(w http.ResponseWriter, r *http.Request) {
 // issued under the old key. Only the new token works from here on.
 func (a *App) remoteHandleResetToken(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	conf := a.remoteConf()
 	nc := *conf
-	nc.Token = remoteRandToken()
+	nc.Token = remote.RandToken()
 	a.remoteSaveConf(&nc)
 	remoteInvalidateLogins()
-	remoteOK(w, remoteAdminToken{Token: nc.Token})
+	remote.OK(w, remoteAdminToken{Token: nc.Token})
 }
 
 // remoteHandlePort implements POST /api/sunvale/port: move the server to a
@@ -148,18 +150,18 @@ func (a *App) remoteHandleResetToken(w http.ResponseWriter, r *http.Request) {
 // the request answers 500 "port in use".
 func (a *App) remoteHandlePort(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
 		Port int `json:"port"`
 	}
-	if err := remoteReadJSON(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadJSON(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if req.Port < 1 || req.Port > 65535 {
-		remoteErr(w, 400, "invalid port")
+		remote.Err(w, 400, "invalid port")
 		return
 	}
 	conf := a.remoteConf()
@@ -176,10 +178,10 @@ func (a *App) remoteHandlePort(w http.ResponseWriter, r *http.Request) {
 		rb.Port = oldPort
 		a.remoteSaveConf(&rb)
 		a.remoteStart()
-		remoteErr(w, 500, "port in use")
+		remote.Err(w, 500, "port in use")
 		return
 	}
-	remoteOK(w, remoteAdminPort{Port: a.remoteConf().Port})
+	remote.OK(w, remoteAdminPort{Port: a.remoteConf().Port})
 }
 
 // remoteHandleEnabled implements POST /api/sunvale/enabled: turn remote
@@ -188,14 +190,14 @@ func (a *App) remoteHandlePort(w http.ResponseWriter, r *http.Request) {
 // opens after switching on.
 func (a *App) remoteHandleEnabled(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
-	if err := remoteReadJSON(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadJSON(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	conf := a.remoteConf()
@@ -207,7 +209,7 @@ func (a *App) remoteHandleEnabled(w http.ResponseWriter, r *http.Request) {
 	} else {
 		a.remoteStop()
 	}
-	remoteOK(w, remoteAdminEnabled{Enabled: nc.Enabled, URL: a.remoteLANURL()})
+	remote.OK(w, remoteAdminEnabled{Enabled: nc.Enabled, URL: a.remoteLANURL()})
 }
 
 // remoteInvalidateLogins retires every login JWT issued this run; the raw
@@ -223,20 +225,4 @@ func remoteServing() bool {
 	remoteSrvMu.Lock()
 	defer remoteSrvMu.Unlock()
 	return remoteSrv != nil
-}
-
-// remoteValidAccountName accepts 1..32 letters, digits, underscores and
-// hyphens for the admin username.
-func remoteValidAccountName(name string) bool {
-	if name == "" || len(name) > 32 {
-		return false
-	}
-	for _, c := range name {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '-':
-		default:
-			return false
-		}
-	}
-	return true
 }

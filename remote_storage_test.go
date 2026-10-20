@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // storageEnv is an admin server over a home folder, with its own store
@@ -437,7 +439,7 @@ func TestRemoteDefaultPassword(t *testing.T) {
 	if conf.Username != "admin" {
 		t.Fatalf("default username = %q, want admin", conf.Username)
 	}
-	if remoteHashPassword(remoteDefaultPassword) != conf.PassHash {
+	if remote.HashPassword(remoteDefaultPassword) != conf.PassHash {
 		t.Fatal("the default password is not admin")
 	}
 
@@ -448,7 +450,7 @@ func TestRemoteDefaultPassword(t *testing.T) {
 	if rr.Code != 200 {
 		t.Fatalf("account change: %d (%s)", rr.Code, rr.Message)
 	}
-	if e.a.remoteConf().PassHash == remoteHashPassword("new-secret") {
+	if e.a.remoteConf().PassHash == remote.HashPassword("new-secret") {
 		// expected: the hash changed
 	} else {
 		t.Fatal("the account endpoint did not change the password")

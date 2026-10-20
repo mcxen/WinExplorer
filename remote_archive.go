@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"sunvale/internal/remote"
 )
 
 // remote_archive.go is the archive side of the remote server: the
@@ -33,7 +35,7 @@ func remoteArchiveExts() []string {
 // remoteHandleArchiveExt implements GET /api/public/archive_extensions,
 // which the web UI requests at startup and breaks without.
 func (a *App) remoteHandleArchiveExt(w http.ResponseWriter, r *http.Request) {
-	remoteOK(w, remoteArchiveExts())
+	remote.OK(w, remoteArchiveExts())
 }
 
 // remoteArchiveReq is the body of both archive endpoints. A batch sends
@@ -73,29 +75,29 @@ type remoteArchiveResult struct {
 // the disk, both of them folders that must already exist. dst_dir defaults
 // to src_dir. ok is false once the protocol error has been written.
 func (a *App) remoteArchiveDirs(w http.ResponseWriter, r *http.Request, req *remoteArchiveReq) (src, dst string, ok bool) {
-	if err := remoteReadReq(r, req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return "", "", false
 	}
 	if len(req.targets()) == 0 {
-		remoteErr(w, 400, "Empty file names")
+		remote.Err(w, 400, "Empty file names")
 		return "", "", false
 	}
 	srcDir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return "", "", false
 	}
 	dstDir := srcDir
 	if req.DstDir != "" {
 		if dstDir, ok = a.remoteDiskPath(req.DstDir); !ok {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return "", "", false
 		}
 	}
 	for _, dir := range []string{srcDir, dstDir} {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return "", "", false
 		}
 	}
@@ -110,7 +112,7 @@ func (a *App) remoteArchiveDirs(w http.ResponseWriter, r *http.Request, req *rem
 // written fails outright so the caller sees why.
 func (a *App) remoteHandleArchiveUnzip(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req remoteArchiveReq
@@ -121,7 +123,7 @@ func (a *App) remoteHandleArchiveUnzip(w http.ResponseWriter, r *http.Request) {
 	var created, failed []string
 	reason := ""
 	for _, name := range req.targets() {
-		if !remoteValidBatchName(name) {
+		if !remote.ValidBatchName(name) {
 			continue // sub-paths and escapes are skipped, never acted on
 		}
 		disk := filepath.Join(srcDir, name)
@@ -163,10 +165,10 @@ func (a *App) remoteHandleArchiveUnzip(w http.ResponseWriter, r *http.Request) {
 		if reason == "" {
 			reason = "object not found"
 		}
-		remoteErr(w, 500, reason)
+		remote.Err(w, 500, reason)
 		return
 	}
-	remoteOK(w, remoteArchiveResult{
+	remote.OK(w, remoteArchiveResult{
 		Message: "Unzip operations completed immediately",
 		Created: created,
 		Failed:  failed,
@@ -181,7 +183,7 @@ func (a *App) remoteHandleArchiveUnzip(w http.ResponseWriter, r *http.Request) {
 // recursively under their own name; symlinks are skipped.
 func (a *App) remoteHandleArchiveZip(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req remoteArchiveReq
@@ -196,7 +198,7 @@ func (a *App) remoteHandleArchiveZip(w http.ResponseWriter, r *http.Request) {
 	}
 	entries := make([]Entry, 0, len(names))
 	for _, name := range names {
-		if !remoteValidBatchName(name) {
+		if !remote.ValidBatchName(name) {
 			continue
 		}
 		disk := filepath.Join(srcDir, name)
@@ -207,21 +209,21 @@ func (a *App) remoteHandleArchiveZip(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, Entry{Name: filepath.Base(disk), Path: disk, IsDir: st.IsDir()})
 	}
 	if len(entries) == 0 {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	name, err := uniqueFreeName(dstDir, stem+".zip", false)
 	if err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	dst := filepath.Join(dstDir, name)
 	if err := makeZip(dst, entries); err != nil {
 		_ = os.Remove(dst)
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
-	remoteOK(w, remoteArchiveResult{
+	remote.OK(w, remoteArchiveResult{
 		Message: "Zip operations completed immediately",
 		Created: []string{remoteVPath(dst)},
 	})

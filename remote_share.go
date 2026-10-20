@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // remote_share.go is the OpenList v4-compatible share system: the admin
@@ -232,27 +234,27 @@ func remoteShareHasFiles(files []string) bool {
 // generated. The reply carries the share, password included.
 func (a *App) remoteHandleShareCreate(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	req, ok := remoteShareReadReq(r)
 	if !ok {
-		remoteErr(w, 400, "bad request")
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if !remoteShareHasFiles(req.Files) {
-		remoteErr(w, 400, "must add at least 1 object")
+		remote.Err(w, 400, "must add at least 1 object")
 		return
 	}
 	for i, f := range req.Files {
-		vpath := remoteFSCleanVPath(f)
+		vpath := remote.FSCleanVPath(f)
 		disk, ok := a.remoteDiskPath(vpath)
 		if !ok {
-			remoteErr(w, 500, "file not found")
+			remote.Err(w, 500, "file not found")
 			return
 		}
 		if _, err := os.Stat(disk); err != nil {
-			remoteErr(w, 500, "file not found")
+			remote.Err(w, 500, "file not found")
 			return
 		}
 		req.Files[i] = vpath
@@ -263,11 +265,11 @@ func (a *App) remoteHandleShareCreate(w http.ResponseWriter, r *http.Request) {
 	id := req.ID
 	if id != "" {
 		if !remoteShareCheckID(id) {
-			remoteErr(w, 400, "invalid share id")
+			remote.Err(w, 400, "invalid share id")
 			return
 		}
 		if remoteShareIDIn(list, id) {
-			remoteErr(w, 500, "sharing already exist")
+			remote.Err(w, 500, "sharing already exist")
 			return
 		}
 	} else {
@@ -275,14 +277,14 @@ func (a *App) remoteHandleShareCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	expires, ok := remoteShareParseExpires(req.Expires)
 	if !ok {
-		remoteErr(w, 400, "invalid expires")
+		remote.Err(w, 400, "invalid expires")
 		return
 	}
 	share := a.remoteShareBuild(id, req, expires)
 	// the head of the list is the newest share
 	a.remoteShareSaveAll(append([]remoteShare{share}, list...))
 	remoteShareAccessPurge(id)
-	remoteOK(w, share)
+	remote.OK(w, share)
 }
 
 // remoteHandleShareList implements /api/share/list, on any method: every
@@ -290,7 +292,7 @@ func (a *App) remoteHandleShareCreate(w http.ResponseWriter, r *http.Request) {
 // list). The page numbers come from the body and the query alike.
 func (a *App) remoteHandleShareList(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	page, perPage := 1, 0
@@ -301,12 +303,12 @@ func (a *App) remoteHandleShareList(w http.ResponseWriter, r *http.Request) {
 		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
-			remoteErr(w, 400, "bad request")
+			remote.Err(w, 400, "bad request")
 			return
 		}
 		if len(strings.TrimSpace(string(body))) > 0 {
 			if err := json.Unmarshal(body, &req); err != nil {
-				remoteErr(w, 400, "bad request")
+				remote.Err(w, 400, "bad request")
 				return
 			}
 			page, perPage = req.Page, req.PerPage
@@ -341,22 +343,22 @@ func (a *App) remoteHandleShareList(w http.ResponseWriter, r *http.Request) {
 	} else if total > 0 {
 		content = list
 	}
-	remoteOK(w, remoteShareListData{Content: content, Total: total})
+	remote.OK(w, remoteShareListData{Content: content, Total: total})
 }
 
 // remoteHandleShareGet implements GET /api/share/get?id=: one share, or the
 // protocol's 404 envelope.
 func (a *App) remoteHandleShareGet(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	share, ok := a.remoteShareFind(r.URL.Query().Get("id"))
 	if !ok {
-		remoteErr(w, 404, "sharing not found")
+		remote.Err(w, 404, "sharing not found")
 		return
 	}
-	remoteOK(w, share)
+	remote.OK(w, share)
 }
 
 // remoteHandleShareUpdate implements POST /api/share/update: the full
@@ -364,20 +366,20 @@ func (a *App) remoteHandleShareGet(w http.ResponseWriter, r *http.Request) {
 // files must be given again, and new_id renames the share.
 func (a *App) remoteHandleShareUpdate(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	req, ok := remoteShareReadReq(r)
 	if !ok {
-		remoteErr(w, 400, "bad request")
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if !remoteShareHasFiles(req.Files) {
-		remoteErr(w, 400, "must add at least 1 object")
+		remote.Err(w, 400, "must add at least 1 object")
 		return
 	}
 	for i, f := range req.Files {
-		req.Files[i] = remoteFSCleanVPath(f)
+		req.Files[i] = remote.FSCleanVPath(f)
 	}
 	remoteShareMu.Lock()
 	defer remoteShareMu.Unlock()
@@ -390,24 +392,24 @@ func (a *App) remoteHandleShareUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if idx < 0 {
-		remoteErr(w, 404, "sharing not found")
+		remote.Err(w, 404, "sharing not found")
 		return
 	}
 	id := req.ID
 	if req.NewID != "" && req.NewID != req.ID {
 		if !remoteShareCheckID(req.NewID) {
-			remoteErr(w, 400, "invalid share id")
+			remote.Err(w, 400, "invalid share id")
 			return
 		}
 		if remoteShareIDIn(list, req.NewID) {
-			remoteErr(w, 500, "sharing id already exists")
+			remote.Err(w, 500, "sharing id already exists")
 			return
 		}
 		id = req.NewID
 	}
 	expires, ok := remoteShareParseExpires(req.Expires)
 	if !ok {
-		remoteErr(w, 400, "invalid expires")
+		remote.Err(w, 400, "invalid expires")
 		return
 	}
 	share := a.remoteShareBuild(id, req, expires)
@@ -416,14 +418,14 @@ func (a *App) remoteHandleShareUpdate(w http.ResponseWriter, r *http.Request) {
 	if id != req.ID {
 		remoteShareAccessPurge(id)
 	}
-	remoteOK(w, share)
+	remote.OK(w, share)
 }
 
 // remoteHandleShareDelete implements POST /api/share/delete?id=: the share
 // leaves the list; the data is null.
 func (a *App) remoteHandleShareDelete(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	a.remoteShareRemove(w, r.URL.Query().Get("id"))
@@ -433,7 +435,7 @@ func (a *App) remoteHandleShareDelete(w http.ResponseWriter, r *http.Request) {
 // opens to guests again.
 func (a *App) remoteHandleShareEnable(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	a.remoteShareSetDisabled(w, r.URL.Query().Get("id"), false)
@@ -443,7 +445,7 @@ func (a *App) remoteHandleShareEnable(w http.ResponseWriter, r *http.Request) {
 // stops serving guests.
 func (a *App) remoteHandleShareDisable(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	a.remoteShareSetDisabled(w, r.URL.Query().Get("id"), true)
@@ -464,11 +466,11 @@ func (a *App) remoteShareRemove(w http.ResponseWriter, sid string) {
 		out = append(out, s)
 	}
 	if !found {
-		remoteErr(w, 404, "sharing not found")
+		remote.Err(w, 404, "sharing not found")
 		return
 	}
 	a.remoteShareSaveAll(out)
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteShareSetDisabled opens or closes a share to guests.
@@ -485,11 +487,11 @@ func (a *App) remoteShareSetDisabled(w http.ResponseWriter, sid string, disabled
 		}
 	}
 	if !found {
-		remoteErr(w, 404, "sharing not found")
+		remote.Err(w, 404, "sharing not found")
 		return
 	}
 	a.remoteShareSaveAll(list)
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteShareIsValid is OpenList's Sharing.Valid: enabled, under its visit
@@ -557,14 +559,14 @@ func remoteShareResolve(files []string, sub string) (string, bool) {
 	}
 	child, rest, _ := strings.Cut(sub, "/")
 	for _, f := range files {
-		f = remoteFSCleanVPath(f)
+		f = remote.FSCleanVPath(f)
 		if path.Base(f) == child {
 			return path.Join(f, rest), true
 		}
 	}
 	p := "/" + sub
 	for _, f := range files {
-		f = remoteFSCleanVPath(f)
+		f = remote.FSCleanVPath(f)
 		if f == "/" || p == f || strings.HasPrefix(p, f+"/") {
 			return p, true
 		}
@@ -615,7 +617,7 @@ func (a *App) remoteShareFSList(w http.ResponseWriter, r *http.Request, vpath, p
 	sid, sub := remoteShareSplitPath(vpath)
 	share, code, msg := a.remoteShareLookup(sid, password)
 	if code != 0 {
-		remoteErr(w, code, msg)
+		remote.Err(w, code, msg)
 		return
 	}
 	var objs []remoteObj
@@ -639,22 +641,22 @@ func (a *App) remoteShareFSList(w http.ResponseWriter, r *http.Request, vpath, p
 	} else {
 		vp, ok := remoteShareResolve(share.Files, sub)
 		if !ok {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		disk, ok := a.remoteDiskPath(vp)
 		if !ok {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		info, err := os.Stat(disk)
 		if err != nil || !info.IsDir() {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		entries, err := os.ReadDir(disk)
 		if err != nil {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		objs = make([]remoteObj, 0, len(entries))
@@ -685,7 +687,7 @@ func (a *App) remoteShareFSList(w http.ResponseWriter, r *http.Request, vpath, p
 		}
 		content = objs[start:end]
 	}
-	remoteOK(w, remoteFSListData{
+	remote.OK(w, remoteFSListData{
 		Content:  content,
 		Total:    int64(len(objs)),
 		Readme:   share.Readme,
@@ -703,14 +705,14 @@ func (a *App) remoteShareFSGet(w http.ResponseWriter, r *http.Request, vpath, pa
 	sid, sub := remoteShareSplitPath(vpath)
 	share, code, msg := a.remoteShareLookup(sid, password)
 	if code != 0 {
-		remoteErr(w, code, msg)
+		remote.Err(w, code, msg)
 		return
 	}
 	data := remoteFSGetData{
 		remoteObj: remoteObj{
 			Name:     sid,
 			IsDir:    true,
-			Type:     remoteFSTypeFolder,
+			Type:     remote.FSTypeFolder,
 			HashInfo: "null",
 		},
 		Readme:   share.Readme,
@@ -720,24 +722,24 @@ func (a *App) remoteShareFSGet(w http.ResponseWriter, r *http.Request, vpath, pa
 	if sub != "" {
 		vp, ok := remoteShareResolve(share.Files, sub)
 		if !ok {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		disk, ok := a.remoteDiskPath(vp)
 		if !ok {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		st, err := os.Stat(disk)
 		if err != nil {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		obj := a.remoteFSObj(path.Base(vp), vp, disk, st)
 		obj.Sign = ""
 		data.remoteObj = obj
 		if !obj.IsDir {
-			link := remoteRequestBase(r) + "/sd/" + sid + remoteShareEncodePath(sub)
+			link := remote.RequestBase(r) + "/sd/" + sid + remoteShareEncodePath(sub)
 			if share.Pwd != "" {
 				link += "?pwd=" + url.QueryEscape(share.Pwd)
 			}
@@ -745,7 +747,7 @@ func (a *App) remoteShareFSGet(w http.ResponseWriter, r *http.Request, vpath, pa
 		}
 	}
 	a.remoteShareCountAccess(sid, r)
-	remoteOK(w, data)
+	remote.OK(w, data)
 }
 
 // remoteHandleShareDown implements GET/HEAD /sd/<sid>/<path>: the guest
@@ -753,43 +755,43 @@ func (a *App) remoteShareFSGet(w http.ResponseWriter, r *http.Request, vpath, pa
 // parameter. Errors are OpenList's HTML pages.
 func (a *App) remoteHandleShareDown(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		remoteHTMLFail(w, http.StatusMethodNotAllowed, "method not allowed")
+		remote.HTMLFail(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	rest := strings.TrimPrefix(r.URL.Path, "/sd/")
 	sid, sub, _ := strings.Cut(rest, "/")
-	sub = strings.TrimPrefix(remoteFSCleanVPath("/"+sub), "/")
+	sub = strings.TrimPrefix(remote.FSCleanVPath("/"+sub), "/")
 	share, code, msg := a.remoteShareLookup(sid, r.URL.Query().Get("pwd"))
 	if code != 0 {
-		remoteHTMLFail(w, code, msg)
+		remote.HTMLFail(w, code, msg)
 		return
 	}
 	if sub == "" {
-		remoteHTMLFail(w, http.StatusInternalServerError, "not a file")
+		remote.HTMLFail(w, http.StatusInternalServerError, "not a file")
 		return
 	}
 	vp, ok := remoteShareResolve(share.Files, sub)
 	if !ok {
-		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
+		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	disk, ok := a.remoteDiskPath(vp)
 	if !ok {
-		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
+		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	info, err := os.Stat(disk)
 	if err != nil {
-		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
+		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	if info.IsDir() {
-		remoteHTMLFail(w, http.StatusInternalServerError, "not a file")
+		remote.HTMLFail(w, http.StatusInternalServerError, "not a file")
 		return
 	}
 	f, err := os.Open(disk)
 	if err != nil {
-		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
+		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	defer f.Close()

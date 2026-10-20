@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sunvale/internal/remote"
 )
 
 // remote_ext_test.go drives the manage console's shell extension surface
@@ -279,7 +281,7 @@ func TestRemoteFSSearchGlobal(t *testing.T) {
 	if len(hits) != 1 {
 		t.Fatalf("global search: %d hits, want 1 (%v)", len(hits), hits)
 	}
-	if it := hits["global-hit-深.txt"]; it.Parent != "/Documents/deep" || it.IsDir || it.Type != remoteFSTypeText {
+	if it := hits["global-hit-深.txt"]; it.Parent != "/Documents/deep" || it.IsDir || it.Type != remote.FSTypeText {
 		t.Fatalf("global hit = %+v", it)
 	}
 	// the plain search keeps working without the flag

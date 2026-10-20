@@ -1,4 +1,4 @@
-package main
+package remote
 
 // webtokens.go holds the shared design tokens for Sunvale's two built-in web
 // pages (the management console and the guest page). Both pages keep

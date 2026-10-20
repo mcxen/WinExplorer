@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"sunvale/internal/remote"
+
 	"sunvale/internal/fsops"
 
 	"sunvale/internal/rename"
@@ -38,17 +40,6 @@ type remoteOpMsg struct {
 type remoteDirEntry struct {
 	Name     string    `json:"name"`
 	Modified time.Time `json:"modified"`
-}
-
-// remoteValidBatchName reports whether a batch name (the names arrays of
-// move, copy and remove) addresses one entry of its directory: not empty,
-// not "." or "..", and free of separators, so it can neither escape its
-// directory nor carry a sub-path.
-func remoteValidBatchName(name string) bool {
-	if name == "" || name == "." || name == ".." {
-		return false
-	}
-	return !strings.ContainsAny(name, `/\`)
 }
 
 // remoteBatchReq is the body of both /api/fs/move and /api/fs/copy.
@@ -79,7 +70,7 @@ type remoteBatchItem struct {
 // A non-zero code is the protocol error to answer with.
 func remoteBatchPlan(req *remoteBatchReq, srcDir, dstDir string, allowMerge bool) (items []remoteBatchItem, code int, msg string) {
 	for _, name := range req.Names {
-		if !remoteValidBatchName(name) {
+		if !remote.ValidBatchName(name) {
 			continue // sub-paths and escapes are skipped, never acted on
 		}
 		src := filepath.Join(srcDir, name)
@@ -191,38 +182,38 @@ func remoteCopyEntry(src, dst string, info os.FileInfo) error {
 // target is "file exists", as the protocol prescribes.
 func (a *App) remoteHandleMkdir(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
 		Path string `json:"path"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	if parent, err := os.Stat(filepath.Dir(disk)); err != nil || !parent.IsDir() {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	if _, err := os.Lstat(disk); err == nil {
-		remoteErr(w, 403, "file exists")
+		remote.Err(w, 403, "file exists")
 		return
 	}
 	if err := os.Mkdir(disk, 0o755); err != nil {
 		if errors.Is(err, os.ErrExist) {
-			remoteErr(w, 403, "file exists")
+			remote.Err(w, 403, "file exists")
 			return
 		}
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteHandleRename answers POST /api/fs/rename: one entry in place, its
@@ -231,7 +222,7 @@ func (a *App) remoteHandleMkdir(w http.ResponseWriter, r *http.Request) {
 // swap, and the virtual root itself is not renamable.
 func (a *App) remoteHandleRename(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
@@ -239,39 +230,39 @@ func (a *App) remoteHandleRename(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		Overwrite bool   `json:"overwrite"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
-	if remoteFSCleanVPath(req.Path) == "/" {
-		remoteErr(w, 500, "object not found")
+	if remote.FSCleanVPath(req.Path) == "/" {
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	if req.Name == "" || req.Name == "." || req.Name == ".." || strings.ContainsAny(req.Name, `/\`) {
-		remoteErr(w, 403, "invalid name")
+		remote.Err(w, 403, "invalid name")
 		return
 	}
 	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	if _, err := os.Lstat(disk); err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	dst := filepath.Join(filepath.Dir(disk), req.Name)
 	if !req.Overwrite && dst != disk {
 		if _, err := os.Lstat(dst); err == nil {
-			remoteErr(w, 403, fmt.Sprintf("file [%s] exists", req.Name))
+			remote.Err(w, 403, fmt.Sprintf("file [%s] exists", req.Name))
 			return
 		}
 	}
 	if err := os.Rename(disk, dst); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteBatchRenameReq is the body of /api/fs/batch_rename, OpenList's
@@ -291,25 +282,25 @@ type remoteBatchRenameReq struct {
 // and its two-pass name swap are shared rather than reimplemented.
 func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req remoteBatchRenameReq
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if len(req.RenameObjects) == 0 {
-		remoteErr(w, 400, "Empty file names")
+		remote.Err(w, 400, "Empty file names")
 		return
 	}
 	dir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	rows := make([]rename.Row, 0, len(req.RenameObjects))
@@ -317,8 +308,8 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 		if o.SrcName == "" || o.NewName == "" {
 			continue // the protocol skips empty pairs, as OpenList does
 		}
-		if !remoteValidBatchName(o.SrcName) {
-			remoteErr(w, 403, "using relative path is not allowed")
+		if !remote.ValidBatchName(o.SrcName) {
+			remote.Err(w, 403, "using relative path is not allowed")
 			return
 		}
 		rows = append(rows, rename.Row{Name: o.SrcName, To: o.NewName})
@@ -327,22 +318,22 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 	// as OpenList's per-object check does, rather than applying the rest.
 	for _, row := range rows {
 		if why := rename.ValidateName(row.To); why != "" {
-			remoteErr(w, 403, "using relative path is not allowed")
+			remote.Err(w, 403, "using relative path is not allowed")
 			return
 		}
 	}
 	// The sources must exist, and the targets must not be taken by anything
 	// that is not itself moving away.
 	if code, msg := remoteRenameCheck(dir, rows); code != 0 {
-		remoteErr(w, code, msg)
+		remote.Err(w, code, msg)
 		return
 	}
 	moved, failed := rename.Apply(dir, rows)
 	if len(failed) > 0 {
-		remoteErr(w, 500, "failed to rename: "+strings.Join(failed, ", "))
+		remote.Err(w, 500, "failed to rename: "+strings.Join(failed, ", "))
 		return
 	}
-	remoteOK(w, remoteOpMsg{Message: fmt.Sprintf("Successfully renamed %d %s",
+	remote.OK(w, remoteOpMsg{Message: fmt.Sprintf("Successfully renamed %d %s",
 		len(moved), pluralize(len(moved), "file", "files"))})
 }
 
@@ -352,7 +343,7 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 // so the remote and desktop answers agree.
 func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
@@ -360,23 +351,23 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 		SrcNameRegex string `json:"src_name_regex"`
 		NewNameRegex string `json:"new_name_regex"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	re, err := regexp.Compile(req.SrcNameRegex)
 	if err != nil || req.SrcNameRegex == "" {
-		remoteErr(w, 500, "invalid regexp")
+		remote.Err(w, 500, "invalid regexp")
 		return
 	}
 	dir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	var rows []rename.Row
@@ -393,25 +384,25 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 		row.To = re.ReplaceAllString(name, req.NewNameRegex)
 		row.To = rename.DateTokens(row.To, row)
 		if why := rename.ValidateName(row.To); why != "" {
-			remoteErr(w, 403, "using relative path is not allowed")
+			remote.Err(w, 403, "using relative path is not allowed")
 			return
 		}
 		rows = append(rows, row)
 	}
 	if len(rows) == 0 {
-		remoteOK(w, remoteOpMsg{Message: "Nothing to rename"})
+		remote.OK(w, remoteOpMsg{Message: "Nothing to rename"})
 		return
 	}
 	if code, msg := remoteRenameCheck(dir, rows); code != 0 {
-		remoteErr(w, code, msg)
+		remote.Err(w, code, msg)
 		return
 	}
 	moved, failed := rename.Apply(dir, rows)
 	if len(failed) > 0 {
-		remoteErr(w, 500, "failed to rename: "+strings.Join(failed, ", "))
+		remote.Err(w, 500, "failed to rename: "+strings.Join(failed, ", "))
 		return
 	}
-	remoteOK(w, remoteOpMsg{Message: fmt.Sprintf("Successfully renamed %d %s",
+	remote.OK(w, remoteOpMsg{Message: fmt.Sprintf("Successfully renamed %d %s",
 		len(moved), pluralize(len(moved), "file", "files"))})
 }
 
@@ -456,7 +447,7 @@ func pluralize(n int, singular, plural string) string {
 // move itself runs synchronously, one os.Rename per item.
 func (a *App) remoteHandleMove(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	req, ok := a.remoteBatchReq(w, r)
@@ -469,24 +460,24 @@ func (a *App) remoteHandleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	items, code, msg := remoteBatchPlan(&req, srcDir, dstDir, false)
 	if code != 0 {
-		remoteErr(w, code, msg)
+		remote.Err(w, code, msg)
 		return
 	}
 	for _, it := range items {
 		if req.Overwrite {
 			if _, err := os.Lstat(it.dst); err == nil {
 				if err := os.RemoveAll(it.dst); err != nil {
-					remoteErr(w, 500, err.Error())
+					remote.Err(w, 500, err.Error())
 					return
 				}
 			}
 		}
 		if err := remoteMoveEntry(it.src, it.dst); err != nil {
-			remoteErr(w, 500, err.Error())
+			remote.Err(w, 500, err.Error())
 			return
 		}
 	}
-	remoteOK(w, remoteOpMsg{Message: "Move operations completed immediately"})
+	remote.OK(w, remoteOpMsg{Message: "Move operations completed immediately"})
 }
 
 // remoteHandleCopy answers POST /api/fs/move's twin /api/fs/copy: the same
@@ -496,7 +487,7 @@ func (a *App) remoteHandleMove(w http.ResponseWriter, r *http.Request) {
 // carried along.
 func (a *App) remoteHandleCopy(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	req, ok := a.remoteBatchReq(w, r)
@@ -509,41 +500,41 @@ func (a *App) remoteHandleCopy(w http.ResponseWriter, r *http.Request) {
 	}
 	items, code, msg := remoteBatchPlan(&req, srcDir, dstDir, true)
 	if code != 0 {
-		remoteErr(w, code, msg)
+		remote.Err(w, code, msg)
 		return
 	}
 	for _, it := range items {
 		if req.Overwrite && !it.merge {
 			if _, err := os.Lstat(it.dst); err == nil {
 				if err := os.RemoveAll(it.dst); err != nil {
-					remoteErr(w, 500, err.Error())
+					remote.Err(w, 500, err.Error())
 					return
 				}
 			}
 		}
 		info, err := os.Lstat(it.src)
 		if err != nil {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return
 		}
 		if err := remoteCopyEntry(it.src, it.dst, info); err != nil {
-			remoteErr(w, 500, err.Error())
+			remote.Err(w, 500, err.Error())
 			return
 		}
 	}
-	remoteOK(w, remoteOpMsg{Message: "Copy operations completed immediately"})
+	remote.OK(w, remoteOpMsg{Message: "Copy operations completed immediately"})
 }
 
 // remoteBatchReq decodes the shared move/copy body, answering the protocol
 // errors itself on failure.
 func (a *App) remoteBatchReq(w http.ResponseWriter, r *http.Request) (remoteBatchReq, bool) {
 	var req remoteBatchReq
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return req, false
 	}
 	if len(req.Names) == 0 {
-		remoteErr(w, 400, "Empty file names")
+		remote.Err(w, 400, "Empty file names")
 		return req, false
 	}
 	return req, true
@@ -555,18 +546,18 @@ func (a *App) remoteBatchReq(w http.ResponseWriter, r *http.Request) (remoteBatc
 func (a *App) remoteBatchDirs(w http.ResponseWriter, req *remoteBatchReq) (src, dst string, ok bool) {
 	srcDir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return "", "", false
 	}
 	dstDir, ok := a.remoteDiskPath(req.DstDir)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return "", "", false
 	}
 	for _, dir := range []string{srcDir, dstDir} {
 		info, err := os.Stat(dir)
 		if err != nil || !info.IsDir() {
-			remoteErr(w, 500, "object not found")
+			remote.Err(w, 500, "object not found")
 			return "", "", false
 		}
 	}
@@ -579,28 +570,28 @@ func (a *App) remoteBatchDirs(w http.ResponseWriter, req *remoteBatchReq) (src, 
 // OpenList's best-effort remove does.
 func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
 		Dir   string   `json:"dir"`
 		Names []string `json:"names"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	if len(req.Names) == 0 {
-		remoteErr(w, 400, "Empty file names")
+		remote.Err(w, 400, "Empty file names")
 		return
 	}
 	dirDisk, ok := a.remoteDiskPath(req.Dir)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	for _, name := range req.Names {
-		if !remoteValidBatchName(name) {
+		if !remote.ValidBatchName(name) {
 			continue
 		}
 		disk := filepath.Join(dirDisk, name)
@@ -609,7 +600,7 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 		}
 		dst, key, err := sysTrashMove(disk)
 		if err != nil {
-			remoteErr(w, 500, err.Error())
+			remote.Err(w, 500, err.Error())
 			return
 		}
 		if a.store != nil && key != "" {
@@ -617,7 +608,7 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = dst
 	}
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }
 
 // remoteHandleDirs answers /api/fs/dirs, on any method: the folders directly
@@ -626,7 +617,7 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 // the virtual root is the only root there is.
 func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	var req struct {
@@ -634,23 +625,23 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 		Password  string `json:"password"`
 		ForceRoot bool   `json:"force_root"`
 	}
-	if err := remoteReadReq(r, &req); err != nil {
-		remoteErr(w, 400, "bad request")
+	if err := remote.ReadReq(r, &req); err != nil {
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	info, err := os.Stat(disk)
 	if err != nil || !info.IsDir() {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	entries, err := os.ReadDir(disk)
 	if err != nil {
-		remoteErr(w, 500, "object not found")
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	dirs := make([]remoteDirEntry, 0, len(entries))
@@ -668,7 +659,7 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 		dirs = append(dirs, remoteDirEntry{Name: de.Name(), Modified: st.ModTime()})
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
-	remoteOK(w, dirs)
+	remote.OK(w, dirs)
 }
 
 // remoteHandlePut answers PUT /api/fs/put: the request body is one file's
@@ -679,14 +670,14 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 // honored by doing the work synchronously.
 func (a *App) remoteHandlePut(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
-		remoteErr(w, 401, "Guest user is disabled, login please")
+		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
 	vpath := r.Header.Get("File-Path")
 	if vpath != "" {
 		unescaped, err := url.PathUnescape(vpath)
 		if err != nil {
-			remoteErr(w, 400, "bad request")
+			remote.Err(w, 400, "bad request")
 			return
 		}
 		vpath = unescaped
@@ -695,28 +686,28 @@ func (a *App) remoteHandlePut(w http.ResponseWriter, r *http.Request) {
 		vpath = r.URL.Query().Get("path")
 	}
 	if vpath == "" {
-		remoteErr(w, 400, "bad request")
+		remote.Err(w, 400, "bad request")
 		return
 	}
 	disk, ok := a.remoteDiskPath(vpath)
-	if !ok || remoteFSCleanVPath(vpath) == "/" {
-		remoteErr(w, 500, "object not found")
+	if !ok || remote.FSCleanVPath(vpath) == "/" {
+		remote.Err(w, 500, "object not found")
 		return
 	}
 	overwrite := r.Header.Get("Overwrite") != "false"
 	if !overwrite {
 		if _, err := os.Lstat(disk); err == nil {
-			remoteErr(w, 403, "file exists")
+			remote.Err(w, 403, "file exists")
 			return
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(disk), 0o755); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(disk), ".sunvale-upload-*")
 	if err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	tmpName := tmp.Name()
@@ -725,24 +716,24 @@ func (a *App) remoteHandlePut(w http.ResponseWriter, r *http.Request) {
 		_ = os.Remove(tmpName) // a no-op once the rename below succeeded
 	}()
 	if _, err := io.Copy(tmp, r.Body); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	if err := tmp.Close(); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	if err := os.Chmod(tmpName, 0o644); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	if err := os.Rename(tmpName, disk); err != nil {
-		remoteErr(w, 500, err.Error())
+		remote.Err(w, 500, err.Error())
 		return
 	}
 	if ms, err := strconv.ParseInt(r.Header.Get("Last-Modified"), 10, 64); err == nil && ms > 0 {
 		t := time.UnixMilli(ms)
 		_ = os.Chtimes(disk, t, t)
 	}
-	remoteOK(w, nil)
+	remote.OK(w, nil)
 }

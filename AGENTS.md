@@ -67,6 +67,7 @@ git hook 不会随 clone 一起走，每台机器（每个 clone）都要装一�
 
 - `README.md` 是面向用户的功能说明，中文。
 - 深层技术说明放在 `docs/`，例如 `docs/marquee-selection.md`（鼠标圈选）。
+- 新界面先查 `docs/ui-components.md`，能用 mygo / Onevra 现成控件就不要再手写一套。
 - 改动了用户可见行为时同步更新 README；纯内部重构不需要。
 
 ## 不要做的事

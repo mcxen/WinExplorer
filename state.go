@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/components/chart"
 	"sync/atomic"
 	"time"
@@ -178,9 +179,9 @@ type App struct {
 	settingsOpen bool
 	// hotkeyCapture is the 托盘 page waiting for a new 快速搜索 shortcut.
 	hotkeyCapture bool
-	// settingsTab is the dialog's active page (外观/查看/扩展/插件/更新,
-	// settingsdialog.go); each window remembers its own.
-	settingsTab int
+	// settingsUI is the dialog's category and search box. components.Settings
+	// owns the navigation; each window remembers its own.
+	settingsUI components.SettingsState
 	// bootLogged reports the first-frame timing log has fired.
 	bootLogged bool
 	// diskWatch stops the 磁盘健康 page's background probe, while that page

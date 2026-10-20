@@ -1,27 +1,21 @@
 package main
 
-import "strings"
+import (
+	"strings"
+
+	assistant "sunvale/internal/assistant"
+)
 
 // assistant_choice.go is the contract for a reply the user can tick.
 // offer_choices, the system prompt and the pane all speak this block;
 // changing the markers without the other two drops the checkboxes.
 
 const (
-	choiceOpen  = "<<<choices"
-	choiceClose = ">>>"
+	choiceOpen  = assistant.ChoiceOpen
+	choiceClose = assistant.ChoiceClose
 )
 
-// aiChoice is one unanswered (or already sent) question under a turn.
-// On is parallel to Options and is what the checkboxes edit.
-type aiChoice struct {
-	Prompt  string   `json:"prompt,omitempty"`
-	Multi   bool     `json:"multi"`
-	Options []string `json:"options"`
-	On      []bool   `json:"on,omitempty"`
-	Sent    bool     `json:"sent,omitempty"`
-	// Custom is what the user typed in place of the options, once sent.
-	Custom string `json:"custom,omitempty"`
-}
+type aiChoice = assistant.Choice
 
 // parseChoices pulls the first choice block out of a model or tool reply.
 // One option is not a question — the model is just writing a list — so the
@@ -41,32 +35,7 @@ func parseChoices(text string) (string, *aiChoice) {
 }
 
 func parseChoiceBlock(block string) *aiChoice {
-	ch := &aiChoice{Multi: true}
-	for _, line := range strings.Split(block, "\n") {
-		line = strings.TrimSpace(line)
-		switch {
-		case line == "":
-			continue
-		case strings.HasPrefix(line, "multi:"):
-			v := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "multi:")))
-			ch.Multi = v == "yes" || v == "true" || v == "multi" || v == "多选"
-		case strings.HasPrefix(line, "mode:"):
-			v := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "mode:")))
-			ch.Multi = v != "single" && v != "no" && v != "单选"
-		case strings.HasPrefix(line, "prompt:"):
-			ch.Prompt = strings.TrimSpace(strings.TrimPrefix(line, "prompt:"))
-		case strings.HasPrefix(line, "- "):
-			opt := strings.TrimSpace(strings.TrimPrefix(line, "- "))
-			if opt != "" {
-				ch.Options = append(ch.Options, opt)
-			}
-		}
-	}
-	if len(ch.Options) < 2 {
-		return nil
-	}
-	ch.On = make([]bool, len(ch.Options))
-	return ch
+	return assistant.ParseChoiceBlock(block)
 }
 
 // formatChoices is what offer_choices hands back. The pane parses it; the

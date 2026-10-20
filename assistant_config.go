@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	assistant "sunvale/internal/assistant"
 	"sync"
+
+	assistant "sunvale/internal/assistant"
 )
 
 // assistant_config.go is the headless half of assistant.json. The desktop
@@ -279,15 +280,7 @@ func deleteAssistantProvider(id string) error {
 // activeAssistantProvider resolves the stored active provider, falling
 // back to the first one exactly as the pane does.
 func activeAssistantProvider(disk assistantDisk) (aiProvider, bool) {
-	for _, p := range disk.Providers {
-		if p.ID == disk.ActiveID {
-			return p, true
-		}
-	}
-	if len(disk.Providers) > 0 {
-		return disk.Providers[0], true
-	}
-	return aiProvider{}, false
+	return assistant.ActiveProvider(disk.Providers, disk.ActiveID)
 }
 
 func assistantSideRootFor(configPath string) string {

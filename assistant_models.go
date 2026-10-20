@@ -2,17 +2,14 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components/chat"
 	"github.com/oneo-me/onevra/source/icons/lucide"
+
+	assistant "sunvale/internal/assistant"
 )
 
 // assistant_models.go is the composer's model chip. The list comes from the
@@ -54,25 +51,12 @@ func (a *App) assistantModelPicker(c *ui.Context) {
 }
 
 func (u *assistantUI) modelOptions() []chat.Option {
-	var out []chat.Option
-	for _, p := range u.providers {
-		models := u.modelLists[p.ID]
-		if len(models) == 0 && p.Model != "" {
-			models = []string{p.Model}
-		}
-		seen := map[string]bool{}
-		if p.Model != "" && !containsStr(models, p.Model) {
-			models = append([]string{p.Model}, models...)
-		}
-		for _, model := range models {
-			if model == "" || seen[model] {
-				continue
-			}
-			seen[model] = true
-			out = append(out, chat.Option{
-				ID: p.ID + "\x1f" + model, Label: model, Group: p.Name,
-			})
-		}
+	choices := assistant.ModelChoices(u.providers, u.modelLists)
+	out := make([]chat.Option, 0, len(choices))
+	for _, choice := range choices {
+		out = append(out, chat.Option{
+			ID: choice.Value, Label: choice.Label, Group: choice.Group,
+		})
 	}
 	return out
 }
@@ -139,48 +123,5 @@ func (a *App) ensureProviderModels(p aiProvider) {
 }
 
 func fetchProviderModels(ctx context.Context, p aiProvider) ([]string, error) {
-	endpoint := strings.TrimRight(strings.TrimSpace(p.BaseURL), "/") + "/models"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("模型列表 %d", res.StatusCode)
-	}
-	var payload struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if json.Unmarshal(body, &payload) != nil || len(payload.Data) == 0 {
-		return nil, fmt.Errorf("模型列表没有内容")
-	}
-	seen := map[string]bool{}
-	var models []string
-	for _, item := range payload.Data {
-		id := strings.TrimSpace(item.ID)
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		models = append(models, id)
-		if len(models) >= 100 {
-			break
-		}
-	}
-	sort.Strings(models)
-	if len(models) == 0 {
-		return nil, fmt.Errorf("模型列表没有内容")
-	}
-	return models, nil
+	return assistant.FetchProviderModels(ctx, p)
 }

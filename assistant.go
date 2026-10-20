@@ -14,6 +14,7 @@ import (
 	"github.com/oneo-me/onevra/source/components/chat"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 
+	assistant "sunvale/internal/assistant"
 	"sunvale/internal/rename"
 )
 
@@ -34,36 +35,8 @@ const (
 	assistantMinW  float32 = 320
 )
 
-// aiTurn is one line of the transcript. Role is user, assistant or tool.
-// Plan, when set, is a rename proposal the user can apply. Model is the
-// text sent back to the model when it differs from the bubble. An attached
-// file's contents live there for the rest of this process only; the session
-// file does not store them. Choice is a question the user can tick.
-type aiTurn struct {
-	Role   string     `json:"role"`
-	Text   string     `json:"text"`
-	Model  string     `json:"-"`
-	Plan   string     `json:"plan,omitempty"`
-	Files  []aiAttach `json:"files,omitempty"`
-	Choice *aiChoice  `json:"choice,omitempty"`
-	// OpenSent is the @ToAssistant text already posted from this reply.
-	OpenSent []string `json:"openSent,omitempty"`
-	// OpenDone is, per OpenUI card (openBlockKey), the label of the button
-	// that answered it: the card is locked and says what was chosen.
-	OpenDone map[string]string `json:"openDone,omitempty"`
-	// Tool is the MCP tool that produced a tool line. Stopped marks a reply
-	// the user cut off; the partial text stays in the transcript.
-	Tool    string `json:"tool,omitempty"`
-	Stopped bool   `json:"stopped,omitempty"`
-}
-
-// aiAttach is a file the user named for this turn. Detail is a size or
-// "文件夹", already formatted so the chip does not stat on every frame.
-type aiAttach struct {
-	Path   string `json:"path"`
-	Name   string `json:"name"`
-	Detail string `json:"detail,omitempty"`
-}
+type aiTurn = assistant.Turn
+type aiAttach = assistant.Attach
 
 // aiRenamePlan is a proposal rename_plan produced and 应用方案 runs.
 type aiRenamePlan struct {

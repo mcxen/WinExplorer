@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	assistant "sunvale/internal/assistant"
 )
 
 // assistant_store.go is the assistant's local config: providers, the password
@@ -15,30 +17,9 @@ import (
 // 0600 because it holds API keys and passwords. Transcripts and cross-session
 // memory are not written here; those stay under assistant/.
 
-type aiProvider struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	BaseURL string `json:"baseURL"`
-	Model   string `json:"model"`
-	APIKey  string `json:"apiKey"`
-}
-
-type assistPrefs struct {
-	Width     float32 `json:"width,omitempty"`
-	Full      bool    `json:"full,omitempty"`
-	Autopilot bool    `json:"autopilot,omitempty"`
-}
-
-type assistantDisk struct {
-	Providers        []aiProvider      `json:"providers,omitempty"`
-	ActiveID         string            `json:"activeID,omitempty"`
-	ArchivePasswords []archivePassword `json:"archivePasswords,omitempty"`
-	// Passwords is the retired account-password field. Keep its raw JSON
-	// when an existing config is rewritten; it is never shown, interpreted,
-	// or used as an archive password.
-	Passwords json.RawMessage `json:"passwords,omitempty"`
-	Prefs     assistPrefs     `json:"prefs,omitempty"`
-}
+type aiProvider = assistant.Provider
+type assistPrefs = assistant.Prefs
+type assistantDisk = assistant.Config[archivePassword]
 
 func (u *assistantUI) ensure() {
 	if u.loaded {
@@ -176,7 +157,7 @@ func (u *assistantUI) writeConfigLocked() {
 // The pane wins only fields it actually changed, so a headless provider edit
 // and a local width drag can both survive.
 func (u *assistantUI) mergeConfigLocked(disk assistantDisk) {
-	u.providers = mergeProviders(u.baseProviders, u.providers, disk.Providers)
+	u.providers = assistant.MergeProviders(u.baseProviders, u.providers, disk.Providers)
 	if u.activeID == u.baseActiveID {
 		u.activeID = disk.ActiveID
 	}
@@ -211,43 +192,6 @@ func cloneProviders(in []aiProvider) []aiProvider {
 
 func clonePasswords(in []archivePassword) []archivePassword {
 	return append([]archivePassword(nil), in...)
-}
-
-func mergeProviders(base, local, disk []aiProvider) []aiProvider {
-	baseByID := make(map[string]aiProvider, len(base))
-	for _, p := range base {
-		baseByID[p.ID] = p
-	}
-	diskByID := make(map[string]aiProvider, len(disk))
-	for _, p := range disk {
-		diskByID[p.ID] = p
-	}
-	localByID := make(map[string]bool, len(local))
-	out := make([]aiProvider, 0, len(local)+len(disk))
-	for _, p := range local {
-		localByID[p.ID] = true
-		old, hadOld := baseByID[p.ID]
-		fresh, hadFresh := diskByID[p.ID]
-		switch {
-		case !hadOld:
-			out = append(out, p)
-		case p == old:
-			if hadFresh {
-				out = append(out, fresh)
-			}
-		default:
-			out = append(out, p)
-		}
-	}
-	for _, p := range disk {
-		if _, hadOld := baseByID[p.ID]; !hadOld && !localByID[p.ID] {
-			out = append(out, p)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func mergePasswords(base, local, disk []archivePassword) []archivePassword {
@@ -296,15 +240,7 @@ func (u *assistantUI) providerLabel() string {
 }
 
 func (u *assistantUI) activeProvider() (aiProvider, bool) {
-	for _, p := range u.providers {
-		if p.ID == u.activeID {
-			return p, true
-		}
-	}
-	if len(u.providers) > 0 {
-		return u.providers[0], true
-	}
-	return aiProvider{}, false
+	return assistant.ActiveProvider(u.providers, u.activeID)
 }
 
 func (u *assistantUI) addProvider() {

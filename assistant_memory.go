@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	assistant "sunvale/internal/assistant"
 	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	assistant "sunvale/internal/assistant"
 )
 
 // assistant_memory.go keeps two kinds of disk state that assistant.json must
@@ -36,40 +37,10 @@ const (
 // windows share the directory and must not tear an index write.
 var assistantDiskMu sync.Mutex
 
-// aiMemory is one fact. Text is what the prompt and the panel show.
-type aiMemory struct {
-	ID      string    `json:"id"`
-	Text    string    `json:"text"`
-	Updated time.Time `json:"updated,omitempty"`
-}
-
-type memoryFile struct {
-	Items []aiMemory `json:"items"`
-}
-
-// aiSessionMeta is the index row. The transcript lives in its own file so
-// rewriting the index does not rewrite every conversation.
-type aiSessionMeta struct {
-	ID      string    `json:"id"`
-	Title   string    `json:"title"`
-	Updated time.Time `json:"updated"`
-	Folder  string    `json:"folder,omitempty"`
-	Preview string    `json:"preview,omitempty"`
-}
-
-type assistIndex struct {
-	ActiveID string          `json:"activeID,omitempty"`
-	Sessions []aiSessionMeta `json:"sessions,omitempty"`
-}
-
-type aiSessionFile struct {
-	ID      string    `json:"id"`
-	Title   string    `json:"title"`
-	Created time.Time `json:"created,omitempty"`
-	Updated time.Time `json:"updated"`
-	Folder  string    `json:"folder,omitempty"`
-	Turns   []aiTurn  `json:"turns,omitempty"`
-}
+type aiMemory = assistant.Memory
+type aiSessionMeta = assistant.SessionMeta
+type assistIndex = assistant.SessionIndex
+type aiSessionFile = assistant.SessionFile
 
 func (u *assistantUI) assistRoot() string {
 	if u.diskPath == "" {
@@ -380,52 +351,19 @@ func (u *assistantUI) hasMemoryLocked(text string) bool {
 }
 
 func (u *assistantUI) saveMemoryLocked() error {
-	data, err := json.MarshalIndent(memoryFile{Items: u.memories}, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writePrivate(u.memoryPath(), data)
+	return assistant.WriteMemories(u.memoryPath(), u.memories)
 }
 
 func readMemoryFile(path string) ([]aiMemory, error) {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var file memoryFile
-	if err := json.Unmarshal(data, &file); err != nil {
-		return nil, err
-	}
-	if len(file.Items) > assistMaxMemory {
-		file.Items = file.Items[len(file.Items)-assistMaxMemory:]
-	}
-	return file.Items, nil
+	return assistant.ReadMemories(path, assistMaxMemory)
 }
 
 func readIndexFile(path string) (assistIndex, bool) {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return assistIndex{}, true
-	}
-	if err != nil {
-		return assistIndex{}, false
-	}
-	var idx assistIndex
-	if json.Unmarshal(data, &idx) != nil {
-		return assistIndex{}, false
-	}
-	return idx, true
+	return assistant.ReadIndex(path)
 }
 
 func writeIndexFile(path string, idx assistIndex) error {
-	data, err := json.MarshalIndent(idx, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writePrivate(path, data)
+	return assistant.WriteIndex(path, idx)
 }
 
 func writePrivate(path string, data []byte) error {
@@ -433,108 +371,27 @@ func writePrivate(path string, data []byte) error {
 }
 
 func normalizeTurns(turns []aiTurn) []aiTurn {
-	if len(turns) > assistMaxTurns {
-		turns = append([]aiTurn(nil), turns[len(turns)-assistMaxTurns:]...)
-	}
-	for i := range turns {
-		turns[i].Model = ""
-		if turns[i].Plan != "" && !sunvaleToolState.hasPlan(turns[i].Plan) {
-			turns[i].Plan = ""
-		}
-		if ch := turns[i].Choice; ch != nil && len(ch.On) != len(ch.Options) {
-			on := make([]bool, len(ch.Options))
-			copy(on, ch.On)
-			ch.On = on
-		}
-	}
-	return turns
+	return assistant.NormalizeTurns(turns, assistMaxTurns, sunvaleToolState.hasPlan)
 }
 
 func diskTurns(in []aiTurn) []aiTurn {
-	out := make([]aiTurn, len(in))
-	for i, t := range in {
-		t.Model = ""
-		t.Text = limitRunes(t.Text, assistTurnRunes)
-		t.Files = append([]aiAttach(nil), t.Files...)
-		if t.Choice != nil {
-			ch := *t.Choice
-			ch.Options = append([]string(nil), t.Choice.Options...)
-			ch.On = append([]bool(nil), t.Choice.On...)
-			t.Choice = &ch
-		}
-		t.OpenSent = append([]string(nil), t.OpenSent...)
-		out[i] = t
-	}
-	return out
+	return assistant.DiskTurns(in, assistTurnRunes)
 }
 
 func capSessions(list []aiSessionMeta, active string, max int) (keep, drop []aiSessionMeta) {
-	if max < 1 {
-		max = 1
-	}
-	for _, s := range list {
-		if s.ID == active {
-			keep = append(keep, s)
-			continue
-		}
-		if len(keep) < max {
-			keep = append(keep, s)
-			continue
-		}
-		drop = append(drop, s)
-	}
-	if len(keep) > max {
-		for i := len(keep) - 1; i >= 0; i-- {
-			if keep[i].ID != active {
-				drop = append(drop, keep[i])
-				keep = append(keep[:i], keep[i+1:]...)
-				break
-			}
-		}
-	}
-	return keep, drop
+	return assistant.CapSessions(list, active, max)
 }
 
 func sessionTitleFrom(turns []aiTurn) string {
-	for _, t := range turns {
-		if t.Role != "user" {
-			continue
-		}
-		text := strings.Join(strings.Fields(t.Text), " ")
-		if text == "" || text == "请阅读这些文件" {
-			if len(t.Files) > 0 && t.Files[0].Name != "" {
-				return trimRunes(t.Files[0].Name, assistTitleRunes)
-			}
-			continue
-		}
-		return trimRunes(text, assistTitleRunes)
-	}
-	return "新会话"
+	return assistant.SessionTitle(turns, assistTitleRunes)
 }
 
 func sessionPreview(turns []aiTurn) string {
-	for i := len(turns) - 1; i >= 0; i-- {
-		text := strings.Join(strings.Fields(turns[i].Text), " ")
-		if text != "" {
-			return trimRunes(text, 42)
-		}
-	}
-	return ""
+	return assistant.SessionPreview(turns, 42)
 }
 
 func memoryPrompt(items []aiMemory) string {
-	if len(items) == 0 {
-		return "无"
-	}
-	var b strings.Builder
-	for i, m := range items {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString("- ")
-		b.WriteString(sessionPlain(m.Text))
-	}
-	return b.String()
+	return assistant.MemoryPrompt(items)
 }
 
 func cleanMemory(text string) (string, error) {

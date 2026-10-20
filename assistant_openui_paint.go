@@ -23,6 +23,7 @@ type assistOpenState struct {
 	confirm string
 	custom  map[int]*string
 	planNo  map[string]bool
+	tree    map[string]bool
 	// keys are the Alt+number shortcuts of the latest card still open,
 	// gathered as the transcript builds.
 	keys []openShortcut
@@ -201,6 +202,8 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 		}
 	case "table":
 		a.paintOpenTable(c, v)
+	case "tree":
+		a.paintOpenTree(c, v, p)
 	case "form":
 		outer := p.form
 		p.form = v
@@ -215,6 +218,87 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 	case "button":
 		a.paintOpenButton(c, v, p)
 	}
+}
+
+// paintOpenTree draws the read-only directory tree. The disclosure is a
+// separate button so clicking a node with a path can navigate without also
+// changing its expanded state.
+func (a *App) paintOpenTree(c *ui.Context, v *ouiView, p *openPaint) {
+	if v == nil {
+		return
+	}
+	st := &a.assist.open
+	if st.tree == nil {
+		st.tree = map[string]bool{}
+	}
+	ui.Column(c).FillWidth().MinWidth(0).Gap(1).Children(func() {
+		a.paintOpenTreeItems(c, v, p, 0)
+	})
+}
+
+func (a *App) paintOpenTreeItems(c *ui.Context, parent *ouiView, p *openPaint, depth int) {
+	for i, item := range parent.Items {
+		id := treeItemKey(p.key, item, depth, i)
+		keyed := c.Key(id)
+		hasKids := len(item.Items) > 0 || item.Extra > 0
+		open, seen := a.assist.open.tree[id]
+		if !seen {
+			// The root row and its direct children are visible at once;
+			// deeper branches wait for their parent's disclosure.
+			open = depth == 0
+		}
+		row := ui.Row(keyed).FillWidth().MinWidth(0).Height(24).Padding(0, 6, 0, 14*float32(depth)).
+			Gap(4).AlignItems(ui.Center)
+		row.Children(func() {
+			if hasKids {
+				chev := ui.ButtonBase(c.Key("chevron")).Size(18, 18).Radius(4).
+					Label("展开或折叠").Tooltip("展开或折叠")
+				chev.Children(func() { chevronIcon(c, open, 12) })
+				if chev.Clicked() {
+					a.assist.open.tree[id] = !open
+				}
+			} else {
+				ui.Box(c).Size(18, 18)
+			}
+			ui.Box(c.Key("icon")).Size(16, 16).Shrink(0).Draw(func(painter *ui.Painter, r ui.Rect) {
+				drawFolder(painter, r, colorFolder())
+			})
+			label := ui.ButtonBase(c.Key("label")).FillWidth().MinWidth(0).Padding(0).
+				Label(item.Text).Tooltip(item.Path)
+			label.Children(func() {
+				ui.Text(c, item.Text).FontSize(12).TextColor(colorText()).SingleLine().
+					Ellipsis("…").MinWidth(0).Grow(1)
+			})
+			if item.Path != "" && label.Clicked() {
+				a.assistOpenPath(item.Path)
+			}
+		})
+		if open {
+			a.paintOpenTreeItems(c, item, p, depth+1)
+			if item.Extra > 0 {
+				ui.Row(c.Key("extra")).FillWidth().Height(24).Padding(0, 6, 0, 14*float32(depth+1)).
+					Children(func() {
+						ui.Text(c, "…另有 "+itoa(item.Extra)+" 项").FontSize(12).TextColor(colorMuted())
+					})
+			}
+		}
+	}
+	if parent.Extra > 0 && depth == 0 {
+		ui.Row(c.Key("extra-root")).FillWidth().Height(24).Padding(0, 6, 0, 14*float32(depth+1)).
+			Children(func() {
+				ui.Text(c, "…另有 "+itoa(parent.Extra)+" 项").FontSize(12).TextColor(colorMuted())
+			})
+	}
+}
+
+func treeItemKey(card string, v *ouiView, depth, index int) string {
+	if v == nil {
+		return card + "\x00tree-item"
+	}
+	if v.Path != "" {
+		return card + "\x00" + v.Path
+	}
+	return card + "\x00" + itoa(depth) + "\x00" + itoa(index) + "\x00" + v.Text
 }
 
 func (a *App) openValue(key, name string) *string {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -78,6 +79,53 @@ extra = TextContent("共 " + "2" + " 项", "small")
 	}
 }
 
+func TestParseOpenUITree(t *testing.T) {
+	view := parseOpenUI(`
+root = Tree([top])
+top = TreeItem("资料", "/tmp/资料", [docs, pics])
+docs = TreeItem("文档", "/tmp/资料/文档", [report])
+report = TreeItem("report.docx", "/tmp/资料/文档/report.docx")
+pics = TreeItem("图片", "/tmp/资料/图片")
+`)
+	tree := findOpen(view, "tree")
+	if tree == nil || len(tree.Items) != 1 {
+		t.Fatalf("tree %s", dumpOpen(view))
+	}
+	top := tree.Items[0]
+	if top.Text != "资料" || top.Path != "/tmp/资料" || len(top.Items) != 2 ||
+		top.Items[0].Items[0].Text != "report.docx" {
+		t.Fatalf("nested tree %+v", top)
+	}
+	compact := findOpen(parseOpenUI(`root = Tree([TreeItem("root", [TreeItem("child")])])`), "tree")
+	if compact == nil || len(compact.Items) != 1 || len(compact.Items[0].Items) != 1 ||
+		compact.Items[0].Items[0].Text != "child" {
+		t.Fatalf("compact TreeItem children: %s", dumpOpen(compact))
+	}
+
+	var nodes strings.Builder
+	nodes.WriteString("root = Tree([")
+	for i := 0; i < 205; i++ {
+		if i > 0 {
+			nodes.WriteString(", ")
+		}
+		nodes.WriteString(`TreeItem("n` + strconv.Itoa(i) + `")`)
+	}
+	nodes.WriteString("])")
+	bounded := findOpen(parseOpenUI(nodes.String()), "tree")
+	if bounded == nil || len(bounded.Items) != 200 || bounded.Extra != 5 {
+		t.Fatalf("node bound: items %d extra %d", len(bounded.Items), bounded.Extra)
+	}
+
+	deep := parseOpenUI(`root = Tree([TreeItem("1", "", [TreeItem("2", "", [TreeItem("3", "", [TreeItem("4", "", [TreeItem("5", "", [TreeItem("6", "", [TreeItem("7", "", [TreeItem("8")])])])])])])])])`)
+	level6 := findOpen(deep, "tree").Items[0]
+	for range 5 {
+		level6 = level6.Items[0]
+	}
+	if level6.Text != "6" || len(level6.Items) != 0 || level6.Extra != 2 {
+		t.Fatalf("depth bound at level 6: %+v", level6)
+	}
+}
+
 func TestOpenUIStreamAndHistory(t *testing.T) {
 	partial := "前文\n```openui\nroot = Stack([\n"
 	if streamShown(partial) != "前文" {
@@ -115,7 +163,7 @@ func TestOpenUIStreamAndHistory(t *testing.T) {
 }
 
 func TestAssistantInstructionMentionsOpenUI(t *testing.T) {
-	for _, want := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "```openui", "ToAssistant", "offer_choices", "CardHeader"} {
+	for _, want := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "```openui", "ToAssistant", "offer_choices", "CardHeader", "TreeItem"} {
 		if !strings.Contains(assistantInstruction, want) {
 			t.Fatalf("instruction missing %s", want)
 		}
@@ -171,6 +219,11 @@ func findOpen(v *ouiView, kind string) *ouiView {
 			return got
 		}
 	}
+	for _, ch := range v.Items {
+		if got := findOpen(ch, kind); got != nil {
+			return got
+		}
+	}
 	return nil
 }
 
@@ -182,6 +235,11 @@ func findOpenLabel(v *ouiView, label string) *ouiView {
 		return v
 	}
 	for _, ch := range v.Children {
+		if got := findOpenLabel(ch, label); got != nil {
+			return got
+		}
+	}
+	for _, ch := range v.Items {
 		if got := findOpenLabel(ch, label); got != nil {
 			return got
 		}
@@ -204,6 +262,11 @@ func findOpenText(v *ouiView, text string) bool {
 		}
 	}
 	for _, ch := range v.Children {
+		if findOpenText(ch, text) {
+			return true
+		}
+	}
+	for _, ch := range v.Items {
 		if findOpenText(ch, text) {
 			return true
 		}
@@ -236,6 +299,9 @@ func dumpOpenInto(b *strings.Builder, v *ouiView, depth int) {
 	}
 	b.WriteByte('\n')
 	for _, ch := range v.Children {
+		dumpOpenInto(b, ch, depth+1)
+	}
+	for _, ch := range v.Items {
 		dumpOpenInto(b, ch, depth+1)
 	}
 }

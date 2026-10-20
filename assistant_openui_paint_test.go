@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -211,5 +214,82 @@ func TestAssistantQuoteUsesRaisedSurface(t *testing.T) {
 	}
 	if tt.HasText("> 这是") {
 		t.Fatalf("quote markers show: %v", tt.Texts())
+	}
+}
+
+// TestOpenTreeNavigatesAndExpands: the disclosure and the path label are
+// separate targets, so expanding a branch does not navigate and clicking a
+// path node opens it in the window.
+func TestOpenTreeNavigatesAndExpands(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "资料")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := newStoreApp(t, root)
+	src := `root = Tree([top])
+top = TreeItem("资料", "` + target + `", [docs])
+docs = TreeItem("文档", "` + filepath.Join(target, "文档") + `", [report])
+report = TreeItem("report.docx", "` + filepath.Join(target, "文档", "report.docx") + `")`
+	a.assist.turns = []aiTurn{
+		{Role: "user", Text: "结构"},
+		{Role: "assistant", Text: "```openui\n" + src + "\n```"},
+	}
+	tt := assistTester(a, 520)
+	tt.Frame()
+	for _, want := range []string{"资料", "文档"} {
+		if !tt.HasText(want) {
+			t.Fatalf("tree node %q missing: %v", want, tt.Texts())
+		}
+	}
+	if tt.HasText("report.docx") {
+		t.Fatalf("the third level is expanded by default: %v", tt.Texts())
+	}
+
+	if err := tt.Click("展开或折叠"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if tt.HasText("文档") {
+		t.Fatalf("disclosure did not collapse: %v", tt.Texts())
+	}
+	if a.cur().path != root {
+		t.Fatalf("disclosure navigated to %q", a.cur().path)
+	}
+	if err := tt.Click("展开或折叠"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("文档") {
+		t.Fatalf("disclosure did not expand: %v", tt.Texts())
+	}
+	if err := tt.Click("资料"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.cur().path != target {
+		t.Fatalf("tree opened %q, want %q", a.cur().path, target)
+	}
+}
+
+func TestOpenTreeShowsTruncation(t *testing.T) {
+	a := &App{}
+	var program strings.Builder
+	program.WriteString("root = Tree([")
+	for i := 0; i < 205; i++ {
+		if i > 0 {
+			program.WriteString(", ")
+		}
+		program.WriteString(`TreeItem("n` + strconv.Itoa(i) + `")`)
+	}
+	program.WriteString("])")
+	a.assist.turns = []aiTurn{
+		{Role: "user", Text: "结构"},
+		{Role: "assistant", Text: "```openui\n" + program.String() + "\n```"},
+	}
+	tt := assistTester(a, 520)
+	tt.Frame()
+	if !tt.HasText("…另有 5 项") {
+		t.Fatalf("depth truncation is not reported: %v", tt.Texts())
 	}
 }

@@ -45,6 +45,8 @@ CardHeader(title, subtitle?)：标题和一行说明。
 TextContent(text, size?)：size 用 small、medium、large 或 large-heavy。
 Table(columns)：columns 是 Col。
 Col(label, cells)：cells 是字符串数组。单元格写完整路径时，用户可以点开。
+Tree(items)：items 是 TreeItem 数组，用来描述文件夹结构。
+TreeItem(label, path?, children?)：label 是节点名，path 是可点击打开的完整路径，children 是子节点数组。
 Button(label, action, variant?)：action 只能是 @ToAssistant("发给助手的一句中文")；variant 用 primary、secondary 或 destructive（会先让用户再确认一次）。
 Buttons(buttons, direction?)：一组按钮。
 Form(name, buttons, fields)：表单。按下其中的按钮时，那句话后面会附上每个填写项的「名称：值」。
@@ -62,4 +64,4 @@ size = Col("大小", ["2 GB", "400 MB"])
 actions = Buttons([openBtn], "row")
 openBtn = Button("打开下载", @ToAssistant("打开下载文件夹"), "primary")
 ` + "```\n" + `
-做完用一两句中文说明结果和路径。search_names 的 query 与窗口搜索框相同：空格是并且，ext:、file:、folder:、path: 可用。`
+做完用一两句中文说明结果和路径。folder_summary 描述结构时优先使用 Tree。search_names 的 query 与窗口搜索框相同：空格是并且，ext:、file:、folder:、path: 可用。`

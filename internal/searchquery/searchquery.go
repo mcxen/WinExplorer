@@ -97,7 +97,7 @@ func Parse(raw string) Query {
 			case "path":
 				// path: alone is not a term; path:docs is.
 				if rest != "" {
-					terms = append(terms, term{text: rest, kind: termPath})
+					terms = append(terms, term{text: rest, kind: termPath, caseSensitive: q.sensitive})
 				}
 				continue
 			case "case":
@@ -236,6 +236,19 @@ const (
 	MatchName
 	MatchPath
 )
+
+// Label is the short Chinese name a result row shows for the kind: the
+// reason the hit is in the list. An unknown kind, and MatchNone in
+// particular, has no label.
+func (k MatchKind) Label() string {
+	switch k {
+	case MatchName:
+		return "文件名"
+	case MatchPath:
+		return "路径"
+	}
+	return ""
+}
 
 // Reason is one contribution to a hit's relevance, in the words the preview
 // can show beside the score.
@@ -405,16 +418,30 @@ func pathWithin(path, root string) bool {
 // merge into one run. A case-sensitive query highlights exact matches
 // only; a phrase term highlights the whole phrase.
 func (q Query) Highlight(name string) []Span {
+	return q.highlight(name, false)
+}
+
+// HighlightPath is Highlight for a whole path: path: terms mark their
+// occurrence in the path, as names do in the list. Plain terms do not
+// match the path and are left unmarked, even when the same letters appear
+// there.
+func (q Query) HighlightPath(path string) []Span {
+	return q.highlight(path, true)
+}
+
+// highlight marks the terms of one haystack. path selects the path terms;
+// name highlighting marks the name terms.
+func (q Query) highlight(text string, path bool) []Span {
 	if len(q.terms) == 0 {
-		return []Span{{Text: name}}
+		return []Span{{Text: text}}
 	}
-	lower := strings.ToLower(name)
+	lower := strings.ToLower(text)
 	marks := make([]bool, len(lower))
 	any := false
 	for _, t := range q.terms {
 		needle := t.text
-		if t.kind == termPath {
-			continue // path terms do not highlight the name
+		if (t.kind == termPath) != path {
+			continue
 		}
 		if !t.caseSensitive {
 			needle = strings.ToLower(needle)
@@ -428,7 +455,7 @@ func (q Query) Highlight(name string) []Span {
 		// ones its lowercase fold.
 		hay := lower
 		if t.caseSensitive {
-			hay = name
+			hay = text
 		}
 		from := 0
 		for {
@@ -445,7 +472,7 @@ func (q Query) Highlight(name string) []Span {
 		}
 	}
 	if !any {
-		return []Span{{Text: name}}
+		return []Span{{Text: text}}
 	}
 	var out []Span
 	var b strings.Builder
@@ -461,7 +488,7 @@ func (q Query) Highlight(name string) []Span {
 		if started && m != prev {
 			flush(prev)
 		}
-		b.WriteByte(name[i])
+		b.WriteByte(text[i])
 		prev = m
 		started = true
 	}

@@ -71,8 +71,8 @@ func TestCtrlKSearchBox(t *testing.T) {
 	}
 	// The hits are laid out as rows: two of them stack at the same left edge,
 	// 44 DIP apart — the list inside the dialog has a real height.
-	firstRow, okFirst := tt.Find(a.searchBox.results[0].Name)
-	secondRow, okSecond := tt.Find(a.searchBox.results[1].Name)
+	firstRow, okFirst := tt.Find(a.searchBox.results[0].Name + " 文件名")
+	secondRow, okSecond := tt.Find(a.searchBox.results[1].Name + " 文件名")
 	if !okFirst || !okSecond {
 		t.Fatalf("the hits are not in the window: %v / %v", firstRow, secondRow)
 	}
@@ -331,6 +331,63 @@ func TestSearchPathElidedSegmentHasNoDestination(t *testing.T) {
 	if got := elidedPath(dir, segs); got != want {
 		t.Fatalf("elided tooltip = %q, want %q", got, want)
 	}
+}
+
+// TestSearchReasonBadge: a hit matched by its name says 文件名, and a hit
+// that only its path satisfies says 路径. A plain-name hit never grows the
+// path label merely because the same letters appear in its folder.
+func TestSearchReasonBadge(t *testing.T) {
+	a, tt, dir := keynavWindow(t, 1)
+	if err := os.MkdirAll(filepath.Join(dir, "reports", "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "reports", "alpha", "notes.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+	tt.Key(ui.Ctrl, ui.KeyK)
+	tt.Frame()
+	a.searchBox.scope = scopeFolder
+
+	tt.Type("notes")
+	tt.Frame()
+	waitSearchBox(t, tt, a)
+	tt.Frame()
+	if got := reasonLabelOf(t, a, "notes.txt"); got != "文件名" {
+		t.Fatalf("name hit label = %q, want 文件名", got)
+	}
+	if !tt.HasText("文件名") || tt.HasText("路径") {
+		t.Fatalf("the window's labels = %v, want only 文件名", tt.Texts())
+	}
+
+	// The query starts over: notes is in the file name, so the old query
+	// would win the name match before path:alpha could be examined.
+	a.searchBoxClose()
+	tt.Frame()
+	tt.Key(ui.Ctrl, ui.KeyK)
+	tt.Frame()
+	a.searchBox.scope = scopeFolder
+	tt.Type("path:alpha")
+	tt.Frame()
+	waitSearchBox(t, tt, a)
+	tt.Frame()
+	if got := reasonLabelOf(t, a, "notes.txt"); got != "路径" {
+		t.Fatalf("path hit label = %q, want 路径", got)
+	}
+	if !tt.HasText("路径") || tt.HasText("文件名") {
+		t.Fatalf("the window's labels = %v, want only 路径", tt.Texts())
+	}
+}
+
+func reasonLabelOf(t *testing.T, a *App, name string) string {
+	t.Helper()
+	for _, e := range a.searchBox.results {
+		if e.Name == name {
+			return a.searchBox.kinds[e.Path].Label()
+		}
+	}
+	t.Fatalf("the palette does not list %q: %v", name, namesOf(a.searchBox.results))
+	return ""
 }
 
 // TestSearchBoxCursorStaysOnItsHit: a batch that sorts above the cursor moves

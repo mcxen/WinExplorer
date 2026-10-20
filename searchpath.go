@@ -190,6 +190,22 @@ func searchNameSpans(q searchquery.Query, name string, isDir bool, font float32)
 	return out
 }
 
+// pathRunSpans marks the query in one run of a path, keeping its ordinary
+// label colour on either side of the hit. fontColor lets a hovering button
+// keep the accent colour it paints over the mark.
+func pathRunSpans(q searchquery.Query, text string, font float32, fontColor ui.Color) []ui.Span {
+	runs := q.HighlightPath(text)
+	out := make([]ui.Span, 0, len(runs))
+	for _, r := range runs {
+		sp := ui.Span{Text: r.Text, Size: font, Color: fontColor}
+		if r.Hit {
+			sp.Background = colorHit()
+		}
+		out = append(out, sp)
+	}
+	return out
+}
+
 func nameRunSpan(name string, from, to int, hit bool, font float32, ext bool) ui.Span {
 	r := []rune(name)
 	sp := ui.Span{Text: string(r[from:to]), Size: font, Color: colorText()}

@@ -186,6 +186,29 @@ func TestHighlight(t *testing.T) {
 	}
 }
 
+func TestHighlightPath(t *testing.T) {
+	q := Parse("path:docs alpha")
+	path := "/root/docs/alpha/notes.txt"
+	got := q.HighlightPath(path)
+	if spansText(got) != path {
+		t.Fatalf("path highlight text = %q", spansText(got))
+	}
+	if len(got) != 3 || got[0].Hit || !got[1].Hit || got[1].Text != "docs" || got[2].Hit {
+		t.Fatalf("path highlight = %+v", got)
+	}
+	// A name term is not highlighted in the path, even when the same text
+	// appears there.
+	got = Parse("alpha").HighlightPath(path)
+	if len(got) != 1 || got[0].Hit {
+		t.Fatalf("name term marked the path: %+v", got)
+	}
+	// case: follows the same positional rules in a path.
+	got = Parse("case: path:DOCS").HighlightPath("/root/DOCS/notes.txt")
+	if len(got) != 3 || !got[1].Hit || got[1].Text != "DOCS" {
+		t.Fatalf("case-sensitive path highlight = %+v", got)
+	}
+}
+
 func spansText(spans []Span) string {
 	var b strings.Builder
 	for _, s := range spans {

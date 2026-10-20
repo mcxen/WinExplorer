@@ -456,9 +456,14 @@ func (a *App) searchBoxNotice(c *ui.Context, height float32) {
 func (a *App) searchHitRow(c *ui.Context, i int) {
 	b := &a.searchBox
 	e := b.results[i]
+	kind := b.kinds[e.Path]
+	label := e.Name
+	if why := kind.Label(); why != "" {
+		label += " " + why
+	}
 	row := ui.ButtonBase(c.Key("hit-"+e.Path)).FillWidth().Height(searchHitRowH).
 		MinHeight(searchHitRowH).Padding(0, 6).Gap(8).AlignItems(ui.Center).
-		Radius(4).Label(e.Name)
+		Radius(4).Label(label)
 	row.Tooltip(e.Path)
 	switch {
 	case i == b.cursor:
@@ -473,8 +478,14 @@ func (a *App) searchHitRow(c *ui.Context, i int) {
 		})
 		main := ui.Column(c).Grow(1).MinWidth(0).Height(searchHitRowH).Justify(ui.Center)
 		main.Children(func() {
-			ui.RichText(c, searchNameSpans(b.parsed, e.Name, e.IsDir, 12)...).
-				SingleLine().MinWidth(0)
+			name := ui.Row(c).MinWidth(0).Height(16).AlignItems(ui.Center).Gap(6)
+			name.Children(func() {
+				ui.RichText(c, searchNameSpans(b.parsed, e.Name, e.IsDir, 12)...).
+					SingleLine().MinWidth(0)
+				if label := kind.Label(); label != "" {
+					searchReasonBadge(c, kind)
+				}
+			})
 			a.searchPathRow(c, e)
 		})
 		meta := ui.Column(c).Width(searchHitMetaW).Shrink(0).Height(searchHitRowH).Justify(ui.Center)
@@ -519,6 +530,7 @@ func (a *App) searchHitRow(c *ui.Context, i int) {
 // destination of its own and shows the hidden folders on hover instead.
 func (a *App) searchPathRow(c *ui.Context, e Entry) {
 	segs := searchPathSegments(e.Dir, homeForSearch(), 5)
+	q := a.searchBox.parsed
 	row := ui.Row(c).MinWidth(0).Height(16).AlignItems(ui.Center).Gap(2).ClipX()
 	row.Children(func() {
 		for i, seg := range segs {
@@ -527,7 +539,7 @@ func (a *App) searchPathRow(c *ui.Context, e Entry) {
 					Padding(0, 2)
 			}
 			if seg.Elided {
-				text := ui.Text(c, seg.Label).FontSize(11).TextColor(colorMuted()).Shrink(0)
+				text := ui.RichText(c, pathRunSpans(q, seg.Label, 11, colorMuted())...).Shrink(0)
 				hidden := elidedPath(e.Dir, segs)
 				text.Tooltip("省略的路径：" + hidden)
 				continue
@@ -538,12 +550,11 @@ func (a *App) searchPathRow(c *ui.Context, e Entry) {
 				btn.Background(colorHover())
 			}
 			btn.Children(func() {
-				ui.Text(c, seg.Label).FontSize(11).TextColor(func() ui.Color {
-					if btn.Hovered() {
-						return colorAccent()
-					}
-					return colorMuted()
-				}()).SingleLine()
+				color := colorMuted()
+				if btn.Hovered() {
+					color = colorAccent()
+				}
+				ui.RichText(c, pathRunSpans(q, seg.Label, 11, color)...).SingleLine()
 			})
 			if btn.Clicked() {
 				a.searchBoxClose()
@@ -551,6 +562,24 @@ func (a *App) searchPathRow(c *ui.Context, e Entry) {
 				a.navigate(seg.Path)
 			}
 		}
+	})
+}
+
+// searchReasonBadge says why a hit is in the list: its name matched, or
+// only its path did. It is a label, not a control.
+func searchReasonBadge(c *ui.Context, kind searchquery.MatchKind) {
+	label := kind.Label()
+	if label == "" {
+		return
+	}
+	ui.Row(c).Height(16).Padding(0, 6).Radius(8).Shrink(0).
+		AlignItems(ui.Center).Justify(ui.Center).
+		Background(colorHover()).Children(func() {
+		color := colorMuted()
+		if kind == searchquery.MatchName {
+			color = colorAccent()
+		}
+		ui.Text(c, label).FontSize(10).TextColor(color).SingleLine()
 	})
 }
 

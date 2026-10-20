@@ -100,4 +100,18 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 			t.Errorf("the management page lost %q", want)
 		}
 	}
+
+	// The phone layout: bottom tab bar, single-column cards, touch-sized
+	// targets and the touch gestures (tap to open, long-press menu, swipe
+	// between previews) that replace double-click and right-click.
+	for _, want := range []string{
+		"viewport-fit=cover", "env(safe-area-inset-bottom)",
+		"(hover:none) and (pointer:coarse)",
+		"touchstart", "touchend", "bindLongPress", "bindPreviewSwipe",
+		"dvh", "grid-template-areas",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the management page lost its phone adaptation: %q", want)
+		}
+	}
 }

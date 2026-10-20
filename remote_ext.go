@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -94,7 +92,7 @@ func (a *App) remoteHandleExtList(w http.ResponseWriter, r *http.Request) {
 		Path string `json:"path"`
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return
 	}
@@ -132,7 +130,7 @@ func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 		Name    string `json:"name"`
 		ExtName string `json:"ext_name"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return
 	}
@@ -176,7 +174,7 @@ func (a *App) remoteHandleTerminal(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path string `json:"path"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return
 	}

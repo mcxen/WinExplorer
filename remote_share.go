@@ -737,7 +737,7 @@ func (a *App) remoteShareFSGet(w http.ResponseWriter, r *http.Request, vpath, pa
 		obj.Sign = ""
 		data.remoteObj = obj
 		if !obj.IsDir {
-			link := "http://" + r.Host + "/sd/" + sid + remoteShareEncodePath(sub)
+			link := remoteRequestBase(r) + "/sd/" + sid + remoteShareEncodePath(sub)
 			if share.Pwd != "" {
 				link += "?pwd=" + url.QueryEscape(share.Pwd)
 			}

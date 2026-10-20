@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>晴谷</title>
 <style>
 *{box-sizing:border-box}
@@ -76,7 +76,8 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
 .toast.err{border-left-color:var(--danger)}
 .toast.out{opacity:0;transform:translateX(24px);transition:all .25s}
 @keyframes tin{from{opacity:0;transform:translateX(40px)}}
-@media(max-width:600px){.tm{display:none}header{padding:12px 14px}main{padding:0 14px}.row{padding:9px 8px}}
+@media(max-width:600px){.tm{display:none}header{padding:calc(10px + env(safe-area-inset-top)) 12px}.toolbar{padding:12px 12px 0;gap:8px}main{padding:0 12px;margin:10px auto 32px;padding-bottom:calc(32px + env(safe-area-inset-bottom))}.row{padding:11px 8px}#searchForm{flex:1 1 100%;min-width:0}#searchInput{flex:1;width:auto;font-size:16px}#searchForm button{padding:8px 14px}.crumb{padding:6px 8px}header a,header button{padding:8px 10px}.pv-bar{padding:calc(10px + env(safe-area-inset-top)) 12px 10px;flex-wrap:wrap}#pvName{flex:1 1 100%;order:-1;font-size:13px}.pv-bar a,.pv-bar button{padding:8px 12px;font-size:13px}#pvBody{padding:0 8px calc(8px + env(safe-area-inset-bottom));touch-action:pan-y}#toasts{left:12px;right:12px;top:auto;bottom:calc(16px + env(safe-area-inset-bottom))}.toast{max-width:none}}
+@media(hover:none) and (pointer:coarse){.row,.crumb,header a,header button,.pv-bar a,.pv-bar button{touch-action:manipulation}}
 </style>
 </head>
 <body>

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -75,7 +73,7 @@ type remoteArchiveResult struct {
 // the disk, both of them folders that must already exist. dst_dir defaults
 // to src_dir. ok is false once the protocol error has been written.
 func (a *App) remoteArchiveDirs(w http.ResponseWriter, r *http.Request, req *remoteArchiveReq) (src, dst string, ok bool) {
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(req); err != nil {
+	if err := remoteReadReq(r, req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return "", "", false
 	}

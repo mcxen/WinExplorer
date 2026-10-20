@@ -27,8 +27,11 @@ func TestFloatDialogsRender(t *testing.T) {
 			a.showProperties()
 		}},
 		{"批量重命名", func() {
+			// A batch of two: one row is the single-item inline rename, and
+			// the dialog is what these tests are here for.
 			a.selectOnly(dir + "/f000.txt")
-			a.batch.open = true
+			a.toggleSelect(dir + "/f001.txt")
+			a.doRenameStart()
 		}},
 		{"快速预览", func() { a.quickLook = true }},
 		{"重复文件查找", func() { *a.dupsOpenFlag() = true }},

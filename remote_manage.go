@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,9 +16,9 @@ import (
 )
 
 // remote_manage.go is the write side of the remote server's
-// OpenList-compatible API: the /api/fs/mkdir, /api/fs/rename, /api/fs/move,
-// /api/fs/copy, /api/fs/remove, /api/fs/put (upload) and /api/fs/dirs
-// handlers. Every path arrives as a virtual path under the home directory
+// OpenList-compatible API: the /api/fs/mkdir, /api/fs/rename, the batch and
+// regexp renames, /api/fs/move, /api/fs/copy, /api/fs/remove, /api/fs/put
+// (upload) and /api/fs/dirs handlers. Every path arrives as a virtual path under the home directory
 // and goes through remoteDiskPath before anything touches the disk; the
 // replies use the same always-200 {code,message,data} envelope as the read
 // side (remote.go).
@@ -29,10 +29,11 @@ type remoteOpMsg struct {
 	Message string `json:"message"`
 }
 
-// remoteDirEntry is one folder of /api/fs/dirs' reply.
+// remoteDirEntry is one folder of /api/fs/dirs' reply. Modified is the
+// time.Time OpenList serializes as-is, nanoseconds and zone offset included.
 type remoteDirEntry struct {
-	Name     string `json:"name"`
-	Modified string `json:"modified"`
+	Name     string    `json:"name"`
+	Modified time.Time `json:"modified"`
 }
 
 // remoteValidBatchName reports whether a batch name (the names arrays of
@@ -192,7 +193,7 @@ func (a *App) remoteHandleMkdir(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path string `json:"path"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return
 	}
@@ -234,7 +235,7 @@ func (a *App) remoteHandleRename(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		Overwrite bool   `json:"overwrite"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return
 	}
@@ -267,6 +268,182 @@ func (a *App) remoteHandleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	remoteOK(w, nil)
+}
+
+// remoteBatchRenameReq is the body of /api/fs/batch_rename, OpenList's
+// shape: the folder and one src→new name pair per item.
+type remoteBatchRenameReq struct {
+	SrcDir        string `json:"src_dir"`
+	RenameObjects []struct {
+		SrcName string `json:"src_name"`
+		NewName string `json:"new_name"`
+	} `json:"rename_objects"`
+}
+
+// remoteHandleBatchRename answers POST /api/fs/batch_rename: one src_dir
+// with explicit src_name → new_name pairs, the endpoint the OpenList
+// frontend's batch rename calls. The plan runs through renameplan.go, the
+// same engine the desktop dialog uses, so its validation, its clash rules
+// and its two-pass name swap are shared rather than reimplemented.
+func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
+	if !a.remoteIsAdmin(r) {
+		remoteErr(w, 401, "Guest user is disabled, login please")
+		return
+	}
+	var req remoteBatchRenameReq
+	if err := remoteReadReq(r, &req); err != nil {
+		remoteErr(w, 400, "bad request")
+		return
+	}
+	if len(req.RenameObjects) == 0 {
+		remoteErr(w, 400, "Empty file names")
+		return
+	}
+	dir, ok := remoteDiskPath(req.SrcDir)
+	if !ok {
+		remoteErr(w, 500, "object not found")
+		return
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		remoteErr(w, 500, "object not found")
+		return
+	}
+	rows := make([]renameRow, 0, len(req.RenameObjects))
+	for _, o := range req.RenameObjects {
+		if o.SrcName == "" || o.NewName == "" {
+			continue // the protocol skips empty pairs, as OpenList does
+		}
+		if !remoteValidBatchName(o.SrcName) {
+			remoteErr(w, 403, "using relative path is not allowed")
+			return
+		}
+		rows = append(rows, renameRow{Name: o.SrcName, To: o.NewName})
+	}
+	// Every target must be a bare name; a bad one fails the whole request,
+	// as OpenList's per-object check does, rather than applying the rest.
+	for _, row := range rows {
+		if why := renameValidateName(row.To); why != "" {
+			remoteErr(w, 403, "using relative path is not allowed")
+			return
+		}
+	}
+	// The sources must exist, and the targets must not be taken by anything
+	// that is not itself moving away.
+	if code, msg := remoteRenameCheck(dir, rows); code != 0 {
+		remoteErr(w, code, msg)
+		return
+	}
+	moved, failed := renameApply(dir, rows)
+	if len(failed) > 0 {
+		remoteErr(w, 500, "failed to rename: "+strings.Join(failed, ", "))
+		return
+	}
+	remoteOK(w, remoteOpMsg{Message: fmt.Sprintf("Successfully renamed %d %s",
+		len(moved), pluralize(len(moved), "file", "files"))})
+}
+
+// remoteHandleRegexRename answers POST /api/fs/regex_rename: a Go regexp
+// and its replacement, applied to every name in src_dir that the regexp
+// matches. The engine expands the date tokens a client's frontend would,
+// so the remote and desktop answers agree.
+func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
+	if !a.remoteIsAdmin(r) {
+		remoteErr(w, 401, "Guest user is disabled, login please")
+		return
+	}
+	var req struct {
+		SrcDir       string `json:"src_dir"`
+		SrcNameRegex string `json:"src_name_regex"`
+		NewNameRegex string `json:"new_name_regex"`
+	}
+	if err := remoteReadReq(r, &req); err != nil {
+		remoteErr(w, 400, "bad request")
+		return
+	}
+	re, err := regexp.Compile(req.SrcNameRegex)
+	if err != nil || req.SrcNameRegex == "" {
+		remoteErr(w, 500, "invalid regexp")
+		return
+	}
+	dir, ok := remoteDiskPath(req.SrcDir)
+	if !ok {
+		remoteErr(w, 500, "object not found")
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		remoteErr(w, 500, "object not found")
+		return
+	}
+	var rows []renameRow
+	for _, de := range entries {
+		name := de.Name()
+		if !re.MatchString(name) {
+			continue
+		}
+		info, err := de.Info()
+		if err != nil {
+			continue
+		}
+		row := renameRow{Name: name, IsDir: de.IsDir(), ModTime: info.ModTime()}
+		row.To = re.ReplaceAllString(name, req.NewNameRegex)
+		row.To = renameDateTokens(row.To, row)
+		if why := renameValidateName(row.To); why != "" {
+			remoteErr(w, 403, "using relative path is not allowed")
+			return
+		}
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		remoteOK(w, remoteOpMsg{Message: "Nothing to rename"})
+		return
+	}
+	if code, msg := remoteRenameCheck(dir, rows); code != 0 {
+		remoteErr(w, code, msg)
+		return
+	}
+	moved, failed := renameApply(dir, rows)
+	if len(failed) > 0 {
+		remoteErr(w, 500, "failed to rename: "+strings.Join(failed, ", "))
+		return
+	}
+	remoteOK(w, remoteOpMsg{Message: fmt.Sprintf("Successfully renamed %d %s",
+		len(moved), pluralize(len(moved), "file", "files"))})
+}
+
+// remoteRenameCheck is the pre-flight every remote rename runs: the sources
+// exist, and no target is already taken by something that is not one of the
+// sources moving away. It answers the protocol's code and message, zero for
+// a plan that can run.
+func remoteRenameCheck(dir string, rows []renameRow) (int, string) {
+	sources := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		sources[strings.ToLower(r.Name)] = true
+	}
+	for _, r := range rows {
+		if _, err := os.Lstat(filepath.Join(dir, r.Name)); err != nil {
+			return 500, "object not found: " + r.Name
+		}
+		if strings.EqualFold(r.To, r.Name) {
+			continue
+		}
+		if sources[strings.ToLower(r.To)] {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(dir, r.To)); err == nil {
+			return 403, fmt.Sprintf("file [%s] exists", r.To)
+		}
+	}
+	return 0, ""
+}
+
+// pluralize is OpenList's Pluralize: the singular for one, the plural
+// otherwise.
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
 }
 
 // remoteHandleMove answers POST /api/fs/move: a batch of names relocated
@@ -357,7 +534,7 @@ func (a *App) remoteHandleCopy(w http.ResponseWriter, r *http.Request) {
 // errors itself on failure.
 func (a *App) remoteBatchReq(w http.ResponseWriter, r *http.Request) (remoteBatchReq, bool) {
 	var req remoteBatchReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return req, false
 	}
@@ -405,7 +582,7 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 		Dir   string   `json:"dir"`
 		Names []string `json:"names"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return
 	}
@@ -439,9 +616,10 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 	remoteOK(w, nil)
 }
 
-// remoteHandleDirs answers POST /api/fs/dirs: the folders directly inside
-// a virtual path, one level deep, as the flat array the file pickers want.
-// force_root changes nothing — the virtual root is the only root there is.
+// remoteHandleDirs answers /api/fs/dirs, on any method: the folders directly
+// inside a virtual path, one level deep, as the flat array the file pickers
+// want. A missing path is the virtual root; force_root changes nothing —
+// the virtual root is the only root there is.
 func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 	if !a.remoteIsAdmin(r) {
 		remoteErr(w, 401, "Guest user is disabled, login please")
@@ -452,7 +630,7 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 		Password  string `json:"password"`
 		ForceRoot bool   `json:"force_root"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := remoteReadReq(r, &req); err != nil {
 		remoteErr(w, 400, "bad request")
 		return
 	}
@@ -479,7 +657,7 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 		if err != nil || !st.IsDir() {
 			continue
 		}
-		dirs = append(dirs, remoteDirEntry{Name: de.Name(), Modified: st.ModTime().Format(time.RFC3339)})
+		dirs = append(dirs, remoteDirEntry{Name: de.Name(), Modified: st.ModTime()})
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
 	remoteOK(w, dirs)

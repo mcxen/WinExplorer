@@ -406,7 +406,7 @@ func TestRemoteFSDirs(t *testing.T) {
 	if len(dirs) != 3 || dirs[0].Name != "alpha" || dirs[1].Name != "beta" || dirs[2].Name != "empty" {
 		t.Fatalf("dirs = %+v, want alpha beta empty", dirs)
 	}
-	if dirs[0].Modified == "" {
+	if dirs[0].Modified.IsZero() {
 		t.Fatal("dirs entries carry no modified time")
 	}
 
@@ -1494,5 +1494,100 @@ func TestRemoteManageSmoke(t *testing.T) {
 	if conn, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(port), time.Second); err == nil {
 		conn.Close()
 		t.Fatalf("port %d still accepts connections after shutdown", port)
+	}
+}
+
+// TestRemoteBatchRename covers /api/fs/batch_rename and /api/fs/regex_rename:
+// the endpoint the OpenList frontend calls, sharing renameplan.go's engine
+// with the desktop dialog.
+func TestRemoteBatchRename(t *testing.T) {
+	e := newRemoteManageEnv(t)
+	e.writeFile("docs/a.txt", "A")
+	e.writeFile("docs/b.txt", "B")
+	e.writeFile("docs/taken.txt", "T")
+	tok := e.login()
+
+	batch := func(objects ...map[string]string) remoteTestResp {
+		return e.api(http.MethodPost, "/api/fs/batch_rename", tok, map[string]any{
+			"src_dir": "/docs", "rename_objects": objects,
+		})
+	}
+	pair := func(from, to string) map[string]string {
+		return map[string]string{"src_name": from, "new_name": to}
+	}
+
+	// A guest gets the 401 envelope; an empty list is the protocol's 400.
+	if rr := e.api(http.MethodPost, "/api/fs/batch_rename", "", map[string]any{"src_dir": "/docs"}); rr.Code != 401 {
+		t.Fatalf("guest batch rename: code %d, want 401", rr.Code)
+	}
+	if rr := e.api(http.MethodPost, "/api/fs/batch_rename", tok, map[string]any{"src_dir": "/docs"}); rr.Code != 400 {
+		t.Fatalf("empty batch rename: code %d, want 400", rr.Code)
+	}
+
+	// A plain batch renames both and reports how many moved.
+	rr := batch(pair("a.txt", "a2.txt"), pair("b.txt", "b2.txt"))
+	if rr.Code != 200 {
+		t.Fatalf("batch rename: code %d (%s)", rr.Code, rr.Message)
+	}
+	for _, name := range []string{"a2.txt", "b2.txt"} {
+		if _, err := os.Stat(filepath.Join(e.home, "docs", name)); err != nil {
+			t.Fatalf("%s not renamed: %v", name, err)
+		}
+	}
+
+	// Swapping two names goes through the engine's temporary pass.
+	if rr := batch(pair("a2.txt", "b2.txt"), pair("b2.txt", "a2.txt")); rr.Code != 200 {
+		t.Fatalf("swap: code %d (%s)", rr.Code, rr.Message)
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.home, "docs", "b2.txt")); string(b) != "A" {
+		t.Fatalf("swap lost the contents: %q", b)
+	}
+
+	// A target an unselected item holds is the protocol's 403.
+	rr = batch(pair("b2.txt", "taken.txt"))
+	if rr.Code != 403 || rr.Message != "file [taken.txt] exists" {
+		t.Fatalf("clash: code %d (%s), want 403 file [taken.txt] exists", rr.Code, rr.Message)
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.home, "docs", "b2.txt")); string(b) != "A" {
+		t.Fatal("a rejected batch still moved the file")
+	}
+
+	// A path in either name is refused: only bare names address one item.
+	for _, bad := range [][2]string{{"b2.txt", "../escape.txt"}, {"sub/../b2.txt", "x.txt"}, {"b2.txt", ".."}} {
+		if rr = batch(pair(bad[0], bad[1])); rr.Code != 403 {
+			t.Fatalf("bad pair %v: code %d, want 403", bad, rr.Code)
+		}
+	}
+
+	// A missing source is the protocol's 500.
+	if rr = batch(pair("ghost.txt", "x.txt")); rr.Code != 500 {
+		t.Fatalf("missing source: code %d (%s), want 500", rr.Code, rr.Message)
+	}
+
+	// Regex rename: the capture group, applied to every matching name.
+	e.writeFile("pics/IMG_001.jpg", "1")
+	e.writeFile("pics/IMG_002.jpg", "2")
+	e.writeFile("pics/notes.txt", "n")
+	rr = e.api(http.MethodPost, "/api/fs/regex_rename", tok, map[string]any{
+		"src_dir": "/pics", "src_name_regex": `^IMG_(\d+)\.jpg$`, "new_name_regex": "photo-$1.jpg",
+	})
+	if rr.Code != 200 {
+		t.Fatalf("regex rename: code %d (%s)", rr.Code, rr.Message)
+	}
+	for _, name := range []string{"photo-001.jpg", "photo-002.jpg", "notes.txt"} {
+		if _, err := os.Stat(filepath.Join(e.home, "pics", name)); err != nil {
+			t.Fatalf("%s not renamed: %v", name, err)
+		}
+	}
+
+	// An invalid regexp is a 500, not a silent no-op.
+	rr = e.api(http.MethodPost, "/api/fs/regex_rename", tok, map[string]any{
+		"src_dir": "/pics", "src_name_regex": `(`,
+	})
+	if rr.Code != 500 {
+		t.Fatalf("invalid regexp: code %d, want 500", rr.Code)
+	}
+	if rr = e.api(http.MethodPost, "/api/fs/regex_rename", "", map[string]any{"src_dir": "/pics"}); rr.Code != 401 {
+		t.Fatalf("guest regex rename: code %d, want 401", rr.Code)
 	}
 }

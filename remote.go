@@ -260,11 +260,12 @@ func (a *App) remoteStop() {
 }
 
 // remoteMux routes the OpenList v3 API surface plus Sunvale's own
-// extensions. The /api/fs/*, /d/, /p/, /ping and / handlers live in
-// remote_fs.go, remote_ext.go, remote_dl.go and remote_web.go; the
-// fs-write, share, /sd/, /@manage and /api/sunvale/* handlers are
-// registered below and live in their own files, remote_admin.go among them.
-func (a *App) remoteMux() *http.ServeMux {
+// extensions, behind remoteCORS. The /api/fs/*, /d/, /p/, /ping and /
+// handlers live in remote_fs.go, remote_ext.go, remote_dl.go and
+// remote_web.go; the fs-write, share, /sd/, /@manage and /api/sunvale/*
+// handlers are registered below and live in their own files,
+// remote_admin.go among them.
+func (a *App) remoteMux() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/auth/login", a.remoteHandleLogin)
 	mux.HandleFunc("/api/auth/login/hash", a.remoteHandleLoginHash)
@@ -280,6 +281,8 @@ func (a *App) remoteMux() *http.ServeMux {
 	mux.HandleFunc("/ping", a.remoteHandlePing)
 	mux.HandleFunc("/api/fs/mkdir", a.remoteHandleMkdir)
 	mux.HandleFunc("/api/fs/rename", a.remoteHandleRename)
+	mux.HandleFunc("/api/fs/batch_rename", a.remoteHandleBatchRename)
+	mux.HandleFunc("/api/fs/regex_rename", a.remoteHandleRegexRename)
 	mux.HandleFunc("/api/fs/move", a.remoteHandleMove)
 	mux.HandleFunc("/api/fs/copy", a.remoteHandleCopy)
 	mux.HandleFunc("/api/fs/remove", a.remoteHandleRemove)
@@ -306,7 +309,26 @@ func (a *App) remoteMux() *http.ServeMux {
 	mux.HandleFunc("/@manage", a.remoteHandleManage)
 	mux.HandleFunc("/@manage/", a.remoteHandleManage)
 	mux.HandleFunc("/", a.remoteHandleIndex)
-	return mux
+	return remoteCORS(mux)
+}
+
+// remoteCORS answers the preflight and stamps every reply with the wildcard
+// headers OpenList's default Cors config sends, so a script or a page
+// hosted elsewhere can call the API. No credentials travel in headers the
+// browser would restrict: the token rides in Authorization, which the
+// preflight below allows.
+func remoteCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		h.Set("Access-Control-Allow-Methods", "*")
+		h.Set("Access-Control-Allow-Headers", "*")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // remoteToggle flips remote access on or off, from the 查看更多 menu.
@@ -390,14 +412,14 @@ type remoteResp struct {
 
 // remoteOK writes a success envelope.
 func remoteOK(w http.ResponseWriter, data any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(remoteResp{Code: 200, Message: "success", Data: data})
 }
 
 // remoteErr writes an error envelope; code is the protocol code in the
 // body, never the HTTP status.
 func remoteErr(w http.ResponseWriter, code int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(remoteResp{Code: code, Message: msg})
 }
 

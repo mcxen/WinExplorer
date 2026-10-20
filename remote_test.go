@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -270,6 +271,18 @@ func TestRemotePublicEndpoints(t *testing.T) {
 	if res.StatusCode != 200 || body != "pong" {
 		t.Fatalf("GET /ping: status %d body %q", res.StatusCode, body)
 	}
+
+	// CORS, as OpenList's default config sends it: every reply carries the
+	// wildcard headers and the preflight is answered without a handler.
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want *", got)
+	}
+	res, _ = e.do(http.MethodOptions, "/api/fs/list", map[string]string{
+		"Origin": "http://example.test", "Access-Control-Request-Method": "POST",
+	})
+	if res.StatusCode != http.StatusNoContent || res.Header.Get("Access-Control-Allow-Headers") != "*" {
+		t.Fatalf("preflight: status %d headers %v", res.StatusCode, res.Header)
+	}
 }
 
 func TestRemoteLogin(t *testing.T) {
@@ -470,6 +483,82 @@ func TestRemoteFSList(t *testing.T) {
 	if rr.HTTPStatus != 200 || rr.Code != 500 {
 		t.Fatalf("missing folder: HTTP %d code %d, want 200/500", rr.HTTPStatus, rr.Code)
 	}
+
+	// A file is not a folder: OpenList lists a directory and says so.
+	rr = e.api(http.MethodPost, "/api/fs/list", tok, map[string]any{"path": "/readme.md"})
+	if rr.Code != 500 || rr.Message != "not a folder" {
+		t.Fatalf("file list: code %d (%s), want 500 not a folder", rr.Code, rr.Message)
+	}
+
+	// A missing path is the virtual root, as JoinPath("") resolves it on
+	// OpenList's side.
+	rr = e.api(http.MethodPost, "/api/fs/list", tok, map[string]any{"per_page": 0})
+	if rr.Code != 200 || string(rr.Data) == "" {
+		t.Fatalf("missing path: code %d (%s), want the root listing", rr.Code, rr.Message)
+	}
+
+	// GET binds the query string, the way gin's ShouldBind does.
+	rr = e.api(http.MethodGet, "/api/fs/list?path=/Documents&page=1&per_page=0", tok, nil)
+	if rr.Code != 200 {
+		t.Fatalf("GET list: code %d (%s)", rr.Code, rr.Message)
+	}
+	var got remoteFSListData
+	if err := json.Unmarshal(rr.Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 1 || len(got.Content) != 1 || got.Content[0].Name != "empty" {
+		t.Fatalf("GET list of /Documents = %+v", got)
+	}
+
+	// Folders answer size 0, as a Local storage without directory_size
+	// does; a bare stat size (the inode on Unix) must not leak through.
+	if err := json.Unmarshal(rr.Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	rr = e.api(http.MethodPost, "/api/fs/list", tok, map[string]any{"path": "/"})
+	if err := json.Unmarshal(rr.Data, &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range got.Content {
+		if o.IsDir && o.Size != 0 {
+			t.Fatalf("folder %s carries size %d, want 0", o.Name, o.Size)
+		}
+	}
+}
+
+// TestRemoteFSTypeTable pins the extension table to OpenList's default
+// audio/video/image/text settings, which decide how a client previews a file.
+func TestRemoteFSTypeTable(t *testing.T) {
+	cases := []struct {
+		name string
+		want int
+	}{
+		{"movie.mp4", remoteFSTypeVideo},
+		{"stream.m3u8", remoteFSTypeVideo},
+		{"clip.rmvb", remoteFSTypeVideo},
+		{"song.mp3", remoteFSTypeAudio},
+		{"sound.m4a", remoteFSTypeAudio},
+		{"photo.jpg", remoteFSTypeImage},
+		{"picture.avif", remoteFSTypeImage},
+		{"animation.swf", remoteFSTypeImage},
+		{"notes.md", remoteFSTypeText},
+		{"main.go", remoteFSTypeText},
+		{"app.tsx", remoteFSTypeText},
+		{"sub.srt", remoteFSTypeText},
+		{"danmu.ASS", remoteFSTypeText},
+		{"vars.properties", remoteFSTypeText},
+		{"page.htm", remoteFSTypeText},
+		{"data.bin", remoteFSTypeUnknown},
+		{"archive.zip", remoteFSTypeUnknown},
+	}
+	for _, c := range cases {
+		if got := remoteFSType(c.name, false); got != c.want {
+			t.Errorf("remoteFSType(%q) = %d, want %d", c.name, got, c.want)
+		}
+	}
+	if got := remoteFSType("folder.mp4", true); got != remoteFSTypeFolder {
+		t.Fatalf("a folder named like a video = %d, want %d", got, remoteFSTypeFolder)
+	}
 }
 
 func TestRemoteFSGet(t *testing.T) {
@@ -540,6 +629,68 @@ func TestRemoteFSGet(t *testing.T) {
 	rr = e.api(http.MethodPost, "/api/fs/get", "", map[string]any{"path": "/Documents/notes.txt"})
 	if rr.Code != 401 {
 		t.Fatalf("guest fs/get: code %d, want 401", rr.Code)
+	}
+}
+
+// TestRemoteFSGetRootAndRelated covers the object shape the official client
+// reads: the root is called root, related is null except for videos, whose
+// subtitles travel beside them, and a missing path means the root.
+func TestRemoteFSGetRootAndRelated(t *testing.T) {
+	e := newRemoteTestEnv(t)
+	e.writeFile("media/clip.mp4", "v")
+	e.writeFile("media/clip.srt", "sub")
+	e.writeFile("media/clip.zh.ass", "sub")
+	e.writeFile("media/clip.xml", "danmu")
+	e.writeFile("media/other.mp4", "v")
+	e.writeFile("notes.txt", "n")
+	tok := e.login()
+
+	get := func(path string) remoteFSGetData {
+		t.Helper()
+		rr := e.api(http.MethodPost, "/api/fs/get", tok, map[string]any{"path": path})
+		if rr.Code != 200 {
+			t.Fatalf("fs/get %s: code %d (%s)", path, rr.Code, rr.Message)
+		}
+		var data remoteFSGetData
+		if err := json.Unmarshal(rr.Data, &data); err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+
+	// The virtual root answers OpenList's name for it.
+	root := get("/")
+	if !root.IsDir || root.Name != "root" || root.Size != 0 {
+		t.Fatalf("root = %+v, want name root, a folder, size 0", root)
+	}
+	// A missing path is the same root.
+	if rr := e.api(http.MethodGet, "/api/fs/get", tok, nil); rr.Code != 200 {
+		t.Fatalf("GET fs/get: code %d (%s)", rr.Code, rr.Message)
+	}
+
+	// A video brings its same-prefix siblings; another stem stays out.
+	clip := get("/media/clip.mp4")
+	if clip.Type != remoteFSTypeVideo {
+		t.Fatalf("clip.mp4 type = %d, want video", clip.Type)
+	}
+	names := make([]string, 0, len(clip.Related))
+	for _, o := range clip.Related {
+		names = append(names, o.Name)
+	}
+	sort.Strings(names)
+	if strings.Join(names, ",") != "clip.srt,clip.xml,clip.zh.ass" {
+		t.Fatalf("related = %v, want the clip.* siblings only", names)
+	}
+
+	// Everything else answers JSON null, the field still present.
+	for _, p := range []string{"/media", "/notes.txt", "/media/clip.srt"} {
+		raw, err := json.Marshal(get(p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), `"related":null`) {
+			t.Fatalf("fs/get %s: %s, want related null", p, raw)
+		}
 	}
 }
 

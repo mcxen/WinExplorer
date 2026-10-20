@@ -94,7 +94,7 @@ go build -o sunvale .
 新建文件夹、新建文本文档、内联重命名（`F2`，单选）、**批量重命名**、复制/剪切/粘贴（Windows 风格 `名称 - 副本` 命名）、删除（移入 `~/.Trash`）、永久删除、复制为路径（系统剪贴板）、在终端中打开、属性（打开属性对话框，见下）。
 
 **批量重命名**
-多选时 `F2`、命令栏「重命名」或右键「重命名」打开对话框：一个模式作用于全部选中项，占位符 `{name}`（完整原名）、`{stem}`（去扩展名）、`{ext}`（不带点；文件夹为空）、`{n}` 编号、`{n:3}` 补零三位；起始编号默认 1，模式默认 `{n} {name}`。改动即时重算预览（最多显示 8 行，列表最高 220），目标名为空、`.`、`..`、含路径分隔符、两个选中项撞名（不区分大小写）或与文件夹里已有项撞名时，该行标红加「冲突」。只要存在冲突，主按钮置灰并提示先解决；提交时逐项 `os.Rename`，跳过冲突行与名字未变的项，失败项在状态栏点名，整批压入**一次**撤销（`Ctrl+Z` 一次全还原）。
+多选时 `F2`、命令栏「重命名」或右键「重命名」打开对话框，单选仍走内联重命名。三种模式（对话框顶部切换）：**模板**（占位符 `{name}` 完整原名、`{stem}` 去扩展名、`{ext}` 不带点、`{n}` 编号、`{n:3}` 补零三位，起始编号默认 1，默认模式 `{n} {name}`）、**正则**（Go 正则 + `$1` 捕获组）、**查找替换**（字面替换）；三种模式都支持 `{created_year}`…`{modified_second}` 日期占位符。预览逐行实时更新，并且可交互：**拖动行**调整顺序（编号随之改变，`{n}` 因此按拖后的次序编号）、**双击（或 `F2`）逐项改写**目标名（改过的行「钉住」不再受模式影响，行尾 `↺` 恢复）、`↑/↓` 移动焦点。目标名为空、`.`、`..`、含路径分隔符、两项撞名（不区分大小写）或与文件夹里已有项目撞名时该行标红并说明原因，主按钮按可应用行数显示「重命名 N 项」；提交时整批走两段式改名（互换名字也不会丢文件），跳过冲突行，失败项在状态栏点名，整批压入**一次**撤销（`Ctrl+Z` 一次全还原）。
 
 **压缩 / 解压**
 任意选择「压缩为 ZIP 文件」（单选以原名命名，多选为“压缩文件”）。解压支持 zip、tar、tar.gz/tgz、tar.bz2/tbz2（标准库纯 Go），tar.xz（系统 `bsdtar`），7z/rar（需安装 `7zz` 或 `unar`）。解压到以归档名命名的子文件夹；成员路径含 `..`、绝对路径或反斜杠（zip-slip）一律拒绝，符号链接成员跳过。
@@ -243,6 +243,8 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 
 **文件页与桌面端同构**：命令栏 `新建▾ | 剪切 复制 粘贴 重命名 分享 删除 | 排序▾ 查看▾ | …`（没有选中时剪切/重命名/删除保持置灰，剪贴板为空时粘贴置灰，与客户端同一套开关规则）、地址行（后退/前进/向上/刷新 + 面包屑 + 搜索框）、左侧「位置 / 存储」导航树（主文件夹，桌面/文档/下载/图片/音乐/视频（存在才列出），以及本机存储与容量）、状态栏（项目数与选中体积，右侧当前视图）。六种视图（超大图标/大图标/中等图标/小图标/列表/详细信息）与名称·修改日期·类型·大小时升序/降序都可切换，选择记在 `localStorage`；详细信息视图可按列头排序，图标视图里图片直接以 `/d` 直链当缩略图。选择与键盘对齐客户端：单击、`Cmd/Ctrl+单击`、`Shift+单击` 范围选、`Ctrl+A` 全选，方向键移动（图标/列表视图按行列）、`Shift+方向键` 扩展、`Home`/`End` 到首尾、`Enter` 打开、`Backspace` 向上、`F2` 重命名、`F5` 刷新、`Delete` 删除、`空格` 快速预览、`Alt+P` 预览窗格。行右键菜单对齐 Windows 11：打开/预览、下载、剪切、复制、粘贴、复制为路径、重命名、压缩为 ZIP 文件、全部解压、解压到…、在终端中打开、（登记的扩展命令）、分享、删除、属性；空白处菜单提供新建文件夹/文本文档、上传、粘贴、排序方式、查看、显示隐藏的项目、显示项目复选框、刷新。
 
+**批量重命名（远程）**：多选时命令栏「重命名」、右键「重命名」或 `F2` 打开同一个对话框的网页版——模板/正则/查找替换三种模式、逐行实时预览、**拖动行改变编号**、**双击逐项改写**（行尾 `↺` 交还模式）、冲突行标红且不应用，提交走 `/api/fs/batch_rename`（与桌面端共用的 `renameplan.go` 引擎）。
+
 **手机端适配**：宽度 ≤720px 时侧栏折成底部四个标签（仪表盘/文件/分享/设置，退出登录移到顶栏），卡片单列，命令栏单行横向滑动（上传与 `…` 靠前，排序/查看可滑出），地址行折成「向上/刷新/编辑/搜索范围 + 面包屑 + 搜索框」三行，详细信息视图只保留名称与修改日期（更窄时连日期一起收起）、行高与按钮放大到指尖尺寸，分享页一条分享一张卡片（链接独占一行、操作按钮铺满），菜单与弹窗变成底部动作面板/抽屉，并适配刘海屏安全区。触屏（粗指针）上补上鼠标没有的手势：**轻点即打开**、**长按弹出与右键同一套菜单**（含空白处长按的新建/上传/排序/查看）、浮层预览**左右滑动切上一张/下一张**、图片**双指缩放**（0.2×–5×，双击复原）。桌面端交互不变。
 
 **预览（远程，参考 OpenList）**：预览窗格与全屏浮层共用一套渲染（图片 `<img>`、视频 `<video controls>` 自动播放、音频 `<audio controls>`、PDF `<iframe>`、文本 `<pre>` 前 64 KB，走 `/api/fs/get` 的 `raw_url`+`sign` 直链）。全屏浮层提供 **上一张 / 下一张**（在当前文件夹的图片与视频间循环步进，`←`/`→` 与手机左右滑动同步）与**图片缩放**（滚轮或双指 0.2×–5× 居中缩放，双击复位）；预览窗格保持适合显示。
@@ -267,9 +269,10 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 
 **协议范围**
 
-- 已实现：`/api/public/settings`、`/api/public/archive_extensions`（可解压后缀表）、`/api/auth/login`（明文）与 `/api/auth/login/hash`（StaticHash）、`/api/me`、`/api/auth/logout`、`/api/fs/list`、`/api/fs/get`、`/api/fs/search`（`global:true` 全局）、`/api/fs/mkdir`、`/api/fs/rename`、`/api/fs/move`、`/api/fs/copy`、`/api/fs/remove`、`/api/fs/dirs`、`/api/fs/put`、`/api/fs/archive/unzip`、`/api/fs/archive/zip`、`/api/fs/ext/list`、`/api/fs/ext/run`、`/api/fs/terminal`、`/api/share/{create,list,get,update,delete,enable,disable}`、`/d/`（下载）、`/p/`（流式代理，支持 Range/HEAD）、`/sd/`（分享直链下载）、`/@s/<id>`（分享访客浏览）、`/@manage`（管理界面）、`/api/sunvale/{status,account,reset-token,port,enabled}`、`/`（内置网页）与 `/ping`。
+- 已实现：`/api/public/settings`、`/api/public/archive_extensions`（可解压后缀表）、`/api/auth/login`（明文）与 `/api/auth/login/hash`（StaticHash）、`/api/me`、`/api/auth/logout`、`/api/fs/list`、`/api/fs/get`、`/api/fs/search`（`global:true` 全局）、`/api/fs/mkdir`、`/api/fs/rename`、`/api/fs/batch_rename`、`/api/fs/regex_rename`、`/api/fs/move`、`/api/fs/copy`、`/api/fs/remove`、`/api/fs/dirs`、`/api/fs/put`、`/api/fs/archive/unzip`、`/api/fs/archive/zip`、`/api/fs/ext/list`、`/api/fs/ext/run`、`/api/fs/terminal`、`/api/share/{create,list,get,update,delete,enable,disable}`、`/d/`（下载）、`/p/`（流式代理，支持 Range/HEAD）、`/sd/`（分享直链下载）、`/@s/<id>`（分享访客浏览）、`/@manage`（管理界面）、`/api/sunvale/{status,account,reset-token,port,enabled}`、`/`（内置网页）与 `/ping`。
 - 未实现：`/api/admin/*` 与异步任务队列（写操作、上传与解压同步完成，即答即毕）——OpenList 客户端中的站点管理类按钮不可用属预期；`/api/fs/archive/list`（归档内预览）未实现，故 `settings` 里 `preview_archives_by_default` 保持 `false`。
 - 所有 `/api/*` 响应恒为 HTTP 200，错误以 body `{"code":...}` 表达；`Authorization` 头携带裸令牌（无 `Bearer` 前缀）；下载签名 `sign = base64url(HMAC-SHA256(令牌, 路径 + ":0")) + ":0"`。
+- 读接口（list/get/search/dirs 及写操作）同时接受 JSON body、表单 body 与查询参数，`path`/`parent` 缺省即虚拟根 `/`；对象 `type` 按 OpenList 默认的 audio/video/image/text 后缀表判定，文件夹 `size` 恒为 0；虚拟根在 `fs/get` 里名为 `root`，视频文件的 `related` 返回同目录同前缀的兄弟文件（字幕/弹幕）。
 
 ## 快捷键
 
@@ -392,7 +395,8 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `imgsize.go` | 图片缩放：统一的两段式降采样（先 ApproxBiLinear 到两倍目标、再用 BiLinear 或大图时 CatmullRom 收尾），缩略图 200px 快约 48 倍、512px 快约 8 倍；预览解码上限 2048px |
 | `status.go` | 状态栏（项目/选中统计、搜索与索引状态，以及画廊与磁盘健康页的专有文案） |
 | `ops.go` | 文件操作：打开、复制、剪切、粘贴、删除、重命名、新建、终端、属性、复制为路径 |
-| `batchrename.go` | 批量重命名对话框：模式展开、实时预览、冲突判定、整批一次撤销 |
+| `renameplan.go` | 重命名引擎（桌面端与远程共用）：模板/正则/查找替换展开、日期占位符、校验、撞名判定、两段式改名 |
+| `batchrename.go` | 批量重命名对话框：模式切换、可拖拽排序与逐行改写的预览、整批一次撤销 |
 | `undo.go` | `Ctrl+Z` 撤销栈（created / moved 两类记录，栈深 64，仅存在于进程内） |
 | `home.go` | 主页（主文件夹）：快速访问磁贴、最近使用的文件 |
 | `gallery.go` | 「画廊」插件：`~/Pictures` 的扫描（按月分组、2000 张上限）、200 像素缩略图解码与 LRU 缓存、网格页与月份节 |
@@ -459,7 +463,8 @@ go test ./...
 - `chrome_nav_test.go` —— 地址栏面包屑间的分隔箭头须与面包屑文字同一行并居中。
 - `clipboard_test.go` —— 文件剪贴板往返（空格、中文、仅绝对路径）与 `canPaste` 的回退判断。
 - `toastalign_test.go` —— 内联重命名的输入/回车提交/`Esc` 取消，以及删除 toast 的撤销按钮。
-- `batchrename_test.go` —— 批量重命名：占位符展开、预览与冲突检测、提交与撤销；单选仍走内联。
+- `batchrename_test.go` —— 批量重命名：占位符展开、拖动排序后的编号重算、逐行改写与恢复、正则/查找替换模式、冲突检测、两段式名字互换、提交与撤销；单选仍走内联。
+- `rename_ui_test.go` —— 真实窗口里的批量重命名对话框：行被布局出来、拖动改变顺序并重算编号、双击进入行内编辑且输入落到该行。
 - `propsdialog_test.go` —— 属性对话框仅单选时打开，文件与文件夹均可（文件夹由后台取事实）。
 - `previewpane_test.go` —— 预览窗格只在左边缘分隔条处接受拖动，宽度随拖动改变并受钳制。
 - `gallery_test.go` —— 画廊扫描（时间倒序、跳过隐藏）、月份键、缩略图解码与缓存生命周期。
@@ -485,7 +490,7 @@ go test ./...
 - `theme_test.go` —— 外观模式：`light`/`dark`/缺省（跟随系统）三种取值与设置页分段控件的对应，未知取值回退跟随系统。
 - `platform_test.go` —— 回收站 `$I` 解析、`.trashinfo` 转义与 `.desktop` 的 `Exec`/`MimeType` 解析。
 - `ext_openwith_test.go` —— 扩展命令配置解析与匹配、占位符展开、`Info.plist` 扩展名解析、快速预览门控。
-- `remote_test.go` —— 远程访问协议回归：登录三态（错误/明文/StaticHash）、`/api/me` 三态、fs 列表/获取/搜索、签名下载（全量/Range/HEAD/过期签名/目录拒绝）、路径防逃逸，及真实端口 + curl 端到端冒烟。
+- `remote_test.go` —— 远程访问协议回归：登录三态（错误/明文/StaticHash）、`/api/me` 三态、fs 列表/获取/搜索（含 GET 与查询参数绑定、缺省路径即根、文件夹 size 为 0、root 名、视频 related）、`type` 后缀表、CORS 预检、签名下载（全量/Range/HEAD/过期签名/目录拒绝）、路径防逃逸，及真实端口 + curl 端到端冒烟。
 - `remote_manage_test.go` —— 管理界面一轮回归：fs 写操作（mkdir/rename/move/copy/remove 进回收站/dirs/put 上传，含中文与转义路径）、分享全链路（管理端 CRUD 与改名、`/@s` 免登录访客流、密码/过期/停用/超次、按 IP 去重计数、`/sd` 下载与 Range/HEAD）、`/api/sunvale/*`（状态、改密后旧登录失效、重置令牌、端口校验、开关幂等与真实启停）、`/@manage` 页面，及真实端口 + curl 全故事线冒烟（登录→上传→分享→访客下载→管理页→状态）。
 - `remote_archive_test.go` —— 远程压缩/解压回归：解压到以归档名命名的子文件夹、重名「- 副本」、`dst_dir` 与批量（个别失败在 `reason` 里说明）、压缩单个文件夹/单个文件/批量的三种命名、zip-slip 拒绝且不留半成品文件夹、来宾 401 与参数校验。
 - `remote_ext_test.go` —— 远程扩展 list/run 端点、终端端点校验与搜索的 `global` 标志。
@@ -518,7 +523,6 @@ go test ./...
 - 7z / rar 解压依赖 `7zz` 或 `unar`；tar.xz 依赖系统 `bsdtar`。
 - 画廊的 HEIC / TIFF / AVIF 缩略图走系统 Quick Look，因此在 Windows / Linux 上这些格式只出现在列表里、没有画面（标准库能解的格式不受影响）。
 - GIF 动画只在**空格快速预览**中播放；预览窗格与图标磁贴始终显示静态首帧，尽管插件卡片上的描述写的是「预览窗格与图标视图」。
-- 批量重命名在主按钮因冲突而置灰时，于模式输入框按 `Enter` 仍会提交——冲突行被跳过、其余照常重命名（与按钮的严格判定不一致）。
 - 磁盘健康的实时曲线与速率是**两次探测的差分**，精度受 3 秒轮询间隔与 SMART 计数粒度限制：它反映趋势，不是基准测试结果。
 - 健康评分是应用自己的判据（见「磁盘健康」），不是厂商或系统的结论；它只解释已读到的指标，读不到的项不计分。
 - 温度、寿命与计数依赖平台与硬件：Apple Silicon 由 `diskutil` 直接给出；Linux 与部分外置盘需要 `smartctl`，缺失时显示「未知」而不是猜一个数字。

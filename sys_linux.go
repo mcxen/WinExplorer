@@ -104,13 +104,6 @@ func sysAudioPlay(path string) (name string, args []string, dur time.Duration, o
 	return "", nil, 0, false
 }
 
-// sysSearchPrune are the directories a 全局 search skips: the virtual
-// filesystems, which hold no files anyone means to find and are endless or
-// costly to walk, and the mount points the volume roots walk themselves.
-func sysSearchPrune() []string {
-	return []string{"/proc", "/sys", "/dev", "/run", "/media", "/mnt"}
-}
-
 func sysHiddenName(_ string, e os.DirEntry) bool { return strings.HasPrefix(e.Name(), ".") }
 
 // sysVolumes lists the fixed root and the mounted media.

@@ -1,40 +1,27 @@
 package main
 
 import (
-	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 
+	"sunvale/internal/search"
 	"sunvale/internal/searchquery"
 )
 
-// search.go is Everything's experience on Explorer's engine: a query walks the
-// tab's folder — or, in the 全局 scope, every mounted volume — in the
-// background and streams the hits to the pane as they are found, so results
-// appear while the walk is still running instead of after it. The query
-// language (searchquery.go) is Everything's semantics this engine can
-// honestly answer: case:, file:, folder:, path:, ext:, quoted phrases and
-// space-separated AND terms.
+// search.go connects the reusable search engine to a tab's frame-owned state.
+// A query walks the tab's folder — or, in the 全局 scope, every mounted volume —
+// in the background and streams hits to the pane as they are found.
 const (
-	searchMaxResults = 5000
+	searchMaxResults = search.DefaultMaxResults
 	searchTimeout    = 8 * time.Second
 	// searchGlobalTimeout is the 全局 scope's deadline: a whole machine is many
 	// times the tree a folder walks. The walk streams what it finds meanwhile,
 	// and a new query, an empty box or a closed tab cancels it.
 	searchGlobalTimeout = 30 * time.Second
-	// searchFlushEvery is how often a running walk reports its batch of new
-	// hits to the pane: often enough to feel instant, seldom enough that the
-	// repaints cost nothing.
-	searchFlushEvery = 150 * time.Millisecond
-	// searchWalkers is how many roots the 全局 scope walks at once: one volume
-	// does not hold back another's hits, and the volumes are independent trees.
-	searchWalkers = 8
 )
 
 // searchScope is what a query covers: the tab's folder and its subtree, or
@@ -65,10 +52,8 @@ type searchState struct {
 
 // frameQueue is how a background search reaches the state it fills in: the
 // search's own goroutine writes nothing but the queue, and the frame applies
-// what it finds there. Running, the batch lands on the main thread, where the
-// frame runs, so the posts are serialized already; headless — the tests'
-// ui.Tester, which has no main thread — this queue is what keeps two goroutines
-// off one struct.
+// what it finds there. Running, the batch lands on the main thread; headless,
+// this queue keeps two goroutines off one struct.
 type frameQueue struct {
 	mu  sync.Mutex
 	ops []func()
@@ -130,7 +115,9 @@ func (a *App) updateSearch() {
 	query := searchquery.Parse(q)
 	deadline := time.Now().Add(searchDeadline(t.queryScope))
 	go func() {
-		streamMatches(roots, query, hidden, deadline, func(batch []Entry, more bool) {
+		search.Stream(roots, query, search.Options{
+			Hidden: hidden, Deadline: deadline, Max: searchMaxResults,
+		}, func(batch []Entry, more bool) {
 			apply := func() {
 				if !a.ownsTab(tab) || strings.TrimSpace(tab.query) != q || tab.search.scope != scope || tab.search.query != q {
 					return // a newer query, another scope, or the tab closed
@@ -227,167 +214,15 @@ func (a *App) activeSearchQuery() searchquery.Query {
 	return t.hlCache.parsed
 }
 
-// streamMatches walks every root and hands the entries that match query to
-// emit in batches: at least every searchFlushEvery while the walk runs, and
-// always once at the end with more false, so the caller learns the walk is
-// over even when the last batch is empty. The roots walk at once, up to
-// searchWalkers at a time, so the hits of a fast volume are not held back by a
-// slow one — the whole-machine feel of Everything, on a walk instead of an
-// index. The rules are the ones a subtree walk had: searchMaxResults hits, the
-// deadline, hidden entries skipped unless asked, unreadable folders skipped
-// rather than fatal.
-func streamMatches(roots []string, query searchquery.Query, hidden bool, deadline time.Time, emit func(batch []Entry, more bool)) {
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
-	defer cancel()
-
-	found := make(chan Entry, 256)
-	var (
-		wg      sync.WaitGroup
-		walkers = make(chan struct{}, searchWalkers)
-		total   atomic.Int64
-	)
-	for _, root := range roots {
-		wg.Add(1)
-		walkers <- struct{}{} // at most searchWalkers roots walk at once
-		go func(root string) {
-			defer wg.Done()
-			defer func() { <-walkers }()
-			walkRoot(ctx, root, query, hidden, found, &total)
-		}(root)
-	}
-	go func() {
-		wg.Wait()
-		close(found)
-	}()
-
-	// One goroutine emits, in order: the walkers only hand entries over.
-	var batch []Entry
-	ticker := time.NewTicker(searchFlushEvery)
-	defer ticker.Stop()
-	for {
-		select {
-		case e, ok := <-found:
-			if !ok {
-				emit(batch, false)
-				return
-			}
-			batch = append(batch, e)
-		case <-ticker.C:
-			if len(batch) > 0 {
-				emit(batch, true)
-				batch = batch[:0]
-			}
-		}
-	}
-}
-
-// walkRoot walks one root, sending every matching entry to found. The cap is
-// shared with the other roots and checked against the shared total, so a walk
-// that reached it stops everywhere; the deadline comes in through ctx.
-func walkRoot(ctx context.Context, root string, query searchquery.Query, hidden bool, found chan<- Entry, total *atomic.Int64) {
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if path == root {
-				return err // the root itself is unreadable: this walk is over
-			}
-			return nil // unreadable folder: skip it, keep walking
-		}
-		if ctx.Err() != nil || total.Load() >= searchMaxResults {
-			return filepath.SkipAll
-		}
-		name := d.Name()
-		if path != root {
-			if d.IsDir() && searchPruneDir(path) {
-				return filepath.SkipDir
-			}
-			if strings.HasPrefix(name, ".") && !hidden {
-				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-		}
-		isDir := d.IsDir()
-		ext := ""
-		if !isDir {
-			ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
-		}
-		info := searchquery.MatchInfo{IsDir: isDir, Ext: ext, Size: -1}
-		if !isDir {
-			if dInfo, err := d.Info(); err == nil {
-				info.Size = dInfo.Size()
-				info.ModTime = dInfo.ModTime()
-			}
-		}
-		if info.IsDir {
-			info.Size = 0
-		}
-		if !query.Matches(name, path, info) {
-			return nil
-		}
-		e := searchEntry(path, d)
-		if e.Path == "" {
-			return nil
-		}
-		if total.Add(1) > searchMaxResults {
-			return filepath.SkipAll
-		}
-		select {
-		case found <- e:
-		case <-ctx.Done():
-			return filepath.SkipAll
-		}
-		return nil
-	})
-}
-
-// searchPruneDir reports whether a walk skips this directory: the platform's
-// virtual filesystems and the mount points the volume roots cover themselves
-// (sysSearchPrune). Walking /proc on Linux, or the volumes under /Volumes on
-// macOS a second time, is either endless or plain duplication.
-func searchPruneDir(path string) bool {
-	for _, p := range sysSearchPrune() {
-		if path == p {
-			return true
-		}
-	}
-	return false
-}
-
-// walkMatches is streamMatches collected at once, for callers that want the
-// whole answer in one piece: the remote search endpoint and the tests.
+// walkMatches adapts the reusable one-root walk to the remote endpoint and
+// feature tests that already speak in the application's Entry alias.
 func walkMatches(root, rawQuery string, hidden bool, deadline time.Time) []Entry {
-	query := searchquery.Parse(rawQuery)
-	var out []Entry
-	streamMatches([]string{root}, query, hidden, deadline, func(batch []Entry, more bool) {
-		out = append(out, batch...)
-	})
-	return out
+	return search.Walk(root, rawQuery, hidden, deadline)
 }
 
-// searchEntry builds an Entry for a hit, resolving symlinked dirs.
-func searchEntry(path string, d os.DirEntry) Entry {
-	isDir := d.IsDir()
-	if !isDir && d.Type()&os.ModeSymlink != 0 {
-		if st, err := os.Stat(path); err == nil && st.IsDir() {
-			isDir = true
-		}
-	}
-	e := Entry{
-		Name:  d.Name(),
-		Path:  path,
-		IsDir: isDir,
-		Dir:   filepath.Dir(path),
-	}
-	if info, err := d.Info(); err == nil {
-		e.Size = info.Size()
-		e.ModTime = info.ModTime()
-	}
-	if !e.IsDir {
-		e.Ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(e.Name), "."))
-	}
-	return e
-}
+// searchPruneDir remains a compatibility bridge for the index code that is
+// still in this package; the next refactor step moves that code as well.
+func searchPruneDir(path string) bool { return search.PruneDir(path) }
 
 // searchStatusLabel is the status bar's search line, Everything's shape: the
 // count, the elapsed seconds while the walk runs or once it finished, and the

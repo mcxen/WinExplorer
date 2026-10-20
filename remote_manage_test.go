@@ -28,11 +28,28 @@ import (
 // homePath so /api/sunvale/status sees the volume, and a clean
 // share-visitor dedup window — the access map is global and would otherwise
 // leak between tests.
+// loadStateFile reads a state file by its own path, for tests whose store
+// writes beside the home folder rather than under it.
+func loadStateFile(path string) *persistedState {
+	st := &persistedState{path: path}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return st
+	}
+	if err := json.Unmarshal(data, st); err != nil {
+		return &persistedState{path: path}
+	}
+	st.path = path
+	return st
+}
+
 func newRemoteManageEnv(t *testing.T) *remoteTestEnv {
 	e := newRemoteTestEnv(t)
-	// The shares persist through state.json, which takes a store with a
-	// path: loadState is the one that reads and writes the isolated HOME.
-	e.a.store = loadState()
+	// Shares persist through a store with a path, so the reloading test can
+	// read them back. The file lives beside the home folder rather than
+	// under it: loadState would create Library/Application Support inside
+	// the home, and the fs tests list that home's root and would see it.
+	e.a.store = &persistedState{path: filepath.Join(t.TempDir(), "state.json")}
 	e.a.homePath = e.home
 	remoteShareAccessMu.Lock()
 	remoteShareAccess = map[string]time.Time{}
@@ -562,9 +579,9 @@ func TestRemoteShareCreate(t *testing.T) {
 		t.Fatalf("bad expires: code %d (%s), want 400 invalid expires", rr.Code, rr.Message)
 	}
 
-	// the share persists: the state file under the isolated HOME reloads
-	// with the share intact
-	reloaded := loadState()
+	// the share persists: the state file the store writes reloads with the
+	// share intact
+	reloaded := loadStateFile(e.a.store.path)
 	if len(reloaded.Shares) != 2 || reloaded.Shares[0].ID != "自定义-1" || reloaded.Shares[1].ID != s.ID {
 		t.Fatalf("reloaded shares = %+v", reloaded.Shares)
 	}
@@ -1498,7 +1515,7 @@ func TestRemoteManageSmoke(t *testing.T) {
 }
 
 // TestRemoteBatchRename covers /api/fs/batch_rename and /api/fs/regex_rename:
-// the endpoint the OpenList frontend calls, sharing renameplan.go's engine
+// the endpoint the OpenList frontend calls, sharing internal/rename's engine
 // with the desktop dialog.
 func TestRemoteBatchRename(t *testing.T) {
 	e := newRemoteManageEnv(t)

@@ -1,4 +1,4 @@
-package main
+package rename
 
 import (
 	"fmt"
@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-// renameplan.go is the rename engine behind every batch rename surface: the
-// desktop's 批量重命名 dialog (batchrename.go) and the remote server's
-// /api/fs/batch_rename (remote_manage.go). It owns what a mode expands to,
-// what makes a target invalid, which targets collide, and how a plan is
-// applied to disk — including the two-pass move a name swap needs — so the
-// two surfaces can never disagree about what will happen.
+// Package rename is the rename engine behind every batch rename surface:
+// the desktop's 批量重命名 dialog and the remote server's
+// /api/fs/batch_rename. It owns what a mode expands to, what makes a target
+// invalid, which targets collide, and how a plan is applied to disk —
+// including the two-pass move a name swap needs — so the two surfaces can
+// never disagree about what will happen.
 //
 // Three modes cover what the OpenList frontend offers plus the template this
 // app had first:
@@ -27,47 +27,47 @@ import (
 // as OpenList's frontend does for its regex mode. Rows may also be edited by
 // hand: such a row keeps what the user typed until it is reset.
 
-// renameMode is how a plan names its items.
-type renameMode int
+// Mode is how a plan names its items.
+type Mode int
 
 const (
-	renameModeTemplate renameMode = iota
-	renameModeRegex
-	renameModeFindReplace
+	ModeTemplate Mode = iota
+	ModeRegex
+	ModeFindReplace
 )
 
-// renameModeLabel names a mode for the dialog's chips, in the order the chips
+// ModeLabel names a mode for the dialog's chips, in the order the chips
 // show them.
-func renameModeLabel(m renameMode) string {
+func ModeLabel(m Mode) string {
 	switch m {
-	case renameModeRegex:
+	case ModeRegex:
 		return "正则"
-	case renameModeFindReplace:
+	case ModeFindReplace:
 		return "查找替换"
 	}
 	return "模板"
 }
 
-// renameOptions is the dialog's inputs, as the engine sees them. Pattern is
+// Options is the dialog's inputs, as the engine sees them. Pattern is
 // the template, the regexp or the literal to find, depending on Mode;
 // Replace is only used by the two replacement modes.
-type renameOptions struct {
-	Mode    renameMode
+type Options struct {
+	Mode    Mode
 	Pattern string
 	Replace string
 	Start   int
 }
 
-// renameRow is one item of a plan: where it is now, what it should be
+// Row is one item of a plan: where it is now, what it should be
 // called, and why that name cannot be used. Marking the row — not dropping
 // it — is what lets the dialog show every conflict before anything moves.
-type renameRow struct {
+type Row struct {
 	Name    string
 	Path    string
 	IsDir   bool
 	Ext     string // lower, no dot; empty for folders
 	ModTime time.Time
-	Created time.Time
+	Created time.Time // the item's birth time, when the caller has one
 
 	// To is the target name. Manual rows were typed by the user and the
 	// pattern leaves them alone until the row is reset.
@@ -78,9 +78,9 @@ type renameRow struct {
 	Err string
 }
 
-// renameFixableRows reports how many rows would actually be renamed: those
+// FixableRows reports how many rows would actually be renamed: those
 // without an error whose name really changes.
-func renameFixableRows(rows []renameRow) int {
+func FixableRows(rows []Row) int {
 	n := 0
 	for _, r := range rows {
 		if r.Err == "" && r.To != "" && r.To != r.Name {
@@ -90,48 +90,34 @@ func renameFixableRows(rows []renameRow) int {
 	return n
 }
 
-// renameRowsFromEntries makes a plan out of the selection, in view order —
-// which is the order the numbers run in, and the order a drag changes.
-func renameRowsFromEntries(entries []Entry) []renameRow {
-	rows := make([]renameRow, len(entries))
-	for i, e := range entries {
-		rows[i] = renameRow{
-			Name:    e.Name,
-			Path:    e.Path,
-			IsDir:   e.IsDir,
-			Ext:     e.Ext,
-			ModTime: e.ModTime,
-		}
-		if !e.IsDir && e.Path != "" {
-			if bt, err := birthTime(e.Path); err == nil {
-				rows[i].Created = bt
-			}
-		}
-	}
-	return rows
-}
-
-// renameTarget expands the options over one row, n being its number.
-func renameTarget(o renameOptions, r renameRow, n int) string {
+// target expands the options over one row, n being its number.
+func target(o Options, r Row, n int) string {
 	var to string
 	switch o.Mode {
-	case renameModeRegex:
+	case ModeRegex:
 		re, err := regexp.Compile(o.Pattern)
 		if err != nil {
-			// An invalid regexp is reported by renameReplan, which sees the
+			// An invalid regexp is reported by Replan, which sees the
 			// error; every row keeps its name here.
 			return r.Name
 		}
 		to = re.ReplaceAllString(r.Name, o.Replace)
-	case renameModeFindReplace:
+	case ModeFindReplace:
 		if o.Pattern == "" {
 			return r.Name
 		}
 		to = strings.ReplaceAll(r.Name, o.Pattern, o.Replace)
 	default:
-		to = expandRenamePattern(o.Pattern, n, Entry{Name: r.Name, IsDir: r.IsDir, Ext: r.Ext})
+		to = expandPattern(o.Pattern, n, item{Name: r.Name, IsDir: r.IsDir})
 	}
-	return renameDateTokens(to, r)
+	return DateTokens(to, r)
+}
+
+// item is the name a template expands: a folder keeps its whole name as
+// the stem, a file loses its extension.
+type item struct {
+	Name  string
+	IsDir bool
 }
 
 // expandRenamePattern fills the template's placeholders for one item:
@@ -139,7 +125,7 @@ func renameTarget(o renameOptions, r renameRow, n int) string {
 //	{name}  the full original name        {stem} the name without extension
 //	{ext}   the extension without a dot   {n}    the item's number
 //	{n:3}   the number padded to 3 digits
-func expandRenamePattern(pattern string, n int, e Entry) string {
+func expandPattern(pattern string, n int, e item) string {
 	stem := e.Name
 	ext := ""
 	if !e.IsDir {
@@ -186,9 +172,9 @@ func atoiOr(s string, fallback int) int {
 	return n
 }
 
-// renameDateTokens fills the {created_*} and {modified_*} placeholders,
+// DateTokens fills the {created_*} and {modified_*} placeholders,
 // OpenList's frontend tokens, zero-padded as it pads them.
-func renameDateTokens(s string, r renameRow) string {
+func DateTokens(s string, r Row) string {
 	if !strings.Contains(s, "{created_") && !strings.Contains(s, "{modified_") {
 		return s
 	}
@@ -215,10 +201,10 @@ func renameDateTokens(s string, r renameRow) string {
 	return s
 }
 
-// renameValidateName reports why name cannot be a target of its folder, or
+// ValidateName reports why name cannot be a target of its folder, or
 // "" when it can. The rule is the protocol's checkRelativePath: one path
 // component, never dot or dot-dot, no separators, not empty.
-func renameValidateName(name string) string {
+func ValidateName(name string) string {
 	switch {
 	case strings.TrimSpace(name) == "":
 		return "名称不能为空"
@@ -230,13 +216,13 @@ func renameValidateName(name string) string {
 	return ""
 }
 
-// renameReplan recomputes every pattern-driven target and re-marks the rows
+// Replan recomputes every pattern-driven target and re-marks the rows
 // as invalid or colliding. Manually edited rows keep what the user typed;
 // dir is the folder the targets land in, and empty skips the on-disk clash
 // check (the remote endpoint validates against the disk it will write to).
-func renameReplan(rows []renameRow, o renameOptions, dir string) {
+func Replan(rows []Row, o Options, dir string) {
 	badRegex := false
-	if o.Mode == renameModeRegex {
+	if o.Mode == ModeRegex {
 		if _, err := regexp.Compile(o.Pattern); err != nil {
 			badRegex = true
 		}
@@ -249,7 +235,7 @@ func renameReplan(rows []renameRow, o renameOptions, dir string) {
 				r.Err = "正则表达式无效"
 				continue
 			}
-			r.To = renameTarget(o, *r, o.Start+i)
+			r.To = target(o, *r, o.Start+i)
 		}
 		if r.Err != "" {
 			continue
@@ -257,7 +243,7 @@ func renameReplan(rows []renameRow, o renameOptions, dir string) {
 		if r.To == r.Name {
 			continue // unchanged: neither invalid nor a clash
 		}
-		if why := renameValidateName(r.To); why != "" {
+		if why := ValidateName(r.To); why != "" {
 			r.Err = why
 		}
 	}
@@ -301,6 +287,10 @@ func renameReplan(rows []renameRow, o renameOptions, dir string) {
 	}
 }
 
+// Move is one rename that landed: From is where the item was, To where it
+// is. The caller turns the slice into its own undo record.
+type Move struct{ From, To string }
+
 // renameApply performs the plan's clean rows in dir and reports what moved,
 // plus the original names that failed. A target naming another row's source
 // (a swap, or a rotation) goes through a temporary name first, so a plan can
@@ -308,7 +298,7 @@ func renameReplan(rows []renameRow, o renameOptions, dir string) {
 //
 // The caller owns the undo record: the desktop dialog pushes moved as one
 // undo op, the remote endpoint forgets it.
-func renameApply(dir string, rows []renameRow) (moved []undoMove, failed []string) {
+func Apply(dir string, rows []Row) (moved []Move, failed []string) {
 	type move struct{ from, to, name string }
 	var moves []move
 	sources := make(map[string]bool, len(rows))
@@ -340,7 +330,7 @@ func renameApply(dir string, rows []renameRow) (moved []undoMove, failed []strin
 			failed = append(failed, m.name)
 			continue
 		}
-		moved = append(moved, undoMove{From: m.from, To: m.to})
+		moved = append(moved, Move{From: m.from, To: m.to})
 	}
 	if len(deferred) == 0 {
 		return moved, failed
@@ -365,7 +355,7 @@ func renameApply(dir string, rows []renameRow) (moved []undoMove, failed []strin
 			failed = append(failed, p.m.name)
 			continue
 		}
-		moved = append(moved, undoMove{From: p.m.from, To: p.m.to})
+		moved = append(moved, Move{From: p.m.from, To: p.m.to})
 	}
 	return moved, failed
 }

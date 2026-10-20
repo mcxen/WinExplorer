@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sunvale/internal/searchquery"
 )
 
 // search_stream_test.go drives the streaming walk and the query language
@@ -21,7 +23,7 @@ func streamAll(root, query string, hidden bool, deadline time.Time) (hits []Entr
 
 // streamRoots is streamAll over all the roots of a 全局 walk at once.
 func streamRoots(roots []string, query string, hidden bool, deadline time.Time) (hits []Entry, totals []int) {
-	q := parseSearchQuery(query)
+	q := searchquery.Parse(query)
 	streamMatches(roots, q, hidden, deadline, func(batch []Entry, more bool) {
 		hits = append(hits, batch...)
 		totals = append(totals, len(hits))

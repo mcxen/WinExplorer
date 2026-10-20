@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sunvale/internal/rename"
 )
 
 // remote_manage.go is the write side of the remote server's
@@ -197,7 +199,7 @@ func (a *App) remoteHandleMkdir(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "bad request")
 		return
 	}
-	disk, ok := remoteDiskPath(req.Path)
+	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return
@@ -247,7 +249,7 @@ func (a *App) remoteHandleRename(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 403, "invalid name")
 		return
 	}
-	disk, ok := remoteDiskPath(req.Path)
+	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return
@@ -282,7 +284,7 @@ type remoteBatchRenameReq struct {
 
 // remoteHandleBatchRename answers POST /api/fs/batch_rename: one src_dir
 // with explicit src_name → new_name pairs, the endpoint the OpenList
-// frontend's batch rename calls. The plan runs through renameplan.go, the
+// frontend's batch rename calls. The plan runs through internal/rename, the
 // same engine the desktop dialog uses, so its validation, its clash rules
 // and its two-pass name swap are shared rather than reimplemented.
 func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +301,7 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "Empty file names")
 		return
 	}
-	dir, ok := remoteDiskPath(req.SrcDir)
+	dir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return
@@ -308,7 +310,7 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 500, "object not found")
 		return
 	}
-	rows := make([]renameRow, 0, len(req.RenameObjects))
+	rows := make([]rename.Row, 0, len(req.RenameObjects))
 	for _, o := range req.RenameObjects {
 		if o.SrcName == "" || o.NewName == "" {
 			continue // the protocol skips empty pairs, as OpenList does
@@ -317,12 +319,12 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 			remoteErr(w, 403, "using relative path is not allowed")
 			return
 		}
-		rows = append(rows, renameRow{Name: o.SrcName, To: o.NewName})
+		rows = append(rows, rename.Row{Name: o.SrcName, To: o.NewName})
 	}
 	// Every target must be a bare name; a bad one fails the whole request,
 	// as OpenList's per-object check does, rather than applying the rest.
 	for _, row := range rows {
-		if why := renameValidateName(row.To); why != "" {
+		if why := rename.ValidateName(row.To); why != "" {
 			remoteErr(w, 403, "using relative path is not allowed")
 			return
 		}
@@ -333,7 +335,7 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, code, msg)
 		return
 	}
-	moved, failed := renameApply(dir, rows)
+	moved, failed := rename.Apply(dir, rows)
 	if len(failed) > 0 {
 		remoteErr(w, 500, "failed to rename: "+strings.Join(failed, ", "))
 		return
@@ -365,7 +367,7 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 500, "invalid regexp")
 		return
 	}
-	dir, ok := remoteDiskPath(req.SrcDir)
+	dir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return
@@ -375,7 +377,7 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 500, "object not found")
 		return
 	}
-	var rows []renameRow
+	var rows []rename.Row
 	for _, de := range entries {
 		name := de.Name()
 		if !re.MatchString(name) {
@@ -385,10 +387,10 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		row := renameRow{Name: name, IsDir: de.IsDir(), ModTime: info.ModTime()}
+		row := rename.Row{Name: name, IsDir: de.IsDir(), ModTime: info.ModTime()}
 		row.To = re.ReplaceAllString(name, req.NewNameRegex)
-		row.To = renameDateTokens(row.To, row)
-		if why := renameValidateName(row.To); why != "" {
+		row.To = rename.DateTokens(row.To, row)
+		if why := rename.ValidateName(row.To); why != "" {
 			remoteErr(w, 403, "using relative path is not allowed")
 			return
 		}
@@ -402,7 +404,7 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, code, msg)
 		return
 	}
-	moved, failed := renameApply(dir, rows)
+	moved, failed := rename.Apply(dir, rows)
 	if len(failed) > 0 {
 		remoteErr(w, 500, "failed to rename: "+strings.Join(failed, ", "))
 		return
@@ -415,7 +417,7 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 // exist, and no target is already taken by something that is not one of the
 // sources moving away. It answers the protocol's code and message, zero for
 // a plan that can run.
-func remoteRenameCheck(dir string, rows []renameRow) (int, string) {
+func remoteRenameCheck(dir string, rows []rename.Row) (int, string) {
 	sources := make(map[string]bool, len(rows))
 	for _, r := range rows {
 		sources[strings.ToLower(r.Name)] = true
@@ -549,12 +551,12 @@ func (a *App) remoteBatchReq(w http.ResponseWriter, r *http.Request) (remoteBatc
 // disk and requires both to be folders, so the batch runs against real
 // directories. ok is false once the protocol error has been written.
 func (a *App) remoteBatchDirs(w http.ResponseWriter, req *remoteBatchReq) (src, dst string, ok bool) {
-	srcDir, ok := remoteDiskPath(req.SrcDir)
+	srcDir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return "", "", false
 	}
-	dstDir, ok := remoteDiskPath(req.DstDir)
+	dstDir, ok := a.remoteDiskPath(req.DstDir)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return "", "", false
@@ -590,7 +592,7 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "Empty file names")
 		return
 	}
-	dirDisk, ok := remoteDiskPath(req.Dir)
+	dirDisk, ok := a.remoteDiskPath(req.Dir)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return
@@ -634,7 +636,7 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "bad request")
 		return
 	}
-	disk, ok := remoteDiskPath(req.Path)
+	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return
@@ -690,7 +692,7 @@ func (a *App) remoteHandlePut(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "bad request")
 		return
 	}
-	disk, ok := remoteDiskPath(vpath)
+	disk, ok := a.remoteDiskPath(vpath)
 	if !ok || remoteFSCleanVPath(vpath) == "/" {
 		remoteErr(w, 500, "object not found")
 		return

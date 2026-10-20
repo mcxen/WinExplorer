@@ -10,6 +10,8 @@ import (
 	"github.com/oneo-me/onevra/source/components"
 
 	"sunvale/internal/netfs"
+
+	"sunvale/internal/searchquery"
 )
 
 const (
@@ -929,17 +931,17 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 // searchNameText is a name with the query's hits marked, Everything's yellow
 // runs, or the plain name when the query marks nothing in it. The caller lays
 // the element out — a row grows it, a tile centers it.
-func searchNameText(c *ui.Context, q searchQuery, name string, font float32) ui.Element {
-	if spans := q.highlight(name); markedHit(spans) {
+func searchNameText(c *ui.Context, q searchquery.Query, name string, font float32) ui.Element {
+	if spans := q.Highlight(name); markedHit(spans) {
 		return ui.RichText(c, searchHitSpans(spans, font)...)
 	}
 	return ui.Text(c, name).FontSize(font).TextColor(colorText())
 }
 
 // markedHit reports whether the highlight found anything to mark.
-func markedHit(spans []highlightSpan) bool {
+func markedHit(spans []searchquery.Span) bool {
 	for _, s := range spans {
-		if s.hit {
+		if s.Hit {
 			return true
 		}
 	}
@@ -950,14 +952,14 @@ func markedHit(spans []highlightSpan) bool {
 // carry the hit background, plain runs the ordinary text color. The hit runs
 // keep the text color: on the light theme the amber is pale enough to carry
 // dark text, and on the dark theme it is dark enough for light text.
-func searchHitSpans(spans []highlightSpan, font float32) []ui.Span {
+func searchHitSpans(spans []searchquery.Span, font float32) []ui.Span {
 	out := make([]ui.Span, 0, len(spans))
 	for _, s := range spans {
-		if s.text == "" {
+		if s.Text == "" {
 			continue
 		}
-		sp := ui.Span{Text: s.text, Size: font, Color: colorText()}
-		if s.hit {
+		sp := ui.Span{Text: s.Text, Size: font, Color: colorText()}
+		if s.Hit {
 			sp.Background = colorHit()
 		}
 		out = append(out, sp)

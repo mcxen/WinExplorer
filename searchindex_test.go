@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"sunvale/internal/searchquery"
 )
 
 // searchindex_test.go drives the index both ways: the engine on its own — a
@@ -118,7 +120,7 @@ func TestSearchIndexWalksAndAnswers(t *testing.T) {
 
 	hit := func(query string, hidden bool) []Entry {
 		t.Helper()
-		hits, ok := searchIndexQuery([]string{root}, parseSearchQuery(query), hidden)
+		hits, ok := searchIndexQuery([]string{root}, searchquery.Parse(query), hidden)
 		if !ok {
 			t.Fatalf("the index did not answer %q over its own tree", query)
 		}
@@ -165,24 +167,24 @@ func TestSearchIndexOnlyAnswersWhatItCovers(t *testing.T) {
 	root, other := t.TempDir(), t.TempDir()
 	writeFiles(t, root, map[string]string{"here.txt": ""})
 
-	if _, ok := searchIndexQuery([]string{root}, parseSearchQuery("here"), false); ok {
+	if _, ok := searchIndexQuery([]string{root}, searchquery.Parse("here"), false); ok {
 		t.Fatal("the index answered while it was off")
 	}
 	buildTestIndex(t, root)
-	if _, ok := searchIndexQuery([]string{other}, parseSearchQuery("here"), false); ok {
+	if _, ok := searchIndexQuery([]string{other}, searchquery.Parse("here"), false); ok {
 		t.Fatal("the index answered for a folder it never walked")
 	}
-	hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("here"), false)
+	hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("here"), false)
 	if !ok || len(hits) != 1 {
 		t.Fatalf("a covered folder: %v hits, answered %v", len(hits), ok)
 	}
-	if hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("nothing"), false); !ok || len(hits) != 0 {
+	if hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("nothing"), false); !ok || len(hits) != 0 {
 		t.Fatalf("a covered folder with no hits: %v hits, answered %v", len(hits), ok)
 	}
 	// A root that holds the indexed one answers for it: the index covers a
 	// folder's whole subtree, not only the folder itself.
 	parent := filepath.Dir(root)
-	if hits, ok := searchIndexQuery([]string{parent}, parseSearchQuery("here"), false); !ok || len(hits) != 1 {
+	if hits, ok := searchIndexQuery([]string{parent}, searchquery.Parse("here"), false); !ok || len(hits) != 1 {
 		t.Fatalf("the parent folder came back with %v hits, answered %v", len(hits), ok)
 	}
 	// A root the index holds nothing under is somebody else's to walk.
@@ -191,7 +193,7 @@ func TestSearchIndexOnlyAnswersWhatItCovers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(sibling)
-	if _, ok := searchIndexQuery([]string{sibling}, parseSearchQuery("here"), false); ok {
+	if _, ok := searchIndexQuery([]string{sibling}, searchquery.Parse("here"), false); ok {
 		t.Fatal("the index answered for a sibling folder it never walked")
 	}
 }
@@ -212,11 +214,11 @@ func TestSearchIndexCacheRoundTrip(t *testing.T) {
 	// Emptied, as a fresh process starts: the cache is the only copy.
 	clearSearchIndex()
 	enableSearchIndex()
-	if hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("kept"), false); ok {
+	if hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("kept"), false); ok {
 		t.Fatalf("an empty index answered with %v", namesOf(hits))
 	}
 	loadSearchIndex()
-	hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("kept"), false)
+	hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("kept"), false)
 	if !ok || len(hits) != 1 {
 		t.Fatalf("the loaded cache has %v hits (answered %v)", len(hits), ok)
 	}
@@ -233,7 +235,7 @@ func TestSearchIndexCacheRoundTrip(t *testing.T) {
 		t.Fatalf("the cache forgot its own state: complete=%v built=%v", st.complete, st.built)
 	}
 	// A folder the walk saw is in the cache as a folder.
-	if hits, _ := searchIndexQuery([]string{root}, parseSearchQuery("folder:sub"), false); len(hits) != 1 || !hits[0].IsDir {
+	if hits, _ := searchIndexQuery([]string{root}, searchquery.Parse("folder:sub"), false); len(hits) != 1 || !hits[0].IsDir {
 		t.Fatalf("the folder did not survive the round trip: %v", namesOf(hits))
 	}
 	// A cache from another format is ignored, as a corrupt state.json is.
@@ -243,7 +245,7 @@ func TestSearchIndexCacheRoundTrip(t *testing.T) {
 	clearSearchIndex()
 	enableSearchIndex()
 	loadSearchIndex()
-	if hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("kept"), false); ok {
+	if hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("kept"), false); ok {
 		t.Fatalf("a foreign cache version answered with %v", namesOf(hits))
 	}
 }
@@ -291,16 +293,16 @@ func TestSearchIndexNoteFollowsTheListings(t *testing.T) {
 		return Entry{Name: name, Path: path(name), Size: size, ModTime: time.Now()}
 	}
 	searchIndexNote(root, []Entry{entry("gone.txt", 1), entry("kept.txt", 2)})
-	if hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("gone"), false); !ok || len(hits) != 1 {
+	if hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("gone"), false); !ok || len(hits) != 1 {
 		t.Fatalf("the listing did not reach the index: %v hits, answered %v", len(hits), ok)
 	}
 	// The user deletes gone.txt and creates fresh.txt; the next listing is the
 	// index's word on this folder.
 	searchIndexNote(root, []Entry{entry("kept.txt", 2), entry("fresh.txt", 3)})
-	if hits, _ := searchIndexQuery([]string{root}, parseSearchQuery("gone"), false); len(hits) != 0 {
+	if hits, _ := searchIndexQuery([]string{root}, searchquery.Parse("gone"), false); len(hits) != 0 {
 		t.Fatalf("a deleted file stayed in the index: %v", namesOf(hits))
 	}
-	hits, _ := searchIndexQuery([]string{root}, parseSearchQuery("fresh"), false)
+	hits, _ := searchIndexQuery([]string{root}, searchquery.Parse("fresh"), false)
 	if len(hits) != 1 || hits[0].Size != 3 {
 		t.Fatalf("a created file is not in the index: %v", namesOf(hits))
 	}
@@ -333,7 +335,7 @@ func TestStartSearchIndexWarmsFromTheCache(t *testing.T) {
 	if searchIndexStale() {
 		t.Fatal("a fresh, complete cache reads as stale")
 	}
-	hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("cached"), false)
+	hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("cached"), false)
 	if !ok || len(hits) != 1 {
 		t.Fatalf("the launched index answered %v with %v hits", ok, len(hits))
 	}
@@ -386,7 +388,7 @@ func TestFlushSearchIndexSavesTheWalkInFlight(t *testing.T) {
 	clearSearchIndex()
 	enableSearchIndex()
 	loadSearchIndex()
-	if hits, ok := searchIndexQuery([]string{root}, parseSearchQuery("half"), false); !ok || len(hits) != 1 {
+	if hits, ok := searchIndexQuery([]string{root}, searchquery.Parse("half"), false); !ok || len(hits) != 1 {
 		t.Fatalf("the flushed cache has %v hits (answered %v)", len(hits), ok)
 	}
 

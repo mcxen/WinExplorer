@@ -7,6 +7,8 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
+
+	"sunvale/internal/rename"
 )
 
 // batchrename.go is Explorer's rename of many selected items at once: with a
@@ -19,18 +21,18 @@ import (
 // it alone until the row is reset, so the pattern prepares the batch and the
 // hand fixes what the pattern cannot say.
 //
-// The rule itself is renameplan.go's, shared with the remote server's
+// The rule itself is internal/rename's, shared with the remote server's
 // batch_rename endpoint, so the two never disagree about what a plan does.
 
 // batchRenameState is the dialog's inputs and its live preview.
 type batchRenameState struct {
 	open     bool
-	mode     renameMode
+	mode     rename.Mode
 	pattern  string
 	replace  string
 	start    int
 	startBuf string
-	rows     []renameRow
+	rows     []rename.Row
 	// editing is the index of the row whose target name is being typed, -1
 	// for none. focus is the row the keyboard is on, which ↑/↓ move.
 	editing int
@@ -63,7 +65,7 @@ func (a *App) doRenameStart() {
 func (a *App) batchOpen(sel []Entry) {
 	a.batch = batchRenameState{
 		open:     true,
-		mode:     renameModeTemplate,
+		mode:     rename.ModeTemplate,
 		pattern:  "{n} {name}",
 		start:    1,
 		startBuf: "1",
@@ -75,8 +77,8 @@ func (a *App) batchOpen(sel []Entry) {
 }
 
 // batchOptions is the dialog's inputs as the engine reads them.
-func (a *App) batchOptions() renameOptions {
-	return renameOptions{
+func (a *App) batchOptions() rename.Options {
+	return rename.Options{
 		Mode:    a.batch.mode,
 		Pattern: a.batch.pattern,
 		Replace: a.batch.replace,
@@ -94,7 +96,7 @@ func (a *App) batchReplan() {
 	if specialPath(dir) {
 		dir = ""
 	}
-	renameReplan(a.batch.rows, a.batchOptions(), dir)
+	rename.Replan(a.batch.rows, a.batchOptions(), dir)
 }
 
 // batchHasClash reports whether the current preview has any conflict, for
@@ -112,8 +114,8 @@ func (a *App) batchHasClash() bool {
 // order, to before row to, and recomputes the numbering that follows from
 // the new order.
 func (a *App) batchMoveRows(rows []int, to int) {
-	dragged := make([]renameRow, 0, len(rows))
-	rest := make([]renameRow, 0, len(a.batch.rows))
+	dragged := make([]rename.Row, 0, len(rows))
+	rest := make([]rename.Row, 0, len(a.batch.rows))
 	chosen := make(map[int]bool, len(rows))
 	for _, i := range rows {
 		if i >= 0 && i < len(a.batch.rows) {
@@ -133,7 +135,7 @@ func (a *App) batchMoveRows(rows []int, to int) {
 	if at < 0 {
 		at = 0
 	}
-	out := make([]renameRow, 0, len(a.batch.rows))
+	out := make([]rename.Row, 0, len(a.batch.rows))
 	out = append(out, rest[:at]...)
 	out = append(out, dragged...)
 	out = append(out, rest[at:]...)
@@ -167,14 +169,18 @@ func (a *App) commitBatchRename() {
 		a.batch.message = "无法重命名此页面中的项目"
 		return
 	}
-	moved, failed := renameApply(dir, a.batch.rows)
+	moved, failed := rename.Apply(dir, a.batch.rows)
 	a.batch.open = false
 	if n := len(moved); n > 0 {
 		desc := "批量重命名"
 		if n > 1 {
 			desc = fmt.Sprintf("批量重命名 %d 个项目", n)
 		}
-		a.pushUndo(undoOp{desc: desc, moved: moved})
+		undo := make([]undoMove, len(moved))
+		for i, m := range moved {
+			undo[i] = undoMove{From: m.From, To: m.To}
+		}
+		a.pushUndo(undoOp{desc: desc, moved: undo})
 		a.statusMsg = fmt.Sprintf("已重命名 %d 个项目", n)
 	}
 	if len(failed) > 0 {
@@ -199,16 +205,16 @@ func (a *App) batchRenameModal(c *ui.Context) {
 
 // batchModeChip is one mode chip: the accent fill when chosen, a hover wash
 // otherwise.
-func (a *App) batchModeChip(c *ui.Context, key string, m renameMode) {
+func (a *App) batchModeChip(c *ui.Context, key string, m rename.Mode) {
 	on := a.batch.mode == m
-	chip := ui.ButtonBase(c.Key(key)).Height(26).Padding(0, 10).Radius(13).Label(renameModeLabel(m))
+	chip := ui.ButtonBase(c.Key(key)).Height(26).Padding(0, 10).Radius(13).Label(rename.ModeLabel(m))
 	if on {
 		chip.Background(colorAccent())
 	} else if chip.Hovered() {
 		chip.Background(colorHover())
 	}
 	chip.Children(func() {
-		ui.Text(c, renameModeLabel(m)).FontSize(12).
+		ui.Text(c, rename.ModeLabel(m)).FontSize(12).
 			TextColor(loColor(on, colorBtnText(), colorText()))
 	})
 	if chip.Clicked() && !on {
@@ -239,7 +245,7 @@ func (a *App) batchRenameBody(c *ui.Context) {
 		// The mode chips, then the one field that mode reads.
 		modes := ui.Row(c).Gap(6)
 		modes.Children(func() {
-			for i, m := range []renameMode{renameModeTemplate, renameModeRegex, renameModeFindReplace} {
+			for i, m := range []rename.Mode{rename.ModeTemplate, rename.ModeRegex, rename.ModeFindReplace} {
 				a.batchModeChip(c, fmt.Sprintf("batch-mode-%d", i), m)
 			}
 		})
@@ -247,10 +253,10 @@ func (a *App) batchRenameBody(c *ui.Context) {
 		patternLabel := "模式"
 		placeholder := "{n} {name} · 占位符：{name} {stem} {ext} {n} {n:3}"
 		switch b.mode {
-		case renameModeRegex:
+		case rename.ModeRegex:
 			patternLabel = "正则"
 			placeholder = `^IMG_(\d+) · 用 $1 引用捕获组`
-		case renameModeFindReplace:
+		case rename.ModeFindReplace:
 			patternLabel = "查找"
 			placeholder = "查找的文字（在所有选中项的名称里替换）"
 		}
@@ -265,11 +271,11 @@ func (a *App) batchRenameBody(c *ui.Context) {
 			return
 		}
 
-		if b.mode != renameModeTemplate {
+		if b.mode != rename.ModeTemplate {
 			ui.Text(c, "替换为").FontSize(12).TextColor(colorMuted())
 			rep := ui.TextInputBase(c.Key("batch-replace"), &b.replace).
 				FillWidth().Height(30).FontSize(13)
-			if b.mode == renameModeRegex {
+			if b.mode == rename.ModeRegex {
 				rep.Placeholder("$1 引用捕获组 · 可用 {modified_year} 等日期占位符")
 			}
 			if rep.Changed() {
@@ -277,7 +283,7 @@ func (a *App) batchRenameBody(c *ui.Context) {
 			}
 		}
 
-		if b.mode == renameModeTemplate {
+		if b.mode == rename.ModeTemplate {
 			row := ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center)
 			row.Children(func() {
 				ui.Text(c, "起始编号").FontSize(12).TextColor(colorMuted())
@@ -314,11 +320,11 @@ func (a *App) batchRenameBody(c *ui.Context) {
 			uikitSecondaryButton(c, "取消", func() { a.batch.open = false })
 			a.batchResetAllButton(c)
 			label := "重命名"
-			if n := renameFixableRows(b.rows); n > 0 {
+			if n := rename.FixableRows(b.rows); n > 0 {
 				label = fmt.Sprintf("重命名 %d 项", n)
 			}
 			btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
-				Background(colorAccent()).Label(label).Disabled(renameFixableRows(b.rows) == 0)
+				Background(colorAccent()).Label(label).Disabled(rename.FixableRows(b.rows) == 0)
 			btn.Children(func() {
 				ui.Text(c, label).FontSize(12).TextColor(colorBtnText())
 			})

@@ -8,6 +8,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
+
+	"sunvale/internal/searchquery"
 )
 
 // tabState holds the navigation and listing of one Explorer tab. It is the
@@ -71,7 +73,7 @@ type tabState struct {
 	// parsing on every row of every frame would show.
 	hlCache struct {
 		query  string
-		parsed searchQuery
+		parsed searchquery.Query
 	}
 }
 
@@ -164,6 +166,8 @@ type App struct {
 	quickLook bool
 	// propsOpen is the 属性 dialog modal (propsdialog.go).
 	propsOpen bool
+	// share is the 分享 dialog's state (sharedialog.go).
+	share shareDialog
 	// batch is the 批量重命名 dialog's state (batchrename.go).
 	batch batchRenameState
 	// settingsOpen is the 设置 dialog modal.

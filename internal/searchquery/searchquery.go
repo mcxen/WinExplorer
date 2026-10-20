@@ -1,11 +1,5 @@
-package main
-
-import (
-	"strings"
-)
-
-// searchquery.go is the search box's query language, Everything's semantics
-// on a filename-only engine:
+// Package searchquery is the search box's query language, Everything's
+// semantics on a filename-only engine:
 //
 //	a whole-word modifier-less substring,   alpha  →  *alpha*
 //	case:alpha                             →  case-sensitive *alpha*
@@ -24,19 +18,22 @@ import (
 // case: is position-dependent as in Everything: it toggles case
 // sensitivity from the term it prefixes to the end of the query —
 // "alpha case:BETA" matches "alpha" insensitively and "BETA" strictly.
+package searchquery
 
-// searchQuery is one parsed query: the conjunction every candidate name
-// (or path, for path:) must satisfy. All fields are already normalized:
+import "strings"
+
+// Query is one parsed query: the conjunction every candidate name (or
+// path, for path:) must satisfy. The terms are already normalized:
 // lowercase-folded unless case-sensitive, phrases verbatim.
-type searchQuery struct {
-	terms         []searchTerm // AND of these
-	caseSensitive bool
-	filtering     filterKind // file: / folder:
-	exts          []string   // ext:, lowercase, no dots; nil without ext:
+type Query struct {
+	terms     []term
+	sensitive bool
+	filtering filterKind // file: / folder:
+	exts      []string   // ext:, lowercase, no dots; nil without ext:
 }
 
-// searchTerm is one conjunct of a query.
-type searchTerm struct {
+// term is one conjunct of a query.
+type term struct {
 	text string // the phrase to find
 	kind termKind
 	// caseSensitive freezes case:'s state at this term's position: terms
@@ -61,25 +58,21 @@ const (
 	filterFolder
 )
 
-// extFilter is ext:'s set of extensions, without dots, lowercase.
-// nil means no ext: filter — the field lives on searchQuery.
-
-// parseSearchQuery parses the raw query. A query with no usable term
-// matches nothing; the callers treat an empty string as "no search"
-// before they get here.
-func parseSearchQuery(raw string) searchQuery {
-	q := searchQuery{}
-	fields := splitSearchTerms(raw)
+// Parse parses the raw query. A query with no usable term matches nothing;
+// the callers treat an empty string as "no search" before they get here.
+func Parse(raw string) Query {
+	q := Query{}
+	fields := splitTerms(raw)
 	filtering := filterAny
 	var exts []string
-	var terms []searchTerm
+	var terms []term
 	for _, f := range fields {
 		if f == "" {
 			continue
 		}
 		// case: toggles from here on.
 		if strings.EqualFold(f, "case:") {
-			q.caseSensitive = !q.caseSensitive
+			q.sensitive = !q.sensitive
 			continue
 		}
 		if prefix, rest, ok := cutModifier(f); ok {
@@ -94,21 +87,21 @@ func parseSearchQuery(raw string) searchQuery {
 					filtering = filterFolder
 				}
 				if rest != "" {
-					terms = append(terms, searchTerm{text: rest, caseSensitive: q.caseSensitive})
+					terms = append(terms, term{text: rest, caseSensitive: q.sensitive})
 				}
 				continue
 			case "path":
 				// path: alone is not a term; path:docs is.
 				if rest != "" {
-					terms = append(terms, searchTerm{text: rest, kind: termPath})
+					terms = append(terms, term{text: rest, kind: termPath})
 				}
 				continue
 			case "case":
 				// case: toggles from here on; its rest, if any, is the
 				// next term (case:BETA is case: followed by BETA).
-				q.caseSensitive = !q.caseSensitive
+				q.sensitive = !q.sensitive
 				if rest != "" {
-					terms = append(terms, searchTerm{text: rest, caseSensitive: q.caseSensitive})
+					terms = append(terms, term{text: rest, caseSensitive: q.sensitive})
 				}
 				continue
 			case "ext":
@@ -121,7 +114,7 @@ func parseSearchQuery(raw string) searchQuery {
 				continue
 			}
 		}
-		terms = append(terms, searchTerm{text: f, caseSensitive: q.caseSensitive})
+		terms = append(terms, term{text: f, caseSensitive: q.sensitive})
 	}
 	q.terms = terms
 	q.filtering = filtering
@@ -145,10 +138,10 @@ func cutModifier(field string) (prefix, rest string, ok bool) {
 	return "", "", false
 }
 
-// splitSearchTerms splits the query on spaces outside quotes, keeping each
+// splitTerms splits the query on spaces outside quotes, keeping each
 // quoted phrase as one verbatim term (its quotes dropped). Everything
 // treats "a b" as the single phrase `a b`.
-func splitSearchTerms(q string) []string {
+func splitTerms(q string) []string {
 	var out []string
 	var cur strings.Builder
 	inQuote := false
@@ -177,11 +170,11 @@ func splitSearchTerms(q string) []string {
 	return out
 }
 
-// matches reports whether name and path satisfy the query: every term
+// Matches reports whether name and path satisfy the query: every term
 // present, and the file/folder and ext filters honored. isDir tells the
 // kind; ext is the entry's lowercased extension without a dot. Hidden
 // entries are filtered by the walk, not here.
-func (q searchQuery) matches(name, path, ext string, isDir bool) bool {
+func (q Query) Matches(name, path, ext string, isDir bool) bool {
 	switch q.filtering {
 	case filterFile:
 		if isDir {
@@ -224,20 +217,20 @@ func (q searchQuery) matches(name, path, ext string, isDir bool) bool {
 	return true
 }
 
-// highlightSpan is one run of a name to paint: the text, and whether it is
-// a hit to highlight. The runs concatenate back to the full name.
-type highlightSpan struct {
-	text string
-	hit  bool
+// Span is one run of a name to paint: the text, and whether it is a hit to
+// highlight. The runs concatenate back to the full name.
+type Span struct {
+	Text string
+	Hit  bool
 }
 
-// highlight splits name into runs around the query's matches, Everything's
+// Highlight splits name into runs around the query's matches, Everything's
 // yellow-mark style: every term's occurrence gets a background. Overlaps
 // merge into one run. A case-sensitive query highlights exact matches
 // only; a phrase term highlights the whole phrase.
-func (q searchQuery) highlight(name string) []highlightSpan {
+func (q Query) Highlight(name string) []Span {
 	if len(q.terms) == 0 {
-		return []highlightSpan{{text: name}}
+		return []Span{{Text: name}}
 	}
 	lower := strings.ToLower(name)
 	marks := make([]bool, len(lower))
@@ -276,15 +269,15 @@ func (q searchQuery) highlight(name string) []highlightSpan {
 		}
 	}
 	if !any {
-		return []highlightSpan{{text: name}}
+		return []Span{{Text: name}}
 	}
-	var out []highlightSpan
+	var out []Span
 	var b strings.Builder
 	prev := false
 	started := false
 	flush := func(hit bool) {
 		if b.Len() > 0 {
-			out = append(out, highlightSpan{text: b.String(), hit: hit})
+			out = append(out, Span{Text: b.String(), Hit: hit})
 			b.Reset()
 		}
 	}

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+
+	"sunvale/internal/searchquery"
 )
 
 // search.go is Everything's experience on Explorer's engine: a query walks the
@@ -124,7 +126,7 @@ func (a *App) updateSearch() {
 	t.search.started = time.Now()
 	tab := t
 	hidden := a.showHidden
-	query := parseSearchQuery(q)
+	query := searchquery.Parse(q)
 	deadline := time.Now().Add(searchDeadline(t.queryScope))
 	go func() {
 		streamMatches(roots, query, hidden, deadline, func(batch []Entry, more bool) {
@@ -211,15 +213,15 @@ func (a *App) ownsTab(tab *tabState) bool {
 // pane's hit marking. The parse is cached per tab: every row of a 5000-hit pane
 // asks for it every frame, and the query string changes only between
 // keystrokes.
-func (a *App) activeSearchQuery() searchQuery {
+func (a *App) activeSearchQuery() searchquery.Query {
 	t := a.cur()
 	q := strings.TrimSpace(t.query)
 	if q == "" {
-		t.hlCache.query, t.hlCache.parsed = "", searchQuery{}
-		return searchQuery{}
+		t.hlCache.query, t.hlCache.parsed = "", searchquery.Query{}
+		return searchquery.Query{}
 	}
 	if t.hlCache.query != q {
-		t.hlCache.query, t.hlCache.parsed = q, parseSearchQuery(q)
+		t.hlCache.query, t.hlCache.parsed = q, searchquery.Parse(q)
 	}
 	return t.hlCache.parsed
 }
@@ -233,7 +235,7 @@ func (a *App) activeSearchQuery() searchQuery {
 // index. The rules are the ones a subtree walk had: searchMaxResults hits, the
 // deadline, hidden entries skipped unless asked, unreadable folders skipped
 // rather than fatal.
-func streamMatches(roots []string, query searchQuery, hidden bool, deadline time.Time, emit func(batch []Entry, more bool)) {
+func streamMatches(roots []string, query searchquery.Query, hidden bool, deadline time.Time, emit func(batch []Entry, more bool)) {
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
 
@@ -281,7 +283,7 @@ func streamMatches(roots []string, query searchQuery, hidden bool, deadline time
 // walkRoot walks one root, sending every matching entry to found. The cap is
 // shared with the other roots and checked against the shared total, so a walk
 // that reached it stops everywhere; the deadline comes in through ctx.
-func walkRoot(ctx context.Context, root string, query searchQuery, hidden bool, found chan<- Entry, total *atomic.Int64) {
+func walkRoot(ctx context.Context, root string, query searchquery.Query, hidden bool, found chan<- Entry, total *atomic.Int64) {
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			if path == root {
@@ -309,7 +311,7 @@ func walkRoot(ctx context.Context, root string, query searchQuery, hidden bool, 
 		if !isDir {
 			ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
 		}
-		if !query.matches(name, path, ext, isDir) {
+		if !query.Matches(name, path, ext, isDir) {
 			return nil
 		}
 		e := searchEntry(path, d)
@@ -344,7 +346,7 @@ func searchPruneDir(path string) bool {
 // walkMatches is streamMatches collected at once, for callers that want the
 // whole answer in one piece: the remote search endpoint and the tests.
 func walkMatches(root, rawQuery string, hidden bool, deadline time.Time) []Entry {
-	query := parseSearchQuery(rawQuery)
+	query := searchquery.Parse(rawQuery)
 	var out []Entry
 	streamMatches([]string{root}, query, hidden, deadline, func(batch []Entry, more bool) {
 		out = append(out, batch...)

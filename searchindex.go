@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"sunvale/internal/searchquery"
 )
 
 // searchindex.go is Everything's index: one walk of the machine whose entries
@@ -381,7 +383,7 @@ func searchIndexNote(dir string, entries []Entry) {
 // its hits. ok is false when the index cannot answer — it is off, empty, or
 // holds nothing under roots — and the caller walks the disk instead, which is
 // how a folder the index never reached still gets its results.
-func searchIndexQuery(roots []string, query searchQuery, hidden bool) ([]Entry, bool) {
+func searchIndexQuery(roots []string, query searchquery.Query, hidden bool) ([]Entry, bool) {
 	searchIndex.mu.RLock()
 	defer searchIndex.mu.RUnlock()
 	if !searchIndex.enabled || len(searchIndex.items) == 0 || len(roots) == 0 {
@@ -399,7 +401,7 @@ func searchIndexQuery(roots []string, query searchQuery, hidden bool) ([]Entry, 
 		if e.hidden && !hidden {
 			continue
 		}
-		if !query.matches(filepath.Base(e.path), e.path, e.ext, e.isDir) {
+		if !query.Matches(filepath.Base(e.path), e.path, e.ext, e.isDir) {
 			continue
 		}
 		hits = append(hits, e.entry())

@@ -1,15 +1,15 @@
 //go:build darwin
 
-package main
+package rename
 
 import (
 	"syscall"
 	"time"
 )
 
-// birthTime reads a file's creation (birth) time on macOS via the
+// BirthTime reads a file's creation (birth) time on macOS via the
 // st_birthtimespec field of Stat_t.
-func birthTime(path string) (time.Time, error) {
+func BirthTime(path string) (time.Time, error) {
 	var st syscall.Stat_t
 	if err := syscall.Stat(path, &st); err != nil {
 		return time.Time{}, err

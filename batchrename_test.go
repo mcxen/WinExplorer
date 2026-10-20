@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"sunvale/internal/rename"
 )
 
 func newBatchApp(t *testing.T, names ...string) (*App, string) {
@@ -15,35 +17,6 @@ func newBatchApp(t *testing.T, names ...string) (*App, string) {
 	}
 	a := newTestApp(t, dir)
 	return a, dir
-}
-
-func TestExpandRenamePattern(t *testing.T) {
-	e := Entry{Name: "照片 (2).jpg", Ext: "jpg"}
-	got := expandRenamePattern("{n} {name}", 5, e)
-	if got != "5 照片 (2).jpg" {
-		t.Fatalf("{n} {name} = %q", got)
-	}
-	got = expandRenamePattern("{stem}-{n:3}.{ext}", 7, e)
-	if got != "照片 (2)-007.jpg" {
-		t.Fatalf("padded = %q", got)
-	}
-	// A folder keeps its whole name as the stem, with no extension.
-	d := Entry{Name: "项目文件夹", IsDir: true}
-	if got := expandRenamePattern("[{stem}]", 1, d); got != "[项目文件夹]" {
-		t.Fatalf("dir = %q", got)
-	}
-	// A file with no extension either.
-	f := Entry{Name: "Makefile"}
-	if got := expandRenamePattern("[{stem}]", 1, f); got != "[Makefile]" {
-		t.Fatalf("noext = %q", got)
-	}
-	// {n:0} and {n:x} fall back to plain numbers.
-	if got := expandRenamePattern("{n:0}", 3, f); got != "3" {
-		t.Fatalf("bad width = %q", got)
-	}
-	if got := expandRenamePattern("{n:x}", 3, f); got != "3" {
-		t.Fatalf("non-numeric width = %q", got)
-	}
 }
 
 func TestBatchRenameFlow(t *testing.T) {
@@ -233,56 +206,6 @@ func TestRenameManualRowPinsUntilReset(t *testing.T) {
 	}
 }
 
-func TestRenameRegexAndFindReplaceModes(t *testing.T) {
-	rows := []Entry{
-		{Name: "IMG_001.jpg", Ext: "jpg"},
-		{Name: "IMG_002.jpg", Ext: "jpg"},
-		{Name: "notes.txt", Ext: "txt"},
-	}
-	r := renameRowsFromEntries(rows)
-
-	renameReplan(r, renameOptions{Mode: renameModeRegex, Pattern: `^IMG_(\d+)\.jpg$`, Replace: "photo-$1.jpg"}, "")
-	if r[0].To != "photo-001.jpg" || r[1].To != "photo-002.jpg" || r[2].To != "notes.txt" {
-		t.Fatalf("regex targets = %q %q %q", r[0].To, r[1].To, r[2].To)
-	}
-
-	renameReplan(r, renameOptions{Mode: renameModeFindReplace, Pattern: "IMG_", Replace: "pic_"}, "")
-	if r[0].To != "pic_001.jpg" || r[2].To != "notes.txt" {
-		t.Fatalf("find/replace targets = %q %q", r[0].To, r[2].To)
-	}
-
-	// An invalid regexp marks every row instead of silently keeping names.
-	r = renameRowsFromEntries(rows)
-	renameReplan(r, renameOptions{Mode: renameModeRegex, Pattern: `(`, Replace: "x"}, "")
-	for i, row := range r {
-		if row.Err == "" {
-			t.Fatalf("row %d not marked for an invalid regexp: %+v", i, row)
-		}
-	}
-}
-
-func TestRenameApplyNameSwap(t *testing.T) {
-	dir, _ := os.MkdirTemp("", "we-swap")
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	for name, body := range map[string]string{"a.txt": "A", "b.txt": "B"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Swap the two names: the two-pass move must not lose either file.
-	rows := []renameRow{{Name: "a.txt", To: "b.txt"}, {Name: "b.txt", To: "a.txt"}}
-	moved, failed := renameApply(dir, rows)
-	if len(failed) != 0 || len(moved) != 2 {
-		t.Fatalf("swap: moved %d failed %v", len(moved), failed)
-	}
-	if b, _ := os.ReadFile(filepath.Join(dir, "b.txt")); string(b) != "A" {
-		t.Fatalf("a.txt did not become b.txt: %q", b)
-	}
-	if b, _ := os.ReadFile(filepath.Join(dir, "a.txt")); string(b) != "B" {
-		t.Fatalf("b.txt did not become a.txt: %q", b)
-	}
-}
-
 func TestRenamePlanMarksCollisions(t *testing.T) {
 	a, dir := newBatchApp(t, "x.txt", "y.txt", "existing.txt")
 	a.selectOnly(filepath.Join(dir, "x.txt"))
@@ -290,7 +213,7 @@ func TestRenamePlanMarksCollisions(t *testing.T) {
 	a.doRenameStart()
 
 	// A target an unselected item holds is a clash.
-	a.batch.mode = renameModeFindReplace
+	a.batch.mode = rename.ModeFindReplace
 	a.batch.pattern, a.batch.replace = "x.txt", "existing.txt"
 	a.batchReplan()
 	if a.batch.rows[0].Err == "" {

@@ -14,6 +14,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"sunvale/internal/rename"
 )
 
 // previewState is the loaded result shown in the preview pane. Only one
@@ -491,7 +493,7 @@ func formatFullTime(t time.Time) string {
 }
 
 func createdTime(path string) string {
-	if t, err := birthTime(path); err == nil && !t.IsZero() {
+	if t, err := rename.BirthTime(path); err == nil && !t.IsZero() {
 		return formatFullTime(t)
 	}
 	return ""

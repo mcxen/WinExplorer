@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sunvale/internal/rename"
 )
 
 // remote_fs.go is the read side of the remote server's OpenList-compatible
@@ -74,20 +76,22 @@ func remoteFSCleanVPath(vpath string) string {
 	return path.Clean(p)
 }
 
-// remoteDiskPath maps a virtual path to its disk path under the home
-// directory. ok is false when the path would escape the virtual root.
-func remoteDiskPath(vpath string) (string, bool) {
+// remoteDiskPath maps a virtual path to its disk path through the storage
+// mounts (remote_storage.go): the mount whose path holds vpath decides
+// which disk folder serves it, and ok is false when no enabled mount does
+// or the path would escape it.
+func (a *App) remoteDiskPath(vpath string) (string, bool) {
 	p := remoteFSCleanVPath(vpath)
 	for _, seg := range strings.Split(p, "/") {
 		if seg == ".." {
 			return "", false
 		}
 	}
-	rel := strings.TrimPrefix(p, "/")
-	if rel == "" {
-		return remoteFSHome(), true
+	mount, inner, ok := a.remoteMountFor(p)
+	if !ok {
+		return "", false
 	}
-	return filepath.Join(remoteFSHome(), filepath.FromSlash(rel)), true
+	return remoteDiskPathIn(mount, inner)
 }
 
 // remoteReadReq decodes one /api/fs/* request the way gin's c.ShouldBind
@@ -292,7 +296,7 @@ func remoteObjName(disk string) string {
 // as a real folder total on the client.
 func (a *App) remoteFSObj(name, vpath, disk string, st os.FileInfo) remoteObj {
 	created := st.ModTime()
-	if bt, err := birthTime(disk); err == nil {
+	if bt, err := rename.BirthTime(disk); err == nil {
 		created = bt
 	}
 	size := st.Size()
@@ -352,7 +356,7 @@ func (a *App) remoteHandleFSList(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 401, "Guest user is disabled, login please")
 		return
 	}
-	disk, ok := remoteDiskPath(req.Path)
+	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
 		remoteErr(w, 400, "invalid path")
 		return
@@ -451,7 +455,7 @@ func (a *App) remoteHandleFSGet(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 401, "Guest user is disabled, login please")
 		return
 	}
-	disk, ok := remoteDiskPath(req.Path)
+	disk, ok := a.remoteDiskPath(req.Path)
 	if !ok {
 		remoteErr(w, 400, "invalid path")
 		return
@@ -550,7 +554,7 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "page and per_page must be positive")
 		return
 	}
-	disk, ok := remoteDiskPath(req.Parent)
+	disk, ok := a.remoteDiskPath(req.Parent)
 	if !ok {
 		remoteErr(w, 400, "invalid path")
 		return

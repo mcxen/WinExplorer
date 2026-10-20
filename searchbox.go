@@ -9,6 +9,8 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
+
+	"sunvale/internal/searchquery"
 )
 
 // searchbox.go is the Ctrl+K box: Everything's search window, raised over this
@@ -77,7 +79,7 @@ type searchBoxState struct {
 	// ready for the list's hit marking.
 	walked      string
 	walkedScope searchScope
-	parsed      searchQuery
+	parsed      searchquery.Query
 	// gen is the walk's generation. Closing the box or typing again bumps it,
 	// and the batches of an older walk are dropped.
 	gen uint64
@@ -140,7 +142,7 @@ func (a *App) searchBoxFrame() {
 		return
 	}
 	b.walked, b.walkedScope = q, b.scope
-	b.parsed = parseSearchQuery(q)
+	b.parsed = searchquery.Parse(q)
 	b.results = nil
 	b.seen = nil
 	b.cursor, b.cursorPath = 0, ""
@@ -161,7 +163,7 @@ func (a *App) searchBoxFrame() {
 	b.src = sourceWalk
 	b.started = time.Now()
 	hidden := a.showHidden
-	query := parseSearchQuery(q)
+	query := searchquery.Parse(q)
 	deadline := time.Now().Add(searchDeadline(b.scope))
 	// land hands a closure to the frame: the main thread while the app runs,
 	// and the next frame's own thread in a headless test (frameQueue).

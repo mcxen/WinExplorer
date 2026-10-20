@@ -60,7 +60,7 @@ git hook 不会随 clone 一起走，每台机器（每个 clone）都要装一�
 - **可替换接口**：目录读取走 `lister` 接口（`listing.go`），新数据源实现该接口即可，
   不要往 `reload` 里加分支。
 - **包结构**：应用本体在根目录单包 `package main`，按职责分文件；可独立复用的
-  模块放 `internal/`（如 `internal/netfs`），自带测试，不得反向引用主包。
+  模块放 `internal/`（`netfs`、`searchquery`、`rename`），自带测试，不得反向引用主包。
   新增一个 `internal/` 包前先确认它真的不依赖 `App`/`Entry`/`ui`。
 
 ## 文档

@@ -125,13 +125,14 @@ func (a *App) updateSearch() {
 	t.search.busy = true
 	t.search.started = time.Now()
 	tab := t
+	scope := t.queryScope
 	hidden := a.showHidden
 	query := searchquery.Parse(q)
 	deadline := time.Now().Add(searchDeadline(t.queryScope))
 	go func() {
 		streamMatches(roots, query, hidden, deadline, func(batch []Entry, more bool) {
 			apply := func() {
-				if !a.ownsTab(tab) || strings.TrimSpace(tab.query) != q || tab.queryScope != t.search.scope {
+				if !a.ownsTab(tab) || strings.TrimSpace(tab.query) != q || tab.search.scope != scope || tab.search.query != q {
 					return // a newer query, another scope, or the tab closed
 				}
 				if !more {

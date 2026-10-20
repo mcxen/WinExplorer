@@ -8,6 +8,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
+
+	"sunvale/internal/netfs"
 )
 
 const (
@@ -593,7 +595,7 @@ func (a *App) listRow(c *ui.Context, e Entry) {
 func (a *App) iconView(c *ui.Context, entries []Entry) {
 	// The folder's mount decides each tile's eagerness, once for the view:
 	// probing it per tile would be thousands of lookups a frame.
-	a.cur().networkDir = isNetworkPath(a.cur().path)
+	a.cur().networkDir = netfs.IsNetworkPath(a.cur().path)
 	// Whether the first tiles warm up is the folder's answer and the
 	// setting's, read once for the view rather than per tile.
 	a.cur().networkWarm = a.cur().networkDir && a.store.settings().networkWarmup()

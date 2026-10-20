@@ -3,6 +3,7 @@ package main
 import (
 	"slices"
 	"sunvale/diskhealth"
+	"sunvale/internal/netfs"
 )
 
 // navigate loads path in the active tab, resetting its transient state and
@@ -153,7 +154,7 @@ func (a *App) reload() {
 // number is worth; 刷新统计 asks for one explicitly.
 func (a *App) decorateEntries(entries []Entry) {
 	t := a.cur()
-	network := isNetworkPath(t.path)
+	network := netfs.IsNetworkPath(t.path)
 	for i := range entries {
 		e := &entries[i]
 		if !e.IsDir {

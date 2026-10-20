@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package netfs
 
 import (
 	"syscall"
@@ -9,6 +9,11 @@ import (
 
 // driveRemote is GetDriveTypeW's DRIVE_REMOTE: a mapped network drive.
 const driveRemote = 4
+
+// kernel32 is this package's own handle to the DLL: the main package's
+// kernel32 is not visible across the package boundary, and a lazy DLL is
+// cheap enough to hold one per package that needs it.
+var kernel32 = syscall.NewLazyDLL("kernel32.dll")
 
 var procGetDriveTypeW = kernel32.NewProc("GetDriveTypeW")
 

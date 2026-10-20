@@ -1,4 +1,4 @@
-package main
+package netfs
 
 import (
 	"sync"
@@ -25,9 +25,9 @@ type netfsVerdict struct {
 
 var netfsCache sync.Map // map[string]netfsVerdict
 
-// isNetworkPath reports whether path sits on a network mount — SMB, NFS,
+// IsNetworkPath reports whether path sits on a network mount — SMB, NFS,
 // AFP, WebDAV and their kin. Results are cached for netfsTTL.
-func isNetworkPath(path string) bool {
+func IsNetworkPath(path string) bool {
 	if path == "" {
 		return false
 	}
@@ -41,6 +41,6 @@ func isNetworkPath(path string) bool {
 	return network
 }
 
-// forgetNetworkPath drops a cached verdict, for a test or a remount that
+// ForgetNetworkPath drops a cached verdict, for a test or a remount that
 // should be re-probed at once.
-func forgetNetworkPath(path string) { netfsCache.Delete(path) }
+func ForgetNetworkPath(path string) { netfsCache.Delete(path) }

@@ -1,6 +1,6 @@
 //go:build !darwin && !linux && !windows
 
-package main
+package netfs
 
 // platformIsNetworkPath cannot tell a network mount from a local one on
 // this platform, so every path is treated as local: the listing stays

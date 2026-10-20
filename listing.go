@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"sunvale/internal/netfs"
 )
 
 // lister reads one directory into the entries the pane shows. It is the
@@ -81,5 +83,5 @@ func (l localLister) List(dir string) ([]Entry, error) {
 // entryLister is the lister for a folder: the parallel reader on a network
 // mount, the serial one on a local disk.
 func entryLister(dir string) lister {
-	return localLister{parallel: isNetworkPath(dir)}
+	return localLister{parallel: netfs.IsNetworkPath(dir)}
 }

@@ -375,8 +375,12 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 
 ## 代码结构
 
-| 文件 | 职责 |
+根目录是单包 `package main`（应用本体按职责分文件），可独立复用的模块放在
+`internal/` 下，各有自己的测试。
+
+| 文件 / 目录 | 职责 |
 | --- | --- |
+| `internal/netfs/` | 网络卷识别：按平台判断路径是否在 SMB/NFS/AFP/WebDAV 挂载上（macOS 读 `statfs` 类型、Linux 查挂载表、Windows 用 `GetDriveTypeW`），结果缓存 5 秒。列表并行读与缩略图预热都据此决定策略 |
 | `main.go` | 入口、`newApp`、`view` 组合各区域、快捷键表、选择辅助 |
 | `state.go` | `App` / `tabState` 状态模型、视图/排序/分组枚举与常量 |
 | `tabs.go` | 导航、历史、排序/视图/分组切换、标签增删与切换 |

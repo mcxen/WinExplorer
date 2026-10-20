@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"sunvale/internal/netfs"
 )
 
 // listingDir makes a folder with a file, a subfolder and a symlink to the
@@ -84,21 +86,12 @@ func TestLocalListerEdges(t *testing.T) {
 }
 
 // TestNetworkPathPicksTheReader: a local folder — which is what the tests'
-// temp folders are — is not a network path, the answer is the same on the
-// cached second ask, and the folder therefore gets the serial reader. The
-// choice is the mount's, not the path's shape.
+// temp folders are — gets the serial reader. The path's own verdict is
+// netfs's business and tested there; what matters here is that the choice
+// follows the mount, not the path's shape.
 func TestNetworkPathPicksTheReader(t *testing.T) {
 	dir := t.TempDir()
-	forgetNetworkPath(dir)
-	if isNetworkPath(dir) {
-		t.Fatalf("%s reads as a network path", dir)
-	}
-	if isNetworkPath(dir) {
-		t.Fatalf("%s reads as a network path on the cached answer too", dir)
-	}
-	if isNetworkPath("") {
-		t.Fatal("the empty path reads as a network path")
-	}
+	netfs.ForgetNetworkPath(dir)
 	l, ok := entryLister(dir).(localLister)
 	if !ok {
 		t.Fatalf("entryLister returned %T, want localLister", entryLister(dir))

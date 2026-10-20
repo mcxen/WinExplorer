@@ -123,6 +123,13 @@ type App struct {
 		id  int
 		acc float32
 	}
+	// tabDropHover is the tab a file drag has hovered long enough to consider
+	// bringing forward. The id is stable while tabs reorder, and zero means
+	// there is no delayed switch pending.
+	tabDropHover struct {
+		id    int
+		since time.Time
+	}
 
 	sortKey        SortKey
 	sortAsc        bool

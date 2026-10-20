@@ -146,6 +146,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 搜索索引进度条 | 索引正在构建 | 不定进度 1.4s 往返 | 余弦往返 | 80×4、`colorAccent()` 填充；有估计时定值填充并显示百分比；`ReduceMotion` 下静止 | `searchbox.go:searchIndexProgress`、Onevra `components.Progress` |
 | 树展开箭头旋转 | 展开/折叠目录树节点 | 150ms | easeOut | 始终使用右箭头，0°→90°；`ReduceMotion` 直接到终值 | `icons.go:chevronIconAnimated`、`sidebar.go:navTwist` |
 | 树缩进引导线淡入淡出 | 鼠标进入/离开导航窗格 | 120ms | easeOut | 每级 1px `colorDivider()`；当前选中行祖先链用 `colorMuted()`；`ReduceMotion` 直接到终值 | `sidebar.go:navIndentGuides` |
+| 拖动文件悬停标签自动切换 | 文件拖动在非当前标签上持续悬停 | 600ms | 到时切换 | 离开或放下清零；等待期间用 `colorHover()`，用 `c.After` 只请求到时帧 | `chrome_tab.go:tabDropHoverFrame` |
 
 ![呼吸光](assets/ui/motion-glow.png) ![移出](assets/ui/motion-slideout.png) ![改名高亮](assets/ui/motion-rename-flash.png)
 
@@ -156,7 +157,6 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 动效 | 时长/数值 | 规格 |
 | --- | --- | --- |
 | 树平滑滚动到当前位置 | 跳过 | mygo v0.5.5 `ListState` 只有 `ScrollTo/ScrollIntoView/ScrollToEnd`，没有当前偏移读写 API，无法在不 fork 依赖的情况下插值；按规格 D 记录并保留瞬时滚动 |
-| 拖动文件悬停标签自动切换 | 悬停 600ms 后切换 | `docs/specs/04-tabs-followups.md` A |
 
 ## 7. 反模式 / 禁止
 

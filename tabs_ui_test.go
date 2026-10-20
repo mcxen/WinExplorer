@@ -5,9 +5,38 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
+
+// TestTabHoverSwitch keeps the delayed tab switch's boundaries explicit:
+// the timer starts only for another tab, waits 600ms, and ignores a zero
+// target as the frame's "leave" marker.
+func TestTabHoverSwitch(t *testing.T) {
+	since := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		prevID int
+		id     int
+		after  time.Duration
+		want   bool
+	}{
+		{"before the delay", 1, 2, 599 * time.Millisecond, false},
+		{"at the delay", 1, 2, 600 * time.Millisecond, true},
+		{"after the delay", 1, 2, 900 * time.Millisecond, true},
+		{"front tab stays", 2, 2, 900 * time.Millisecond, false},
+		{"left the tab strip", 1, 0, 900 * time.Millisecond, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tabHoverSwitch(tt.prevID, tt.id, since, since.Add(tt.after)); got != tt.want {
+				t.Fatalf("tabHoverSwitch(%d, %d, +%v) = %v, want %v",
+					tt.prevID, tt.id, tt.after, got, tt.want)
+			}
+		})
+	}
+}
 
 // tabsWindow boots the real window over a root holding the folders named,
 // each with one file <name>.txt, and returns the app, the tester and root.

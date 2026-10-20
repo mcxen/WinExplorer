@@ -119,22 +119,26 @@ func (a *App) dragValueFor(path string) dragPayload {
 	return dragPayload{paths: []string{path}}
 }
 
-// bindDropFolder 让文件夹 el 接受窗口内拖拽移动到 dstDir，并在拖过
-// 时高亮。此电脑与目标自身的拖拽源被忽略；从其他应用拖入的文件也落
-// 到这个文件夹（见 bindNativeDrop）。
-func (a *App) bindDropFolder(c *ui.Context, el ui.Element, dstDir string) {
+// bindDropFolder makes folder el a destination for dstDir and reports the
+// drag state the caller needs: whether a drag is over it now, and whether it
+// took a drop this frame. This PC and drops from the target itself are
+// ignored; files from other applications also land in this folder.
+func (a *App) bindDropFolder(c *ui.Context, el ui.Element, dstDir string) (hovered, dropped bool) {
 	dstDir = a.dropDir(dstDir)
 	if dstDir == "" {
-		return
+		return false, false
 	}
 	if over, ok := ui.DragOver[dragPayload](el); ok && over.paths != nil {
+		hovered = true
 		if !a.dropAllInside(dstDir, over.paths) {
 			el.Background(colorSelected().Alpha(0.75))
 		}
 	}
-	a.bindNativeDrop(el, func(paths []string) {
+	nativeHover, nativeDrop := a.bindNativeDrop(el, func(paths []string) {
 		a.doDropInto(dropModifiers(c.Modifiers()), dstDir, paths)
 	})
+	hovered = hovered || nativeHover
+	dropped = dropped || nativeDrop
 	if p, ok := ui.Drop[dragPayload](el); ok && len(p.paths) > 0 {
 		// A native session takes the pointer's input, so what was held as
 		// it began comes with the drag's offer (the toolkit's suggestion:
@@ -142,11 +146,14 @@ func (a *App) bindDropFolder(c *ui.Context, el ui.Element, dstDir string) {
 		copyDrag := a.dragSuggested == transfer.Copy || c.Modifiers()&(ui.Cmd|ui.Ctrl) != 0
 		a.doDropInto(dragDropModifiers(copyDrag), dstDir, p.paths)
 		a.dropTookOwnDrag = true
+		dropped = true
 	}
 	// 从其他应用拖入的文件落到此文件夹。
 	if files := el.DroppedFiles(); len(files) > 0 {
 		a.doDropInto(dropModifiers(c.Modifiers()), dstDir, files)
+		dropped = true
 	}
+	return hovered, dropped
 }
 
 // bindNativeDrop makes el a destination of files dropped from another
@@ -154,9 +161,10 @@ func (a *App) bindDropFolder(c *ui.Context, el ui.Element, dstDir string) {
 // drops, so an element that only asked DroppedFiles never saw them; the
 // formats are negotiated here so the drop lands on the element under the
 // pointer, which highlights while the drag is over it.
-func (a *App) bindNativeDrop(el ui.Element, take func([]string)) {
+func (a *App) bindNativeDrop(el ui.Element, take func([]string)) (hovered, dropped bool) {
 	opts := dropOptions()
 	if offer, over := ui.DataDragOver(el, opts); over {
+		hovered = true
 		// The pointer's keys, for the window's own drags: a native session
 		// takes the input, so Context.Modifiers has what was held as it
 		// began.
@@ -164,16 +172,22 @@ func (a *App) bindNativeDrop(el ui.Element, take func([]string)) {
 		el.Background(colorSelected().Alpha(0.75))
 	}
 	if drop, ok := ui.DropData(el, opts); ok {
+		// The drag ended here even when its payload has no usable paths;
+		// consuming the event keeps the target's hover timer from surviving
+		// an empty or malformed native drop.
+		dropped = true
 		if paths, err := drop.Data.Files(); err == nil && len(paths) > 0 {
 			take(paths)
-			return
+			return true, true
 		}
 		// A URI list that is not local files is still a drop to take: the
 		// row or pane it landed on says so, and the shell opened nothing.
 		if urls, err := drop.Data.URLs(); err == nil && len(urls) > 0 {
 			take(urls)
+			return true, true
 		}
 	}
+	return hovered, dropped
 }
 
 // dropDir is where a target's drags land: the folder it names, or "" when

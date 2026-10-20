@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
@@ -23,6 +24,10 @@ const (
 	// tabDragMinW keeps a piece of title bar to move the window by however
 	// many tabs there are.
 	tabDragMinW = 48
+
+	// Explorer and browsers keep a file drag over another tab for a short
+	// beat before bringing it forward, leaving time to pass over tabs.
+	tabDropHoverDelay = 600 * time.Millisecond
 )
 
 // tabStrip is the Windows 11 title bar: the tab strip and the caption
@@ -136,8 +141,13 @@ func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
 		a.switchTo(i)
 	}
 	// Dropping files on a tab moves them into that tab's folder, as
-	// Explorer's tabs take drops.
-	a.bindDropFolder(c, tab, t.path)
+	// Explorer's tabs take drops. Holding the drag over a different tab
+	// soon brings it forward so the drop can continue into its listing.
+	hovered, dropped := a.bindDropFolder(c, tab, t.path)
+	if hovered && !dropped && !active {
+		tab.Background(colorHover())
+	}
+	a.tabDropHoverFrame(c, id, hovered, dropped)
 	// The tab's own menu, as Explorer's tab context menu. The items name
 	// the tab by id: the menu outlives the frame that built it.
 	tab.ContextMenu(func(m *ui.Menu) {
@@ -166,6 +176,63 @@ func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
 			a.reopenClosedTab()
 		}
 	})
+}
+
+// tabHoverSwitch reports whether a drag has hovered id long enough to bring
+// it forward. Ids outside the tab collection are not switch targets, and a
+// drag over the front tab never changes it.
+func tabHoverSwitch(prevID, id int, since, now time.Time) bool {
+	if id <= 0 || id == prevID || since.IsZero() {
+		return false
+	}
+	return !now.Before(since.Add(tabDropHoverDelay))
+}
+
+// tabDropHoverFrame keeps one delayed tab switch across frames. Only the
+// hovered tab advances its timer; another unhovered tab clears the pending
+// state only when it is the tab being left, so tabs before the hovered one
+// cannot restart the timer.
+func (a *App) tabDropHoverFrame(c *ui.Context, id int, hovered, dropped bool) {
+	if dropped || !hovered {
+		if a.tabDropHover.id == id {
+			a.tabDropHover = struct {
+				id    int
+				since time.Time
+			}{}
+		}
+		return
+	}
+	i := a.tabIndex(id)
+	if i < 0 {
+		return
+	}
+	now := c.Now()
+	if a.activeTab == i {
+		if a.tabDropHover.id == id {
+			a.tabDropHover = struct {
+				id    int
+				since time.Time
+			}{}
+		}
+		return
+	}
+	if a.tabDropHover.id != id {
+		a.tabDropHover.id, a.tabDropHover.since = id, now
+	}
+	if tabHoverSwitch(a.tabs[a.activeTab].id, id, a.tabDropHover.since, now) {
+		a.tabDropHover = struct {
+			id    int
+			since time.Time
+		}{}
+		a.switchTo(i)
+		// A timer-triggered switch has no pointer event to invalidate the
+		// frame after the state changes.
+		repaint()
+		return
+	}
+	// The timer is the only reason to build another frame while the drag
+	// remains over this tab.
+	c.After(tabDropHoverDelay - now.Sub(a.tabDropHover.since))
 }
 
 // tabPointer is a tab's raw pointer input: the middle button closes it on

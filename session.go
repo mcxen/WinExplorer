@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 )
 
 // session.go is 恢复上次会话: the tabs and windows of the run that ended,
@@ -15,6 +16,12 @@ import (
 type windowGeom struct {
 	x, y, w, h int
 }
+
+// maxTabHistory bounds the history a session keeps per tab. The current
+// entry is always retained; when there is not room for both directions,
+// older back entries win over forward entries, matching the user's likely
+// need to retrace where they came from.
+const maxTabHistory = 50
 
 // captureSession records every open window — its box and its tabs — into
 // the store. Called as the app quits, after each window's close refreshed
@@ -59,6 +66,9 @@ func (a *App) windowSession() (windowSession, bool) {
 	ws := windowSession{}
 	for _, t := range a.tabs {
 		ws.Tabs = append(ws.Tabs, t.path)
+		history, histIdx := capTabHistory(t.history, t.histIdx)
+		ws.History = append(ws.History, history)
+		ws.HistIdx = append(ws.HistIdx, histIdx)
 	}
 	if len(ws.Tabs) == 0 {
 		return ws, false
@@ -70,6 +80,52 @@ func (a *App) windowSession() (windowSession, bool) {
 		}
 	}
 	return ws, true
+}
+
+// capTabHistory returns a session-sized copy of history and its current
+// index in that copy. Starting at histIdx-(maxTabHistory-1) keeps as much
+// back history as fits before spending any room on forward history.
+func capTabHistory(history []string, histIdx int) ([]string, int) {
+	if len(history) == 0 {
+		return nil, 0
+	}
+	histIdx = min(max(histIdx, 0), len(history)-1)
+	start := max(0, histIdx-(maxTabHistory-1))
+	end := min(len(history), start+maxTabHistory)
+	return slices.Clone(history[start:end]), histIdx - start
+}
+
+// restoreTabHistory filters a saved history through restoreTabPath and
+// makes sure its current index points at current. A missing current path is
+// replaced by the restored tab's fallback and inserted at the same position,
+// so the relative back/forward shape survives a deleted folder.
+func restoreTabHistory(saved []string, savedIdx int, current string) ([]string, int) {
+	if len(saved) == 0 {
+		return []string{current}, 0
+	}
+	out := make([]string, 0, len(saved))
+	oldToNew := make([]int, len(saved))
+	for i, p := range saved {
+		oldToNew[i] = -1
+		restored := restoreTabPath(p)
+		if p != "" && !specialPath(p) && restored != p {
+			continue
+		}
+		oldToNew[i] = len(out)
+		out = append(out, restored)
+	}
+	idx := min(max(savedIdx, 0), len(out))
+	if savedIdx >= 0 && savedIdx < len(oldToNew) && oldToNew[savedIdx] >= 0 {
+		idx = oldToNew[savedIdx]
+	}
+	if at := slices.Index(out, current); at >= 0 {
+		idx = at
+	} else {
+		idx = min(idx, len(out))
+		out = slices.Insert(out, idx, current)
+	}
+	out, idx = capTabHistory(out, idx)
+	return out, idx
 }
 
 // saveWindowSession refreshes this window's own record in the stored
@@ -135,8 +191,12 @@ func newSessionApp(store *persistedState, ws windowSession, slot int) *App {
 		return a
 	}
 	tabs := make([]*tabState, 0, len(ws.Tabs))
-	for _, p := range ws.Tabs {
-		tabs = append(tabs, newTab(restoreTabPath(p)))
+	for i, p := range ws.Tabs {
+		t := newTab(restoreTabPath(p))
+		if len(ws.History) == len(ws.Tabs) && len(ws.HistIdx) == len(ws.Tabs) {
+			t.history, t.histIdx = restoreTabHistory(ws.History[i], ws.HistIdx[i], t.path)
+		}
+		tabs = append(tabs, t)
 	}
 	a.tabs = tabs
 	a.activeTab = min(max(ws.Active, 0), len(tabs)-1)

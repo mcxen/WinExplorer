@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -161,6 +162,67 @@ func TestSessionCaptureAndRestore(t *testing.T) {
 	}}, 0)
 	if got := missing.tabs[0].path; got != pathHome {
 		t.Fatalf("a missing tab restored as %q, want %q", got, pathHome)
+	}
+}
+
+// TestSessionHistoryRoundTrip keeps each tab's back/forward history beside
+// its path, caps it at 50 entries while retaining the current position, and
+// drops deleted folders while keeping histIdx on the restored current path.
+func TestSessionHistoryRoundTrip(t *testing.T) {
+	dir := listingDir(t)
+	for _, name := range []string{"current", "later"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := newStoreApp(t, dir)
+	a.tabs[0].history = []string{filepath.Join(dir, "gone"), filepath.Join(dir, "current"), filepath.Join(dir, "later")}
+	a.tabs[0].histIdx = 1
+	ws, ok := a.windowSession()
+	if !ok || len(ws.History) != 1 || len(ws.HistIdx) != 1 || ws.HistIdx[0] != 1 {
+		t.Fatalf("captured history = %+v (ok %v)", ws, ok)
+	}
+
+	store := &persistedState{Pinned: defaultPins(), path: filepath.Join(t.TempDir(), "state.json")}
+	store.setSession(&sessionState{Windows: []windowSession{ws}})
+	data, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var disk persistedState
+	if err := json.Unmarshal(data, &disk); err != nil {
+		t.Fatal(err)
+	}
+	if disk.Session == nil || len(disk.Session.Windows) != 1 || len(disk.Session.Windows[0].History) != 1 {
+		t.Fatalf("stored session = %+v", disk.Session)
+	}
+
+	// A missing folder leaves the list, while the existing current folder
+	// remains the histIdx entry after the index shifts.
+	restored := newSessionApp(store, windowSession{
+		Tabs:    []string{filepath.Join(dir, "current")},
+		History: [][]string{{filepath.Join(dir, "gone"), filepath.Join(dir, "current"), filepath.Join(dir, "later")}},
+		HistIdx: []int{1},
+	}, 0)
+	if got := restored.tabs[0].history; len(got) != 2 || got[0] != filepath.Join(dir, "current") || got[1] != filepath.Join(dir, "later") {
+		t.Fatalf("restored history = %v, want missing entry removed", got)
+	}
+	if restored.tabs[0].histIdx != 0 || restored.tabs[0].history[restored.tabs[0].histIdx] != restored.tabs[0].path {
+		t.Fatalf("restored histIdx = %d history = %v path = %q", restored.tabs[0].histIdx, restored.tabs[0].history, restored.tabs[0].path)
+	}
+
+	long := make([]string, 80)
+	for i := range long {
+		long[i] = filepath.Join(dir, "h", string(rune('a'+i%26)), string(rune('0'+i/26)))
+	}
+	capped, idx := capTabHistory(long, 60)
+	if len(capped) != maxTabHistory || idx != maxTabHistory-1 || capped[idx] != long[60] {
+		t.Fatalf("capped history = %d entries at %d, want %d at the current entry", len(capped), idx, maxTabHistory)
+	}
+
+	old := newSessionApp(store, windowSession{Tabs: []string{dir}}, 0)
+	if len(old.tabs) != 1 || len(old.tabs[0].history) != 1 || old.tabs[0].histIdx != 0 {
+		t.Fatalf("old session without history = %+v", old.tabs[0])
 	}
 }
 

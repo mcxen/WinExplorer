@@ -155,6 +155,10 @@ type windowSession struct {
 	H      int      `json:"h,omitempty"`
 	Tabs   []string `json:"tabs,omitempty"`
 	Active int      `json:"active,omitempty"`
+	// History is each tab's back/forward list, parallel to Tabs. Older
+	// session files omit it and restore one entry per tab as before.
+	History [][]string `json:"history,omitempty"`
+	HistIdx []int      `json:"histIdx,omitempty"`
 }
 
 // session returns a copy of the saved session, nil when none is.
@@ -168,6 +172,11 @@ func (st *persistedState) session() *sessionState {
 	out.Windows = append([]windowSession(nil), st.Session.Windows...)
 	for i := range out.Windows {
 		out.Windows[i].Tabs = append([]string(nil), out.Windows[i].Tabs...)
+		out.Windows[i].HistIdx = append([]int(nil), out.Windows[i].HistIdx...)
+		out.Windows[i].History = make([][]string, len(out.Windows[i].History))
+		for j, history := range st.Session.Windows[i].History {
+			out.Windows[i].History[j] = append([]string(nil), history...)
+		}
 	}
 	return &out
 }

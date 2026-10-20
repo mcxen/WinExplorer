@@ -81,14 +81,14 @@ func (a *App) remoteArchiveDirs(w http.ResponseWriter, r *http.Request, req *rem
 		remoteErr(w, 400, "Empty file names")
 		return "", "", false
 	}
-	srcDir, ok := remoteDiskPath(req.SrcDir)
+	srcDir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
 		remoteErr(w, 500, "object not found")
 		return "", "", false
 	}
 	dstDir := srcDir
 	if req.DstDir != "" {
-		if dstDir, ok = remoteDiskPath(req.DstDir); !ok {
+		if dstDir, ok = a.remoteDiskPath(req.DstDir); !ok {
 			remoteErr(w, 500, "object not found")
 			return "", "", false
 		}

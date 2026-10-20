@@ -29,9 +29,13 @@ type persistedState struct {
 	Session  *sessionState `json:"session,omitempty"`
 	TrashLog []trashRecord `json:"trash"`
 	Remote   *remoteConfig `json:"remote"`
-	Shares   []remoteShare `json:"shares"`
-	Settings *appSettings  `json:"settings"`
-	Plugins  []string      `json:"plugins"`
+	// RemoteStorages are the remote server's mounts (remote_storage.go):
+	// each maps a virtual path to a disk folder, and the one at "/" is what
+	// the remote browser opens on.
+	RemoteStorages []remoteStorage `json:"remoteStorages,omitempty"`
+	Shares         []remoteShare   `json:"shares"`
+	Settings       *appSettings    `json:"settings"`
+	Plugins        []string        `json:"plugins"`
 	// PluginSettings holds each plugin's own key-value preferences, by
 	// plugin id. A state file written before this field existed
 	// unmarshals to nil, and the setters initialize it lazily.
@@ -433,6 +437,22 @@ func (st *persistedState) setRemote(rc *remoteConfig) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.Remote = rc
+	st.saveLocked()
+}
+
+// remoteStorages returns a copy of the remote server's mounts
+// (remote_storage.go).
+func (st *persistedState) remoteStorages() []remoteStorage {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]remoteStorage(nil), st.RemoteStorages...)
+}
+
+// setRemoteStorages replaces the mounts.
+func (st *persistedState) setRemoteStorages(list []remoteStorage) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.RemoteStorages = append([]remoteStorage(nil), list...)
 	st.saveLocked()
 }
 

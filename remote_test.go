@@ -377,13 +377,14 @@ func TestRemotePathMapping(t *testing.T) {
 	if hd, err := os.UserHomeDir(); err != nil || hd != home {
 		t.Skip("HOME does not redirect the home dir on this platform")
 	}
+	a := newStoreApp(t, home)
 
-	if p, ok := remoteDiskPath("/Documents/notes.txt"); !ok || p != filepath.Join(home, "Documents", "notes.txt") {
+	if p, ok := a.remoteDiskPath("/Documents/notes.txt"); !ok || p != filepath.Join(home, "Documents", "notes.txt") {
 		t.Fatalf("remoteDiskPath(/Documents/notes.txt) = %q %v", p, ok)
 	}
 	// Dot-dot is resolved against the virtual root, never past it.
 	for _, v := range []string{"/..", "/../etc/passwd", "/a/../../etc"} {
-		if p, ok := remoteDiskPath(v); !ok || !strings.HasPrefix(p, home) {
+		if p, ok := a.remoteDiskPath(v); !ok || !strings.HasPrefix(p, home) {
 			t.Fatalf("remoteDiskPath(%q) = %q %v, want it contained in %q", v, p, ok, home)
 		}
 	}

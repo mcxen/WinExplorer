@@ -193,9 +193,7 @@ func (a *App) commandBar(c *ui.Context) {
 		a.commandIconButton(c, lucide.Copy, "复制", hasSel, a.doCopy)
 		a.commandIconButton(c, lucide.ClipboardPaste, "粘贴", canPaste, a.doPaste)
 		a.commandIconButton(c, lucide.Pencil, "重命名", hasSel, a.doRenameStart)
-		a.commandIconButton(c, lucide.Share2, "分享", true, func() {
-			a.statusMsg = "分享在此版本中不可用"
-		})
+		a.commandIconButton(c, lucide.Share2, "分享", hasSel, a.shareDialogOpen)
 		a.commandIconButton(c, lucide.Trash, "删除", hasSel, a.doDelete)
 
 		a.commandSep(c)

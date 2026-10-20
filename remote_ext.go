@@ -33,13 +33,16 @@ type remoteExtListData struct {
 // let path.Clean absorb a climb at the virtual root, while the ext verbs
 // hand the resolved path to shell commands, so an escape attempt is worth a
 // 400 rather than a silently resolved name.
-func remoteExtDiskPath(vpath string) (string, bool) {
+// remoteExtDiskPath is a.remoteDiskPath for the extension handlers, which
+// keep their path check local so a bad path is answered as a request error
+// rather than as a missing file.
+func (a *App) remoteExtDiskPath(vpath string) (string, bool) {
 	for _, seg := range strings.Split(strings.ReplaceAll(vpath, "\\", "/"), "/") {
 		if seg == ".." {
 			return "", false
 		}
 	}
-	return remoteDiskPath(vpath)
+	return a.remoteDiskPath(vpath)
 }
 
 // remoteExtEntry builds the pseudo-Entry the shell extensions match and run
@@ -61,8 +64,8 @@ func remoteExtEntry(name, disk string, st os.FileInfo) Entry {
 // disk (remoteExtDiskPath's ".." refusal included), the pseudo-Entry the
 // exts match against and a fresh read of the registry. The protocol errors
 // are answered here; ok is false once the reply is written.
-func remoteExtTarget(w http.ResponseWriter, vpath, name string) (Entry, []shellExt, bool) {
-	disk, ok := remoteExtDiskPath(vpath)
+func (a *App) remoteExtTarget(w http.ResponseWriter, vpath, name string) (Entry, []shellExt, bool) {
+	disk, ok := a.remoteExtDiskPath(vpath)
 	if !ok {
 		remoteErr(w, 400, "invalid path")
 		return Entry{}, nil, false
@@ -100,7 +103,7 @@ func (a *App) remoteHandleExtList(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "path is required")
 		return
 	}
-	e, exts, ok := remoteExtTarget(w, req.Path, req.Name)
+	e, exts, ok := a.remoteExtTarget(w, req.Path, req.Name)
 	if !ok {
 		return
 	}
@@ -142,7 +145,7 @@ func (a *App) remoteHandleExtRun(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "ext_name is required")
 		return
 	}
-	e, exts, ok := remoteExtTarget(w, req.Path, req.Name)
+	e, exts, ok := a.remoteExtTarget(w, req.Path, req.Name)
 	if !ok {
 		return
 	}
@@ -182,7 +185,7 @@ func (a *App) remoteHandleTerminal(w http.ResponseWriter, r *http.Request) {
 		remoteErr(w, 400, "path is required")
 		return
 	}
-	disk, ok := remoteExtDiskPath(req.Path)
+	disk, ok := a.remoteExtDiskPath(req.Path)
 	if !ok {
 		remoteErr(w, 400, "invalid path")
 		return

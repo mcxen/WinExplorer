@@ -122,13 +122,18 @@ var (
 )
 
 // remoteConf returns the remote access configuration, generating the default
-// account on first use — port 5244, the admin user, a random 10-character
-// password and a random 64-hex token — and persisting it.
+// account on first use — port 5244, the admin user, the admin password (the
+// user changes it in 管理界面) and a random 64-hex token — and persisting it.
 func (a *App) remoteConf() *remoteConfig {
 	remoteConfMu.Lock()
 	defer remoteConfMu.Unlock()
 	return a.remoteConfLocked()
 }
+
+// remoteDefaultPassword is the account a fresh install starts with. It is
+// the OpenList convention, and the management page at /@manage makes
+// changing it the first thing an owner can do.
+const remoteDefaultPassword = "admin"
 
 // remoteConfLocked needs remoteConfMu held.
 func (a *App) remoteConfLocked() *remoteConfig {
@@ -140,7 +145,7 @@ func (a *App) remoteConfLocked() *remoteConfig {
 		remoteConfCache = &rc
 		return remoteConfCache
 	}
-	pass := remoteRandString(10)
+	pass := remoteDefaultPassword
 	rc := &remoteConfig{
 		Port:     5244,
 		Username: "admin",
@@ -167,16 +172,17 @@ func (a *App) remoteSaveConf(rc *remoteConfig) {
 }
 
 // remotePlainPassword returns the account's plaintext password. It lives in
-// memory only, so after a restart it is unknown; a fresh one is generated
-// then, replacing the stored hash, so a copy always carries a password that
-// works.
+// memory only, so after a restart it is unknown. The account then starts
+// over with the default password rather than a random one the owner could
+// not know: the management page changes it, and every restart without a
+// change keeps the last one working.
 func (a *App) remotePlainPassword() string {
 	remoteConfMu.Lock()
 	defer remoteConfMu.Unlock()
 	if remotePassPlain != "" {
 		return remotePassPlain
 	}
-	pass := remoteRandString(10)
+	pass := remoteDefaultPassword
 	rc := *a.remoteConfLocked()
 	rc.PassHash = remoteHashPassword(pass)
 	if a.store != nil {
@@ -301,6 +307,21 @@ func (a *App) remoteMux() http.Handler {
 	mux.HandleFunc("/api/share/enable", a.remoteHandleShareEnable)
 	mux.HandleFunc("/api/share/disable", a.remoteHandleShareDisable)
 	mux.HandleFunc("/sd/", a.remoteHandleShareDown)
+
+	// OpenList's storage and driver APIs: the mount table the remote tree
+	// is served from, and the driver form the create page renders.
+	mux.HandleFunc("/api/storage/list", a.remoteHandleStorageList)
+	mux.HandleFunc("/api/storage/get", a.remoteHandleStorageGet)
+	mux.HandleFunc("/api/storage/create", a.remoteHandleStorageCreate)
+	mux.HandleFunc("/api/storage/update", a.remoteHandleStorageUpdate)
+	mux.HandleFunc("/api/storage/delete", a.remoteHandleStorageDelete)
+	mux.HandleFunc("/api/storage/enable", a.remoteHandleStorageEnable)
+	mux.HandleFunc("/api/storage/disable", a.remoteHandleStorageDisable)
+	mux.HandleFunc("/api/storage/load_all", a.remoteHandleStorageLoadAll)
+	mux.HandleFunc("/api/driver/list", a.remoteHandleDriverList)
+	mux.HandleFunc("/api/driver/names", a.remoteHandleDriverNames)
+	mux.HandleFunc("/api/driver/info", a.remoteHandleDriverInfo)
+
 	mux.HandleFunc("/api/sunvale/status", a.remoteHandleStatus)
 	mux.HandleFunc("/api/sunvale/account", a.remoteHandleAccount)
 	mux.HandleFunc("/api/sunvale/reset-token", a.remoteHandleResetToken)

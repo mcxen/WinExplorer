@@ -465,6 +465,7 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
    <button class="nav-item" data-p="dash"><svg class="ic" viewBox="0 0 24 24"><path d="M4.5 17.5a9 9 0 1 1 15 0"/><path d="M12 13.5l3.5-3.5"/><path d="M12 16.5h.01"/></svg>仪表盘</button>
    <button class="nav-item" data-p="files"><svg class="ic" viewBox="0 0 24 24"><path d="M3.5 6.5a2 2 0 0 1 2-2h4.2l2 2.5h6.8a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>文件</button>
    <button class="nav-item" data-p="shares"><svg class="ic" viewBox="0 0 24 24"><circle cx="6.5" cy="12" r="2.4"/><circle cx="17" cy="6.5" r="2.4"/><circle cx="17" cy="17.5" r="2.4"/><path d="M8.7 10.9l6.1-3.3M8.7 13.1l6.1 3.3"/></svg>分享</button>
+   <button class="nav-item" data-p="storage"><svg class="ic" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/></svg>存储</button>
    <button class="nav-item" data-p="set"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7.5h16M4 16.5h16"/><circle cx="9.5" cy="7.5" r="2.2"/><circle cx="14.5" cy="16.5" r="2.2"/></svg>设置</button>
   </nav>
   <div id="navtree" class="hidden"></div>
@@ -551,6 +552,25 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
      <div id="sstate" class="empty"></div>
     </div>
    </section>
+   <section id="pg-storage" class="page hidden">
+    <div class="cards">
+     <div class="card">
+      <h2>首页显示</h2>
+      <p class="mtext">根挂载决定远程首页列出哪个文件夹。把它指到图片目录，首页就是图片目录。</p>
+      <div class="fld"><label>根目录（挂载点 /）</label><input id="rootPath" autocomplete="off" placeholder="/Users/me/Pictures"></div>
+      <div class="macts"><button id="rootSave" class="primary">保存</button></div>
+      <p class="hint" id="rootNow"></p>
+     </div>
+     <div class="card">
+      <h2>挂载点</h2>
+      <p class="mtext">每个挂载点把一个虚拟路径映射到本机文件夹。挂载点 / 是根，其余是它下面的子目录。</p>
+      <div id="storageList"></div>
+      <div class="fld"><label>挂载路径（如 /pics）</label><input id="stMount" autocomplete="off" placeholder="/pics"></div>
+      <div class="fld"><label>本机文件夹</label><input id="stRoot" autocomplete="off" placeholder="/Users/me/Pictures"></div>
+      <div class="macts"><button id="stAdd" class="primary">添加挂载</button></div>
+     </div>
+    </div>
+   </section>
    <section id="pg-set" class="page hidden">
     <div class="cards">
      <div class="card">
@@ -602,7 +622,7 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
 const TOKEN_KEY='sunvale_token';
 const $=id=>document.getElementById(id);
 /*__SHARED_JS__*/
-const PAGES={dash:['仪表盘','服务状态、存储与分享概览'],files:['文件','浏览、上传与整理主文件夹'],shares:['分享','通过链接向外分享文件'],set:['设置','账号、令牌、端口与远程开关']};
+const PAGES={dash:['仪表盘','服务状态、存储与分享概览'],files:['文件','浏览、上传与整理主文件夹'],shares:['分享','通过链接向外分享文件'],storage:['存储','挂载点与远程首页显示'],set:['设置','账号、令牌、端口与远程开关']};
 let token='';
 try{token=localStorage.getItem(TOKEN_KEY)||''}catch(e){}
 let page='';
@@ -735,7 +755,7 @@ async function boot(){
 function go(p){
  page=p;
  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.p===p));
- ['dash','files','shares','set'].forEach(k=>$('pg-'+k).classList.toggle('hidden',k!==p));
+ ['dash','files','shares','storage','set'].forEach(k=>$('pg-'+k).classList.toggle('hidden',k!==p));
  renderTopbar();
  if(p==='files'){
   renderNavtree();
@@ -746,6 +766,7 @@ function go(p){
  $('previewpane').classList.add('hidden');
  if(addrEditing())endAddrEdit();
  if(p==='dash'||p==='set')loadStatus();
+ else if(p==='storage')loadStorages();
  else loadShares();
 }
 function renderTopbar(){
@@ -793,6 +814,77 @@ async function setRemote(on){
  if(on){toast('远程访问已开启',1);await loadStatus()}
  else{status=status||{};status.enabled=false;renderStatus();toast('远程访问已关闭',1)}
 }
+// ---- 存储：挂载点与远程首页 ----
+let storages=[];
+async function loadStorages(){
+ const j=await api('/api/storage/list');
+ if(!j||j.code!==200){toast('存储加载失败：'+(j&&j.message||'网络错误'),0);return}
+ storages=(j.data&&j.data.content)||[];
+ renderStorages();
+}
+function storageRootOf(s){
+ try{return (JSON.parse(s.addition||'{}').root)||''}catch(e){return ''}
+}
+function renderStorages(){
+ const root=storages.find(s=>s.mount_path==='/');
+ $('rootPath').value=root?storageRootOf(root):'';
+ $('rootNow').textContent=root?('当前：'+storageRootOf(root)):'';
+ const box=$('storageList');
+ box.textContent='';
+ storages.filter(s=>s.mount_path!=='/').forEach(s=>{
+  const row=document.createElement('div');
+  row.className='setrow';
+  const txt=document.createElement('span');
+  txt.textContent=s.mount_path+' → '+storageRootOf(s)+(s.disabled?'（已停用）':'');
+  txt.style.flex='1';
+  const toggle=btn(s.disabled?'启用':'停用');
+  toggle.onclick=async()=>{
+   const act=s.disabled?'enable':'disable';
+   const j=await api('/api/storage/'+act+'?id='+s.id,'POST');
+   if(!j||j.code!==200){toast('操作失败：'+(j&&j.message||'网络错误'),0);return}
+   await loadStorages();
+  };
+  const del=btn('删除');del.className='danger';
+  del.onclick=async()=>{
+   if(!await confirmBox('删除挂载','删除挂载点 '+s.mount_path+'？它下面的路径将不再可访问。','删除',true))return;
+   const j=await api('/api/storage/delete?id='+s.id,'POST');
+   if(!j||j.code!==200){toast('删除失败：'+(j&&j.message||'网络错误'),0);return}
+   await loadStorages();
+  };
+  row.append(txt,toggle,del);
+  box.append(row);
+ });
+ if(!box.children.length){
+  const p=document.createElement('p');p.className='hint';p.textContent='还没有子挂载点';
+  box.append(p);
+ }
+}
+async function saveRootStorage(){
+ const root=$('rootPath').value.trim();
+ if(!root){toast('请填写文件夹路径',0);return}
+ const cur=storages.find(s=>s.mount_path==='/');
+ const body={mount_path:'/',driver:'local',addition:JSON.stringify({root})};
+ if(cur)body.id=cur.id;
+ const j=await api('/api/storage/'+(cur?'update':'create'),'POST',body);
+ if(!j||j.code!==200){toast('保存失败：'+(j&&j.message||'网络错误'),0);return}
+ toast('首页目录已更新',1);
+ await loadStorages();
+}
+async function addStorage(){
+ const mount=$('stMount').value.trim(),root=$('stRoot').value.trim();
+ if(!mount||!root){toast('请填写挂载路径与文件夹',0);return}
+ const j=await api('/api/storage/create','POST',{mount_path:mount,driver:'local',addition:JSON.stringify({root})});
+ if(!j||j.code!==200){toast('添加失败：'+(j&&j.message||'网络错误'),0);return}
+ $('stMount').value='';$('stRoot').value='';
+ toast('挂载已添加',1);
+ await loadStorages();
+}
+document.addEventListener('DOMContentLoaded',()=>{
+ const r=$('rootSave'),a=$('stAdd');
+ if(r)r.onclick=saveRootStorage;
+ if(a)a.onclick=addStorage;
+});
+
 async function saveAccount(){
  const u=$('accUser').value.trim(),p=$('accPass').value;
  if(!u&&!p){toast('请填写新用户名或新密码',0);return}

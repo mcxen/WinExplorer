@@ -130,6 +130,9 @@ go build -o sunvale .
 **扩展命令（Shell 扩展协议）**
 对应资源管理器的注册表动词：在配置文件中登记的命令会出现在匹配文件的右键菜单里，按注册顺序排列，带占位符与可选终端执行（详见下方「配置文件」）。
 
+**分享**
+命令栏「分享」（需先选中文件）打开分享对话框：可设访问密码与有效期（永久/1 小时/1 天/7 天/30 天），创建后给出 `/sd/<id>` 链接，一键复制。分享由应用自带的远程服务创建（走 `/api/share/create`，与浏览器管理端同一套存储与校验），因此需要先在 查看更多 中开启远程访问；只支持主文件夹内的项目，主文件夹之外的路径会被明确拒绝而不是被悄悄改成别的路径。
+
 **拖拽移动**
 把文件拖到文件夹行、侧边栏位置、面包屑层级、标签页或主页磁贴即移动过去；按住 `Cmd/Ctrl` 拖为复制；行在选中集合内时携带整个选择；同名自动「名称 - 副本」避让，跨盘（EXDEV）移动回退为复制后删除，把文件夹拖进自身或子目录会跳过；可把文件夹拖到标签页移到该标签文件夹。行同样是**系统拖拽源**：把文件拖出窗口，Finder / 资源管理器收到的是文件列表，由放置目标执行移动或复制。从其他应用拖入的文件是**复制**到目标文件夹（空白处即当前文件夹），不论是否按住修饰键——原件属于源应用，不在这里移动；非本地文件的链接（`https://` 等）会被忽略并在状态栏说明。拖过时目标高亮。
 
@@ -441,7 +444,8 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `statdev_unix.go` / `statdev_windows.go` | 取路径所在设备号（Unix `Stat_t.Dev` / Windows 卷名 FNV 哈希），用于卷列表去重 |
 | `statfs_unix.go` / `statfs_other.go` | 按平台读取卷容量 |
 | `birthtime_darwin.go` / `birthtime_other.go` | 按平台读取文件创建时间 |
-| `remote*.go` | 远程访问（OpenList 兼容）：服务生命周期/账号与 JWT（`remote.go`）、auth/public API（`remote_api.go`）、fs/list·get·search 与虚拟路径映射、下载签名（`remote_fs.go`）、fs 写操作与上传（`remote_manage.go`）、压缩与解压端点（`remote_archive.go`）、右键 shell 端点：扩展命令列出/执行与开终端（`remote_ext.go`）、分享协议、`/@s` 访客流与 `/sd` 直链（`remote_share.go`）、`/api/sunvale/*` 管理端点（`remote_admin.go`）、`/d`/`/p` 流式下载（`remote_dl.go`）、内置网页（`remote_web.go` + `remote_web.html`）、管理界面（`remote_manage_web.go` + `remote_manage_web.html`） |
+| `remote*.go` | 远程访问（OpenList 兼容）：服务生命周期/账号与 JWT（`remote.go`）、auth/public API（`remote_api.go`）、fs/list·get·search 与虚拟路径映射、下载签名（`remote_fs.go`）、fs 写操作与上传（`remote_manage.go`）、压缩与解压端点（`remote_archive.go`）、右键 shell 端点：扩展命令列出/执行与开终端（`remote_ext.go`）、分享协议、`/@s` 访客流与 `/sd` 直链（`remote_share.go`）、`/api/storage/*` 与 `/api/driver/*` 挂载点与远程首页（`remote_storage.go`）、`/api/sunvale/*` 管理端点（`remote_admin.go`）、`/d`/`/p` 流式下载（`remote_dl.go`）、内置网页（`remote_web.go` + `remote_web.html`）、管理界面（`remote_manage_web.go` + `remote_manage_web.html`） |
+| `sharedialog.go` | 桌面端分享对话框：密码、有效期、创建分享与复制链接 |
 
 ## 测试
 

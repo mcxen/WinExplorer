@@ -296,6 +296,7 @@ func (a *App) view(c *ui.Context) {
 	})
 	a.quickLookModal(c)
 	a.propertiesModal(c)
+	a.shareModal(c)
 	a.settingsModal(c)
 	a.extEditModal(c)
 	a.batchRenameModal(c)

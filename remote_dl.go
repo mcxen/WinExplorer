@@ -50,7 +50,7 @@ func (a *App) remoteServeDownload(w http.ResponseWriter, r *http.Request, prefix
 		remoteHTMLFail(w, http.StatusUnauthorized, remoteSignErrText(sign))
 		return
 	}
-	disk, ok := remoteDiskPath(vpath)
+	disk, ok := a.remoteDiskPath(vpath)
 	if !ok {
 		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
 		return

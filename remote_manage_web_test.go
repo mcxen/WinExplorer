@@ -67,6 +67,9 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"fzone", "previewpane", "statusbar", "statusLeft", "statusMode",
 		// 导航树、上传进度与拖拽提示
 		"navtree", "uplist", "dropHint",
+		// 存储页：根目录与挂载点
+		"pg-storage", "rootPath", "rootSave", "rootNow", "storageList",
+		"stMount", "stRoot", "stAdd",
 	} {
 		if !ids[id] {
 			t.Errorf("the files view lost #%s", id)

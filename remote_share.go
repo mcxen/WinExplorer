@@ -246,7 +246,7 @@ func (a *App) remoteHandleShareCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, f := range req.Files {
 		vpath := remoteFSCleanVPath(f)
-		disk, ok := remoteDiskPath(vpath)
+		disk, ok := a.remoteDiskPath(vpath)
 		if !ok {
 			remoteErr(w, 500, "file not found")
 			return
@@ -625,7 +625,7 @@ func (a *App) remoteShareFSList(w http.ResponseWriter, r *http.Request, vpath, p
 			if f == "/" {
 				continue // the virtual root itself is not an entry
 			}
-			disk, ok := remoteDiskPath(f)
+			disk, ok := a.remoteDiskPath(f)
 			if !ok {
 				continue
 			}
@@ -642,7 +642,7 @@ func (a *App) remoteShareFSList(w http.ResponseWriter, r *http.Request, vpath, p
 			remoteErr(w, 500, "object not found")
 			return
 		}
-		disk, ok := remoteDiskPath(vp)
+		disk, ok := a.remoteDiskPath(vp)
 		if !ok {
 			remoteErr(w, 500, "object not found")
 			return
@@ -723,7 +723,7 @@ func (a *App) remoteShareFSGet(w http.ResponseWriter, r *http.Request, vpath, pa
 			remoteErr(w, 500, "object not found")
 			return
 		}
-		disk, ok := remoteDiskPath(vp)
+		disk, ok := a.remoteDiskPath(vp)
 		if !ok {
 			remoteErr(w, 500, "object not found")
 			return
@@ -773,7 +773,7 @@ func (a *App) remoteHandleShareDown(w http.ResponseWriter, r *http.Request) {
 		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
-	disk, ok := remoteDiskPath(vp)
+	disk, ok := a.remoteDiskPath(vp)
 	if !ok {
 		remoteHTMLFail(w, http.StatusInternalServerError, "file not found")
 		return

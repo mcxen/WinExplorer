@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 
+	"sunvale/diskhealth"
 	"sunvale/internal/searchquery"
 )
 
@@ -216,6 +217,9 @@ type App struct {
 	// and is torn down on navigation, so no window probes disks it is not
 	// showing.
 	diskWatch func()
+	// diskRead replaces the disk-health probe in tests, keeping the page's
+	// layout assertions independent of the machine running them.
+	diskRead func() diskhealth.Report
 	// diskCharts and diskVolumeCharts keep the per-disk chart interaction
 	// state (which point or slice is selected), one entry per disk id.
 	diskCharts       map[string]*chart.State

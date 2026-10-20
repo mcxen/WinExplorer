@@ -141,7 +141,7 @@ func (a *App) disksView(c *ui.Context) {
 		return
 	}
 	a.disksWatch()
-	r := diskhealth.ReadAsync()
+	r := a.readDiskReport()
 
 	ui.Scroll(c).Grow(1).FillWidth().Padding(24, 20, 24, 24).Gap(16).Children(func() {
 		a.disksHeader(c, r)
@@ -157,6 +157,15 @@ func (a *App) disksView(c *ui.Context) {
 			a.disksNotes(c, r.Notes)
 		}
 	})
+}
+
+// readDiskReport returns the page's current report. Tests inject a fixed
+// report so layout checks never depend on the host's drives or smartctl.
+func (a *App) readDiskReport() diskhealth.Report {
+	if a.diskRead != nil {
+		return a.diskRead()
+	}
+	return diskhealth.ReadAsync()
 }
 
 // disksHeader is the page title, the refresh control and the provenance

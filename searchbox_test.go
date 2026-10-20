@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -388,6 +389,88 @@ func reasonLabelOf(t *testing.T, a *App, name string) string {
 	}
 	t.Fatalf("the palette does not list %q: %v", name, namesOf(a.searchBox.results))
 	return ""
+}
+
+// TestSearchFilterCount: 类型 narrows the visible hits without walking the
+// disk again, and the filter bar's count says x / y for the kept and total
+// matches. Switching back to 全部类型 restores the rest.
+func TestSearchFilterCount(t *testing.T) {
+	a, tt, dir := keynavWindow(t, 1)
+	writeFiles(t, dir, map[string]string{
+		"alpha.txt": "x",
+		"alpha.png": "x",
+		"alpha.zip": "x",
+	})
+	a.reload()
+	tt.Key(ui.Ctrl, ui.KeyK)
+	tt.Frame()
+	a.searchBox.scope = scopeFolder
+	tt.Type("alpha")
+	tt.Frame()
+	waitSearchBox(t, tt, a)
+	tt.Frame()
+	if len(a.searchBox.results) != 3 {
+		t.Fatalf("hits = %v, want all three", namesOf(a.searchBox.results))
+	}
+	started := a.searchBox.started
+	gen := a.searchBox.gen
+	if err := tt.Click("类型：全部类型"); err != nil {
+		t.Fatalf("类型 filter did not open: %v", err)
+	}
+	tt.Frame()
+	if menu := tt.Menu(); !slices.Contains(menu, "文档") {
+		t.Fatalf("类型 menu = %v, want 文档", menu)
+	}
+	if err := tt.ChooseMenuItem("文档"); err != nil {
+		t.Fatalf("类型 menu did not choose 文档: %v", err)
+	}
+	waitSearchBox(t, tt, a)
+	tt.Frame()
+	if got := namesOf(a.searchBox.results); len(got) != 1 || got[0] != "alpha.txt" {
+		t.Fatalf("文档 filter = %v, want alpha.txt", got)
+	}
+	if a.searchBox.gen != gen {
+		t.Fatal("a filter change started a second walk")
+	}
+	if a.searchBox.started != started {
+		t.Fatal("a filter change restarted the walk clock")
+	}
+	if !tt.HasText("1 / 3 个结果") {
+		t.Fatalf("the count is missing: %v", tt.Texts())
+	}
+	if err := tt.Click("类型：文档"); err != nil {
+		t.Fatalf("类型 filter did not reopen: %v", err)
+	}
+	tt.Frame()
+	if err := tt.ChooseMenuItem("全部类型"); err != nil {
+		t.Fatalf("类型 menu did not restore all: %v", err)
+	}
+	waitSearchBox(t, tt, a)
+	tt.Frame()
+	if len(a.searchBox.results) != 3 {
+		t.Fatalf("removing the filter left %v", namesOf(a.searchBox.results))
+	}
+}
+
+// TestSearchFilterModifiers: the bar and the query language are one thing:
+// the same dm:, size: and kind: modifiers answer a typed query.
+func TestSearchFilterModifiers(t *testing.T) {
+	got := searchQueryWithFilters("report", searchFilters{
+		kind: kindDocumentFilter,
+		when: timeWeekFilter,
+		size: sizeLargeFilter,
+	})
+	if !strings.Contains(got, "kind:document") || !strings.Contains(got, "dm:7d") ||
+		!strings.Contains(got, "size:>10mb") {
+		t.Fatalf("query with filters = %q", got)
+	}
+	if got := searchQueryWithFilters("", searchFilters{kind: kindFolderFilter}); got != "folder:" {
+		t.Fatalf("folder filter alone = %q", got)
+	}
+	walk := searchWalkQuery("report", searchFilters{kind: kindDocumentFilter})
+	if strings.Contains(walk, "kind:") || !strings.Contains(walk, "report") {
+		t.Fatalf("the walk query kept the type filter: %q", walk)
+	}
 }
 
 // TestSearchBoxCursorStaysOnItsHit: a batch that sorts above the cursor moves

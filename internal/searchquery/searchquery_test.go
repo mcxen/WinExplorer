@@ -17,7 +17,10 @@ import (
 func matchNames(q Query, names ...string) []string {
 	var out []string
 	for _, n := range names {
-		if q.Matches(n, "/root/"+n, strings.ToLower(strings.TrimPrefix(extOfName(n), ".")), strings.HasSuffix(n, "/")) {
+		if q.Matches(n, "/root/"+n, MatchInfo{
+			Ext:   strings.ToLower(strings.TrimPrefix(extOfName(n), ".")),
+			IsDir: strings.HasSuffix(n, "/"),
+		}) {
 			out = append(out, strings.TrimSuffix(n, "/"))
 		}
 	}
@@ -84,10 +87,10 @@ func TestParseBasics(t *testing.T) {
 	if len(q.terms) != 2 || q.terms[0].kind != termPath || q.terms[1].kind != termName {
 		t.Fatalf("path terms = %+v", q.terms)
 	}
-	if !q.Matches("alpha.txt", "/root/docs/alpha.txt", "txt", false) {
+	if !q.Matches("alpha.txt", "/root/docs/alpha.txt", MatchInfo{Ext: "txt"}) {
 		t.Fatal("path: should match a hit under docs")
 	}
-	if q.Matches("alpha.txt", "/root/other/alpha.txt", "txt", false) {
+	if q.Matches("alpha.txt", "/root/other/alpha.txt", MatchInfo{Ext: "txt"}) {
 		t.Fatal("path: matched outside docs")
 	}
 
@@ -119,6 +122,48 @@ func TestParseModifiersAreNotEaten(t *testing.T) {
 	}
 }
 
+func TestMetadataFilters(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.Local)
+	tests := []struct {
+		name string
+		q    string
+		info MatchInfo
+		want bool
+	}{
+		{"dm today keeps today", "dm:today", MatchInfo{Ext: "txt", ModTime: now.Add(-time.Hour)}, true},
+		{"dm today drops yesterday", "dm:today", MatchInfo{Ext: "txt", ModTime: now.Add(-25 * time.Hour)}, false},
+		{"dm 7d keeps six days", "dm:7d", MatchInfo{Ext: "txt", ModTime: now.Add(-6 * 24 * time.Hour)}, true},
+		{"dm 30d drops forty", "dm:30d", MatchInfo{Ext: "txt", ModTime: now.Add(-40 * 24 * time.Hour)}, false},
+		{"dm year keeps january", "dm:year", MatchInfo{Ext: "txt", ModTime: time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local)}, true},
+		{"dm year drops last year", "dm:year", MatchInfo{Ext: "txt", ModTime: time.Date(2025, 12, 31, 0, 0, 0, 0, time.Local)}, false},
+		{"size small", "size:<100kb", MatchInfo{Ext: "txt", Size: 99 * 1000}, true},
+		{"size small bound", "size:<100kb", MatchInfo{Ext: "txt", Size: 100 * 1000}, false},
+		{"size medium low", "size:100kb..10mb", MatchInfo{Ext: "txt", Size: 100 * 1000}, true},
+		{"size medium high", "size:100kb..10mb", MatchInfo{Ext: "txt", Size: 10 * 1000 * 1000}, true},
+		{"size large", "size:>10mb", MatchInfo{Ext: "txt", Size: 10*1000*1000 + 1}, true},
+		{"size keeps folders", "size:>10mb", MatchInfo{IsDir: true, Size: 0}, true},
+		{"kind document", "kind:document", MatchInfo{Ext: "docx"}, true},
+		{"kind document misses image", "kind:document", MatchInfo{Ext: "png"}, false},
+		{"kind image", "kind:image", MatchInfo{Ext: "heic"}, true},
+		{"kind media", "kind:media", MatchInfo{Ext: "mp3"}, true},
+		{"kind archive", "kind:archive", MatchInfo{Ext: "7z"}, true},
+		{"kind code", "kind:code", MatchInfo{Ext: "go"}, true},
+		{"kind code misses folder", "kind:code", MatchInfo{IsDir: true}, false},
+		{"unknown dm ignores", "dm:tomorrow", MatchInfo{Ext: "txt", ModTime: now, Size: 1, IsDir: false}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			q := Parse(tc.q)
+			if got := q.Matches("notes", "/root/notes", tc.info); got != tc.want {
+				t.Fatalf("%q = %v, want %v", tc.q, got, tc.want)
+			}
+		})
+	}
+	if !Parse("kind:image").HasMetadataFilter() || Parse("alpha").HasMetadataFilter() {
+		t.Fatal("HasMetadataFilter did not tell the filters apart")
+	}
+}
+
 func TestCaseModifier(t *testing.T) {
 	// case: toggles sensitivity from its position to the end.
 	q := Parse("alpha case:BETA")
@@ -128,10 +173,10 @@ func TestCaseModifier(t *testing.T) {
 	// The term before case: stays insensitive: xAlPhAx alone does not
 	// match because BETA must also match, but the insensitive alpha term
 	// accepts any case of it.
-	if !q.Matches("xAlPhAx-BETA", "", "", false) {
+	if !q.Matches("xAlPhAx-BETA", "", MatchInfo{}) {
 		t.Fatal("alpha matched insensitively before case:")
 	}
-	if q.Matches("xalpha-beta", "", "", false) {
+	if q.Matches("xalpha-beta", "", MatchInfo{}) {
 		t.Fatal("case:BETA matched the wrong case")
 	}
 	// A second case: toggles back.
@@ -139,7 +184,7 @@ func TestCaseModifier(t *testing.T) {
 	if q.sensitive {
 		t.Fatal("double case: did not toggle back")
 	}
-	if !q.Matches("xxBETAxxgammaxx", "", "", false) {
+	if !q.Matches("xxBETAxxgammaxx", "", MatchInfo{}) {
 		t.Fatal("toggled-back query should match insensitively")
 	}
 }

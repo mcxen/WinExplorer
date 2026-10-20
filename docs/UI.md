@@ -82,7 +82,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **预览窗格**（`preview_pane.go`）：右侧可调宽。
 - **状态栏**（`status.go`）：左侧项目数/选中数与大小，搜索时为搜索状态（`search.go:searchStatusLabel`）；右侧当前视图名。
 - **助手面板**（`assistant.go`）：右侧，Markdown 回复与 OpenUI 卡片。
-- **快速搜索 Ctrl+K**（`searchbox.go`）：有应用运行时为独立无边框磨砂面板（`ensureSearchPanel`），测试中为窗口内对话框（`searchBoxModal`）。查询行右侧是「相关度 / 名称」排序切换与范围切换；每行第一行显示完整文件名（扩展名用次要文字色）和 16 高、10 号字的命中原因标签（“文件名”为强调色，“路径”为次要色，背景 `colorHover()`），第二行显示相对搜索根的面包屑，悬停显示完整路径。路径分段是 16 高按钮：悬停背景 `colorHover()`、文字 `colorAccent()`，点击关闭面板并导航到该段；省略段不可点击，悬停提示被省略的文件夹。只有路径命中时，第二行路径中的命中片段用 `colorHit()` 标出。
+- **快速搜索 Ctrl+K**（`searchbox.go`）：有应用运行时为独立无边框磨砂面板（`ensureSearchPanel`，760×520），测试中为窗口内对话框（`searchBoxModal`）。查询行右侧是「相关度 / 名称」排序切换与范围切换；查询行下方是高 22、圆角 11、边框 `colorFieldBorder()` 的「类型 / 时间 / 大小 / 位置」筛选 chip，激活时背景 `colorSelected()`，右侧计数为「x / y 个结果」。每行第一行显示完整文件名（扩展名用次要文字色）和 16 高、10 号字的命中原因标签（“文件名”为强调色，“路径”为次要色，背景 `colorHover()`），第二行显示相对搜索根的面包屑，悬停显示完整路径。路径分段是 16 高按钮：悬停背景 `colorHover()`、文字 `colorAccent()`，点击关闭面板并导航到该段；省略段不可点击，悬停提示被省略的文件夹。只有路径命中时，第二行路径中的命中片段用 `colorHit()` 标出。
 
   ![快速搜索现状](assets/ui/search-palette.png)
 - **对话框**：统一走 `glass.go:floatDialog` / Onevra `components.Dialog`；底部按钮用 `uikit.go:uikitDialogButtons`（主按钮在右）。

@@ -34,6 +34,12 @@ type Query struct {
 	sensitive bool
 	filtering filterKind // file: / folder:
 	exts      []string   // ext:, lowercase, no dots; nil without ext:
+	// dm, size and kind are the palette's filter bar in query form. They
+	// live here rather than in the palette so the index and the live walk
+	// answer exactly the same query.
+	dm    timeFilter
+	size  sizeFilter
+	kinds []string // kind: document/image/media/archive/code
 }
 
 // term is one conjunct of a query.
@@ -116,6 +122,20 @@ func Parse(raw string) Query {
 					}
 				}
 				continue
+			case "dm":
+				q.dm = parseTimeFilter(rest)
+				continue
+			case "size":
+				q.size = parseSizeFilter(rest)
+				continue
+			case "kind":
+				for _, k := range strings.Split(rest, ";") {
+					k = strings.ToLower(strings.TrimSpace(k))
+					if k != "" {
+						q.kinds = append(q.kinds, k)
+					}
+				}
+				continue
 			}
 		}
 		terms = append(terms, term{text: f, caseSensitive: q.sensitive})
@@ -131,7 +151,7 @@ func Parse(raw string) Query {
 // that is not exactly "word:" or "word:text" with word in the modifier
 // set — "d:\path" and "http://" must survive as ordinary terms.
 func cutModifier(field string) (prefix, rest string, ok bool) {
-	for _, m := range []string{"file", "folder", "path", "ext", "case"} {
+	for _, m := range []string{"file", "folder", "path", "ext", "case", "dm", "size", "kind"} {
 		if len(field) == len(m)+1 && strings.EqualFold(field[:len(m)], m) && field[len(m)] == ':' {
 			return m, "", true
 		}
@@ -174,11 +194,30 @@ func splitTerms(q string) []string {
 	return out
 }
 
+// MatchInfo is what the query needs of a candidate beyond its name and path:
+// its size and modification time for the palette's filter bar. A zero
+// modification time is unknown and fails a time filter; a negative size is
+// unknown and fails a size filter. Other callers that know neither can leave
+// the fields zero when their query has no such filter.
+type MatchInfo struct {
+	IsDir   bool
+	Ext     string // lower, no dot; empty for folders
+	Size    int64
+	ModTime time.Time
+}
+
+// HasMetadataFilter reports whether the query asks for information that a
+// name-only caller may not have. The assistant's search, for example, only
+// knows names and paths; it leaves such filters to callers that can answer.
+func (q Query) HasMetadataFilter() bool {
+	return q.dm != timeAny || q.size != sizeAny || len(q.kinds) > 0
+}
+
 // Matches reports whether name and path satisfy the query: every term
-// present, and the file/folder and ext filters honored. isDir tells the
-// kind; ext is the entry's lowercased extension without a dot. Hidden
-// entries are filtered by the walk, not here.
-func (q Query) Matches(name, path, ext string, isDir bool) bool {
+// present, and the file/folder, extension, time, size and kind filters
+// honored. info carries what the filters need.
+func (q Query) Matches(name, path string, info MatchInfo) bool {
+	isDir, ext := info.IsDir, info.Ext
 	switch q.filtering {
 	case filterFile:
 		if isDir {
@@ -196,6 +235,29 @@ func (q Query) Matches(name, path, ext string, isDir bool) bool {
 		found := false
 		for _, e := range q.exts {
 			if e == ext {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	if q.dm != timeAny {
+		if info.ModTime.IsZero() || !q.dm.matches(info.ModTime, time.Now()) {
+			return false
+		}
+	}
+	if q.size != sizeAny {
+		if info.Size < 0 || !q.size.matches(info.Size, isDir) {
+			return false
+		}
+	}
+	if len(q.kinds) > 0 {
+		kind := KindOfExt(ext)
+		found := false
+		for _, k := range q.kinds {
+			if k == kind {
 				found = true
 				break
 			}
@@ -255,6 +317,115 @@ func (k MatchKind) Label() string {
 type Reason struct {
 	Text   string
 	Weight int
+}
+
+// timeFilter is one choice of the palette's 时间 filter.
+type timeFilter int
+
+const (
+	timeAny timeFilter = iota
+	timeToday
+	timeWeek
+	timeMonth
+	timeYear
+)
+
+func parseTimeFilter(s string) timeFilter {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "today":
+		return timeToday
+	case "7d":
+		return timeWeek
+	case "30d":
+		return timeMonth
+	case "year":
+		return timeYear
+	}
+	return timeAny
+}
+
+func (f timeFilter) matches(mod, now time.Time) bool {
+	switch f {
+	case timeToday:
+		y, m, d := now.Date()
+		start := time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+		return !mod.Before(start)
+	case timeWeek:
+		return !mod.Before(now.Add(-7 * 24 * time.Hour))
+	case timeMonth:
+		return !mod.Before(now.Add(-30 * 24 * time.Hour))
+	case timeYear:
+		return mod.Year() == now.Year()
+	}
+	return true
+}
+
+// sizeFilter is one choice of the palette's 大小 filter. Files and folders
+// differ: a folder's own size says nothing about what it holds, so a size
+// filter keeps folders rather than pretending they are empty.
+type sizeFilter int
+
+const (
+	sizeAny sizeFilter = iota
+	sizeSmall
+	sizeMedium
+	sizeLarge
+)
+
+func parseSizeFilter(s string) sizeFilter {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "<100kb":
+		return sizeSmall
+	case "100kb..10mb":
+		return sizeMedium
+	case ">10mb":
+		return sizeLarge
+	}
+	return sizeAny
+}
+
+func (f sizeFilter) matches(size int64, isDir bool) bool {
+	if isDir {
+		return true
+	}
+	switch f {
+	case sizeSmall:
+		return size < 100*1000
+	case sizeMedium:
+		return size >= 100*1000 && size <= 10*1000*1000
+	case sizeLarge:
+		return size > 10*1000*1000
+	}
+	return true
+}
+
+// KindOfExt groups extensions the way the filter bar's 类型 menu does. The
+// tags are the query modifiers' own names, so a filter and a typed kind:
+// mean the same thing.
+func KindOfExt(ext string) string {
+	ext = strings.ToLower(strings.TrimPrefix(ext, "."))
+	switch ext {
+	case "txt", "md", "markdown", "pdf", "doc", "docx", "rtf", "odt",
+		"xls", "xlsx", "csv", "ods", "ppt", "pptx", "odp", "pages",
+		"numbers", "key":
+		return "document"
+	case "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif",
+		"tif", "tiff", "avif", "ico", "svg":
+		return "image"
+	case "mp4", "m4v", "mov", "mkv", "avi", "webm", "wmv", "flv",
+		"mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "wma":
+		return "media"
+	case "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "tbz2", "xz",
+		"zst", "lz", "cab", "iso":
+		return "archive"
+	case "go", "rs", "swift", "c", "h", "cc", "cpp", "hpp", "m", "mm",
+		"js", "jsx", "ts", "tsx", "py", "rb", "java", "kt", "kts", "cs",
+		"php", "sh", "bash", "zsh", "fish", "ps1", "sql", "html", "css",
+		"scss", "sass", "less", "vue", "svelte", "json", "yaml", "yml",
+		"toml", "xml", "ini", "conf", "lua", "r", "dart", "ex", "exs":
+		return "code"
+	}
+	return ""
 }
 
 // Score ranks a hit: higher is better. now is passed in so tests are stable,

@@ -312,7 +312,17 @@ func walkRoot(ctx context.Context, root string, query searchquery.Query, hidden 
 		if !isDir {
 			ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
 		}
-		if !query.Matches(name, path, ext, isDir) {
+		info := searchquery.MatchInfo{IsDir: isDir, Ext: ext, Size: -1}
+		if !isDir {
+			if dInfo, err := d.Info(); err == nil {
+				info.Size = dInfo.Size()
+				info.ModTime = dInfo.ModTime()
+			}
+		}
+		if info.IsDir {
+			info.Size = 0
+		}
+		if !query.Matches(name, path, info) {
 			return nil
 		}
 		e := searchEntry(path, d)

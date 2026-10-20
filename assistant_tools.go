@@ -201,7 +201,7 @@ func (s *sunvaleTools) searchNames(ctx context.Context, _ *mcp.CallToolRequest, 
 		if relErr != nil {
 			rel = path
 		}
-		if !query.Matches(d.Name(), rel, ext, d.IsDir()) {
+		if !query.Matches(d.Name(), rel, searchquery.MatchInfo{IsDir: d.IsDir(), Ext: ext, Size: -1}) {
 			return nil
 		}
 		hits = append(hits, path)

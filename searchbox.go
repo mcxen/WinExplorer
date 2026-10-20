@@ -61,13 +61,18 @@ const (
 // searchBoxState is the palette's own search. One box per window, not per tab:
 // it searches the machine, not what a tab happens to show.
 type searchBoxState struct {
-	open    bool
-	query   string
-	scope   searchScope
-	results []Entry
-	list    ui.ListState
-	busy    bool
-	started time.Time
+	open  bool
+	query string
+	scope searchScope
+	// allResults is the raw query's one walk result; results is the filter
+	// bar's visible subset. A filter change reuses allResults rather than
+	// traversing the disks again.
+	filters    searchFilters
+	allResults []Entry
+	results    []Entry
+	list       ui.ListState
+	busy       bool
+	started    time.Time
 	// sortBy is the list's order: relevance (the default) or name.
 	sortBy searchSort
 	// scores and kinds cache what Score said when a hit arrived, so a
@@ -76,6 +81,10 @@ type searchBoxState struct {
 	kinds  map[string]searchquery.MatchKind
 	// src is the engine that answered the results on screen (searchSource).
 	src searchSource
+	// totalHits is everything the raw query found before the filter bar
+	// kept its share: the filter bar's x / y count.
+	totalHits    int
+	filteredHits int
 	// done is when the walk finished; zero while it runs, so the footer can
 	// show the elapsed time either way.
 	done time.Time
@@ -85,21 +94,99 @@ type searchBoxState struct {
 	// first name — stays chosen, whatever streams in above it.
 	cursor     int
 	cursorPath string
-	// walked and walkedScope are the query and scope of the walk in flight or
-	// finished: a change to either starts a new one. parsed is that query,
-	// ready for the list's hit marking.
-	walked      string
-	walkedScope searchScope
-	parsed      searchquery.Query
+	// walked, walkedScope and walkedFilters are the query, scope and filter
+	// bar of the walk in flight or finished: a change to any starts a new
+	// one. parsed is that query, ready for the list's hit marking.
+	walked        string
+	walkedScope   searchScope
+	walkedFilters searchFilters
+	parsed        searchquery.Query
+	walkQuery     searchquery.Query
 	// gen is the walk's generation. Closing the box or typing again bumps it,
 	// and the batches of an older walk are dropped.
 	gen uint64
 	// queue is where the search running off the frame thread hands its results
 	// over (frameQueue).
 	queue frameQueue
-	// seen is the path of every hit already listed, so a hit the index and the
-	// walk both found is listed once (addHits).
+	// seen is the path of every raw hit already listed, so a hit the index and
+	// the walk both found is listed once (addHits).
 	seen map[string]bool
+}
+
+// searchFilters is the palette's filter bar. The zero value is 不限 / 全部
+// kinds, which adds nothing to the query.
+type searchFilters struct {
+	kind searchKindFilter
+	when searchTimeFilter
+	size searchSizeFilter
+}
+
+type searchKindFilter int
+
+const (
+	kindAny searchKindFilter = iota
+	kindFolderFilter
+	kindDocumentFilter
+	kindImageFilter
+	kindMediaFilter
+	kindArchiveFilter
+	kindCodeFilter
+)
+
+var searchKindOptions = []struct {
+	filter searchKindFilter
+	label  string
+	mod    string
+}{
+	{kindAny, "全部类型", ""},
+	{kindFolderFilter, "文件夹", "folder"},
+	{kindDocumentFilter, "文档", "document"},
+	{kindImageFilter, "图片", "image"},
+	{kindMediaFilter, "音视频", "media"},
+	{kindArchiveFilter, "压缩包", "archive"},
+	{kindCodeFilter, "代码", "code"},
+}
+
+type searchTimeFilter int
+
+const (
+	timeAnyFilter searchTimeFilter = iota
+	timeTodayFilter
+	timeWeekFilter
+	timeMonthFilter
+	timeYearFilter
+)
+
+var searchTimeOptions = []struct {
+	filter searchTimeFilter
+	label  string
+	mod    string
+}{
+	{timeAnyFilter, "不限时间", ""},
+	{timeTodayFilter, "今天", "today"},
+	{timeWeekFilter, "近 7 天", "7d"},
+	{timeMonthFilter, "近 30 天", "30d"},
+	{timeYearFilter, "今年", "year"},
+}
+
+type searchSizeFilter int
+
+const (
+	sizeAnyFilter searchSizeFilter = iota
+	sizeSmallFilter
+	sizeMediumFilter
+	sizeLargeFilter
+)
+
+var searchSizeOptions = []struct {
+	filter searchSizeFilter
+	label  string
+	mod    string
+}{
+	{sizeAnyFilter, "不限大小", ""},
+	{sizeSmallFilter, "< 100 KB", "<100kb"},
+	{sizeMediumFilter, "100 KB–10 MB", "100kb..10mb"},
+	{sizeLargeFilter, "> 10 MB", ">10mb"},
 }
 
 type searchSort int
@@ -108,6 +195,55 @@ const (
 	sortRelevance searchSort = iota
 	sortName
 )
+
+// searchQueryWithFilters appends the filter bar's choices to the typed
+// query. A raw query of nothing but filters is a legitimate search: it lists
+// everything the filters keep.
+func searchQueryWithFilters(q string, f searchFilters) string {
+	return searchQueryWithFiltersKind(q, f, true)
+}
+
+// searchWalkQuery is the same query without the 类型 choice. The walk still
+// gathers the type's rejected hits, so the filter bar can say x / y without
+// traversing the disk a second time; addHits applies the full query.
+func searchWalkQuery(q string, f searchFilters) string {
+	return searchQueryWithFiltersKind(q, f, false)
+}
+
+func searchQueryWithFiltersKind(q string, f searchFilters, withKind bool) string {
+	var mods []string
+	if withKind {
+		if f.kind == kindFolderFilter {
+			mods = append(mods, "folder:")
+		} else if f.kind != kindAny {
+			for _, opt := range searchKindOptions {
+				if opt.filter == f.kind {
+					mods = append(mods, "kind:"+opt.mod)
+					break
+				}
+			}
+		}
+	}
+	for _, opt := range searchTimeOptions {
+		if opt.filter == f.when && opt.mod != "" {
+			mods = append(mods, "dm:"+opt.mod)
+			break
+		}
+	}
+	for _, opt := range searchSizeOptions {
+		if opt.filter == f.size && opt.mod != "" {
+			mods = append(mods, "size:"+opt.mod)
+			break
+		}
+	}
+	if len(mods) == 0 {
+		return q
+	}
+	if q == "" {
+		return strings.Join(mods, " ")
+	}
+	return q + " " + strings.Join(mods, " ")
+}
 
 // searchBoxFrame is called once per frame from view: it starts a search when
 // the query or the scope changed and applies what comes back — the index's
@@ -126,20 +262,34 @@ func (a *App) searchBoxFrame() {
 	}
 	q := strings.TrimSpace(b.query)
 	if q == b.walked && b.scope == b.walkedScope {
+		if b.filters != b.walkedFilters {
+			b.walkedFilters = b.filters
+			rawQuery := searchQueryWithFilters(q, b.filters)
+			b.parsed = searchquery.Parse(rawQuery)
+			b.refilter()
+			b.cursor = b.cursorRow()
+			b.list.ScrollIntoView(b.cursor)
+			repaint()
+		}
 		return
 	}
-	b.walked, b.walkedScope = q, b.scope
-	b.parsed = searchquery.Parse(q)
+	b.walked, b.walkedScope, b.walkedFilters = q, b.scope, b.filters
+	rawQuery := searchQueryWithFilters(q, b.filters)
+	b.parsed = searchquery.Parse(rawQuery)
+	b.walkQuery = searchquery.Parse(strings.TrimSpace(q))
+	b.allResults = nil
 	b.results = nil
 	b.seen = nil
 	b.scores = nil
 	b.kinds = nil
+	b.totalHits = 0
+	b.filteredHits = 0
 	b.cursor, b.cursorPath = 0, ""
 	b.done = time.Time{}
 	b.src = sourceNone
 	b.gen++
 	gen := b.gen
-	if q == "" {
+	if rawQuery == "" {
 		b.busy = false
 		return
 	}
@@ -152,7 +302,7 @@ func (a *App) searchBoxFrame() {
 	b.src = sourceWalk
 	b.started = time.Now()
 	hidden := a.showHidden
-	query := searchquery.Parse(q)
+	query := b.walkQuery
 	deadline := time.Now().Add(searchDeadline(b.scope))
 	// land hands a closure to the frame: the main thread while the app runs,
 	// and the next frame's own thread in a headless test (frameQueue).
@@ -219,41 +369,59 @@ func (b *searchBoxState) hit() (Entry, bool) {
 	return b.results[b.cursor], true
 }
 
-// addHits folds a streamed batch into the list, in the order the switch asks
-// for, and keeps the cursor on the hit it was on: rows above it move as hits
-// arrive, the choice does not. A hit already listed — the index and the walk
+// addHits folds a raw batch into the walk's results. The filter bar then
+// derives its visible rows from those results, so changing a filter never
+// needs to walk the disks again. A hit already listed — the index and the walk
 // behind it can find the same file — is folded in once.
 func (b *searchBoxState) addHits(batch []Entry) {
 	added := false
-	if b.scores == nil {
-		b.scores = make(map[string]int)
+	if b.seen == nil {
+		b.seen = make(map[string]bool, len(batch))
 	}
-	if b.kinds == nil {
-		b.kinds = make(map[string]searchquery.MatchKind)
-	}
-	now := time.Now()
-	home := homeForSearch()
 	for _, e := range batch {
 		if e.Path == "" || b.seen[e.Path] {
 			continue
 		}
-		if b.seen == nil {
-			b.seen = make(map[string]bool, len(batch))
-		}
 		b.seen[e.Path] = true
-		b.results = append(b.results, e)
-		score, kind, _ := b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
-		b.scores[e.Path], b.kinds[e.Path] = score, kind
+		b.allResults = append(b.allResults, e)
 		added = true
 	}
 	if !added {
 		return
 	}
-	b.sortHits()
+	b.refilter()
 	if i := b.cursorRow(); i != b.cursor {
 		b.cursor = i
 		b.list.ScrollIntoView(i)
 	}
+}
+
+// refilter rebuilds the visible list from allResults for the filter bar's
+// current choices. It is the one place that applies the full query, so the
+// index, the walk and a filter change cannot drift apart.
+func (b *searchBoxState) refilter() {
+	now := time.Now()
+	home := homeForSearch()
+	b.results = nil
+	b.scores = make(map[string]int, len(b.allResults))
+	b.kinds = make(map[string]searchquery.MatchKind, len(b.allResults))
+	for _, e := range b.allResults {
+		info := searchquery.MatchInfo{
+			IsDir:   e.IsDir,
+			Ext:     e.Ext,
+			Size:    e.Size,
+			ModTime: e.ModTime,
+		}
+		if !b.parsed.Matches(e.Name, e.Path, info) {
+			continue
+		}
+		score, kind, _ := b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
+		b.results = append(b.results, e)
+		b.scores[e.Path], b.kinds[e.Path] = score, kind
+	}
+	b.totalHits = len(b.allResults)
+	b.filteredHits = len(b.results)
+	b.sortHits()
 }
 
 // sortHits puts the hits in the order the switch asks for. Relevance keeps
@@ -396,7 +564,7 @@ func (a *App) searchBoxModal(c *ui.Context) {
 func (a *App) searchBoxBody(c *ui.Context) {
 	b := &a.searchBox
 	_, h := c.Size()
-	listH := min(searchBoxListMax, max(searchBoxListMin, h-140))
+	listH := min(searchBoxListMax, max(searchBoxListMin, h-188))
 	ui.Column(c).Gap(0).FillWidth().MinWidth(420).Children(func() {
 		row := ui.Row(c).FillWidth().Height(44).Gap(8).AlignItems(ui.Center)
 		row.Children(func() {
@@ -420,6 +588,7 @@ func (a *App) searchBoxBody(c *ui.Context) {
 			}
 		})
 		ui.Box(c).Height(1).FillWidth().Background(colorDivider())
+		a.searchFilterBar(c)
 		if len(b.results) == 0 {
 			a.searchBoxNotice(c, listH)
 		} else {
@@ -429,6 +598,157 @@ func (a *App) searchBoxBody(c *ui.Context) {
 		}
 		a.searchBoxStatus(c)
 	})
+}
+
+// searchFilterBar is the row under the query: each menu narrows the same
+// walk by appending a query modifier, and the count on the right is what the
+// filters kept out of the hits that came back. Changing a filter starts a new
+// walk only when one is not already answering; the filter is part of the
+// walk key, so the disk is traversed at most once per distinct query.
+func (a *App) searchFilterBar(c *ui.Context) {
+	b := &a.searchBox
+	ui.Row(c).FillWidth().Height(30).Gap(8).AlignItems(ui.Center).Children(func() {
+		searchKindChip(c, &b.filters.kind)
+		searchTimeChip(c, &b.filters.when)
+		searchSizeChip(c, &b.filters.size)
+		searchPlaceChip(c, &b.scope)
+	})
+	ui.Row(c).FillWidth().Height(18).AlignItems(ui.Center).Justify(ui.End).Children(func() {
+		ui.Text(c, filterResultCount(b)).FontSize(11).TextColor(colorMuted()).
+			SingleLine().Shrink(0).TextAlign(ui.End)
+	})
+}
+
+// searchPlaceChip is the 位置 filter. It is the existing scope switch by
+// another name: 当前文件夹 walks the tab's folder, 主文件夹 the home subtree
+// and 全部磁盘 every mounted volume.
+func searchPlaceChip(c *ui.Context, scope *searchScope) {
+	value := "全部磁盘"
+	if *scope == scopeFolder {
+		value = "当前文件夹"
+	}
+	chip := searchFilterChip(c, "位置", value)
+	changed := false
+	chip.Menu(func(m *ui.Menu) {
+		options := []struct {
+			scope searchScope
+			label string
+		}{{scopeFolder, "当前文件夹"}, {scopeGlobal, "全部磁盘"}}
+		for _, opt := range options {
+			value := opt.scope
+			if m.Item(opt.label).Checked(value == *scope).Chosen() {
+				*scope = value
+				changed = true
+			}
+		}
+	})
+	if changed {
+		repaint()
+	}
+}
+
+func searchFilterChip(c *ui.Context, title, value string) ui.Element {
+	chip := ui.ButtonBase(c.Key("search-filter-"+title)).Height(22).Padding(0, 8).Gap(4).
+		Radius(11).Border(1, colorFieldBorder()).Shrink(0).AlignItems(ui.Center).
+		Label(title + "：" + value)
+	chip.Background(func() ui.Color {
+		if chip.Hovered() || chip.Pressed() {
+			return colorHover()
+		}
+		return ui.Color{}
+	}())
+	chip.Children(func() {
+		ui.Text(c, title+"：").FontSize(11).TextColor(colorMuted()).SingleLine()
+		ui.Text(c, value).FontSize(11).TextColor(colorText()).SingleLine()
+	})
+	return chip
+}
+
+func searchKindOptionsLabel(kind searchKindFilter) string {
+	for _, opt := range searchKindOptions {
+		if opt.filter == kind {
+			return opt.label
+		}
+	}
+	return searchKindOptions[0].label
+}
+
+func searchTimeOptionsLabel(when searchTimeFilter) string {
+	for _, opt := range searchTimeOptions {
+		if opt.filter == when {
+			return opt.label
+		}
+	}
+	return searchTimeOptions[0].label
+}
+
+func searchSizeOptionsLabel(size searchSizeFilter) string {
+	for _, opt := range searchSizeOptions {
+		if opt.filter == size {
+			return opt.label
+		}
+	}
+	return searchSizeOptions[0].label
+}
+
+func searchKindChip(c *ui.Context, current *searchKindFilter) {
+	chip := searchFilterChip(c, "类型", searchKindOptionsLabel(*current))
+	changed := false
+	chip.Menu(func(m *ui.Menu) {
+		for _, opt := range searchKindOptions {
+			value := opt.filter
+			if m.Item(opt.label).Checked(value == *current).Chosen() {
+				*current = value
+				changed = true
+			}
+		}
+	})
+	if changed {
+		repaint()
+	}
+}
+
+func searchTimeChip(c *ui.Context, current *searchTimeFilter) {
+	chip := searchFilterChip(c, "时间", searchTimeOptionsLabel(*current))
+	changed := false
+	chip.Menu(func(m *ui.Menu) {
+		for _, opt := range searchTimeOptions {
+			value := opt.filter
+			if m.Item(opt.label).Checked(value == *current).Chosen() {
+				*current = value
+				changed = true
+			}
+		}
+	})
+	if changed {
+		repaint()
+	}
+}
+
+func searchSizeChip(c *ui.Context, current *searchSizeFilter) {
+	chip := searchFilterChip(c, "大小", searchSizeOptionsLabel(*current))
+	changed := false
+	chip.Menu(func(m *ui.Menu) {
+		for _, opt := range searchSizeOptions {
+			value := opt.filter
+			if m.Item(opt.label).Checked(value == *current).Chosen() {
+				*current = value
+				changed = true
+			}
+		}
+	})
+	if changed {
+		repaint()
+	}
+}
+
+// filterResultCount is the filter bar's right-hand count. It names kept hits
+// when a filter is active; without one, the footer already has the count.
+func filterResultCount(b *searchBoxState) string {
+	if b.filters == (searchFilters{}) {
+		return ""
+	}
+	return itoa(b.filteredHits) + " / " + itoa(b.totalHits) + " 个结果"
 }
 
 // searchBoxNotice is the list's place while there is nothing in it: whether the

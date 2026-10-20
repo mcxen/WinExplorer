@@ -401,7 +401,15 @@ func searchIndexQuery(roots []string, query searchquery.Query, hidden bool) ([]E
 		if e.hidden && !hidden {
 			continue
 		}
-		if !query.Matches(filepath.Base(e.path), e.path, e.ext, e.isDir) {
+		info := searchquery.MatchInfo{
+			IsDir: e.isDir,
+			Ext:   e.ext,
+			Size:  e.size,
+		}
+		if e.mod > 0 {
+			info.ModTime = time.Unix(e.mod, 0)
+		}
+		if !query.Matches(filepath.Base(e.path), e.path, info) {
 			continue
 		}
 		hits = append(hits, e.entry())

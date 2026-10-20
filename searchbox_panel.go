@@ -28,7 +28,7 @@ var (
 // name, folder, size and date, short of a file-manager window.
 const (
 	searchPanelW = 760
-	searchPanelH = 480
+	searchPanelH = 520
 )
 
 // toggleSearchBox is Ctrl+K from anywhere: a second press hides the panel,
@@ -307,6 +307,9 @@ func (a *App) searchBoxCancel() {
 	b.gen++
 	b.query = ""
 	b.walked = ""
+	b.walkedFilters = searchFilters{}
+	b.filters = searchFilters{}
+	b.allResults = nil
 	b.results = nil
 	b.seen = nil
 	b.busy = false

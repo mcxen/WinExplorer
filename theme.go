@@ -144,6 +144,7 @@ func colorFolder() ui.Color   { return tokFolder }
 func colorHit() ui.Color      { return tokHit }
 func colorStatus() ui.Color   { return tokStatus }
 func colorAddress() ui.Color  { return tokAddress }
+func colorSurface() ui.Color  { return tokSurface }
 
 // colorCloseHover is the caption close button's hover, the red Windows 11
 // paints over it in both appearances.

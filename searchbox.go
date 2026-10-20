@@ -32,7 +32,7 @@ const (
 	// searchBoxWidth is the palette's width. It is a fixed request, as the
 	// other dialogs' widths are: a window narrower than it leaves the panel its
 	// insets and no more, and the rows keep their width rather than reflow.
-	searchBoxWidth float32 = 760
+	searchBoxWidth float32 = 960
 	// searchBoxListMax is how tall the hits list grows before it scrolls, and
 	// searchBoxListMin what it keeps when the window is short.
 	searchBoxListMax float32 = 384
@@ -64,6 +64,12 @@ type searchBoxState struct {
 	open  bool
 	query string
 	scope searchScope
+	// querySelected is the query editor's selection as of the last frame or
+	// edit key, so Ctrl+C can leave a selected query to normal text copy.
+	querySelected bool
+	// copyPath is a path queued by an edit-key callback. The next frame
+	// writes it through the current context's clipboard service.
+	copyPath string
 	// allResults is the raw query's one walk result; results is the filter
 	// bar's visible subset. A filter change reuses allResults rather than
 	// traversing the disks again.
@@ -76,10 +82,11 @@ type searchBoxState struct {
 	started    time.Time
 	// sortBy is the list's order: relevance (the default) or name.
 	sortBy searchSort
-	// scores and kinds cache what Score said when a hit arrived, so a
-	// streamed batch does not rescore every row.
-	scores map[string]int
-	kinds  map[string]searchquery.MatchKind
+	// scores, kinds and reasons cache what Score said when a hit arrived, so
+	// a streamed batch does not rescore every row or the preview.
+	scores  map[string]int
+	kinds   map[string]searchquery.MatchKind
+	reasons map[string][]searchquery.Reason
 	// src is the engine that answered the results on screen (searchSource).
 	src searchSource
 	// totalHits is everything the raw query found before the filter bar
@@ -295,6 +302,7 @@ func (a *App) searchBoxFrame() {
 	b.seen = nil
 	b.scores = nil
 	b.kinds = nil
+	b.reasons = nil
 	b.totalHits = 0
 	b.filteredHits = 0
 	b.cursor, b.cursorPath = 0, ""
@@ -422,6 +430,7 @@ func (b *searchBoxState) refilter() {
 	b.results = nil
 	b.scores = make(map[string]int, len(b.allResults))
 	b.kinds = make(map[string]searchquery.MatchKind, len(b.allResults))
+	b.reasons = make(map[string][]searchquery.Reason, len(b.allResults))
 	for _, e := range b.allResults {
 		info := searchquery.MatchInfo{
 			IsDir:   e.IsDir,
@@ -432,9 +441,10 @@ func (b *searchBoxState) refilter() {
 		if !b.parsed.Matches(e.Name, e.Path, info) {
 			continue
 		}
-		score, kind, _ := b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
+		score, kind, reasons := b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
 		b.results = append(b.results, e)
 		b.scores[e.Path], b.kinds[e.Path] = score, kind
+		b.reasons[e.Path] = reasons
 	}
 	b.totalHits = len(b.allResults)
 	b.filteredHits = len(b.results)
@@ -675,7 +685,7 @@ func (a *App) searchBoxModal(c *ui.Context) {
 // streamed hits, and the footer with the count, the elapsed time and the keys.
 func (a *App) searchBoxBody(c *ui.Context) {
 	b := &a.searchBox
-	_, h := c.Size()
+	w, h := c.Size()
 	listH := min(searchBoxListMax, max(searchBoxListMin, h-188))
 	ui.Column(c).Gap(0).FillWidth().MinWidth(420).Children(func() {
 		row := ui.Row(c).FillWidth().Height(44).Gap(8).AlignItems(ui.Center)
@@ -701,14 +711,30 @@ func (a *App) searchBoxBody(c *ui.Context) {
 		})
 		ui.Box(c).Height(1).FillWidth().Background(colorDivider())
 		a.searchFilterBar(c)
-		if len(b.results) == 0 {
-			a.searchBoxNotice(c, listH)
-		} else {
-			ui.List(c, &b.list, len(b.rows), func(i int) {
-				a.searchDisplayRowAt(c, i)
-			}).FillWidth().Height(listH).MinHeight(0)
-		}
-		a.searchBoxStatus(c)
+		bodyH := listH + 24
+		ui.Row(c).FillWidth().Height(bodyH).Children(func() {
+			list := ui.Column(c).Grow(1).MinWidth(0).Height(bodyH)
+			list.Children(func() {
+				if len(b.results) == 0 {
+					a.searchBoxNotice(c, listH)
+				} else {
+					ui.List(c, &b.list, len(b.rows), func(i int) {
+						a.searchDisplayRowAt(c, i)
+					}).FillWidth().Height(listH).MinHeight(0)
+				}
+				a.searchBoxStatus(c)
+			})
+			// The preview needs room for its path and actions without making
+			// the result list reflow; narrow windows keep the list full width.
+			if w >= 900 {
+				ui.Box(c).Width(1).Height(bodyH).Background(colorDivider())
+				if e, ok := b.hit(); ok {
+					a.searchPreview(c, e)
+				} else {
+					searchPreviewEmpty(c, bodyH)
+				}
+			}
+		})
 	})
 }
 
@@ -1060,7 +1086,7 @@ func elidedPath(dir string, segs []pathSeg) string {
 // with the 重建索引 button beside it, and the keys.
 func (a *App) searchBoxStatus(c *ui.Context) {
 	b := &a.searchBox
-	keys := "↑↓ 选择   Enter 打开   Ctrl+Enter 定位   Esc 关闭"
+	keys := "↑↓ 选择   Enter 打开   Ctrl+Enter 定位   Ctrl+C 复制路径   Esc 关闭"
 	text := "输入即搜索"
 	if idx := searchIndexSummary(); idx != "" {
 		text += " · " + idx
@@ -1142,9 +1168,25 @@ func formatElapsed(d time.Duration) string {
 // Escape closes the box.
 func (a *App) searchBoxKeys(c *ui.Context, in ui.Element) {
 	b := &a.searchBox
-	mods := c.Modifiers()
+	if b.copyPath != "" {
+		path := b.copyPath
+		b.copyPath = ""
+		if copyPathTextWith(path, c.WriteClipboard) {
+			a.statusMsg = "已复制路径"
+		}
+	}
+	start, end := in.TextSelection()
+	b.querySelected = start != end
 	in.OnTextKey(func(k ui.TextKey) bool {
 		switch k.Key {
+		case ui.KeyA:
+			if k.Mods&(ui.Ctrl|ui.Cmd) != 0 {
+				b.querySelected = true
+			}
+			return false
+		case ui.KeyEnd, ui.KeyHome, ui.KeyLeft, ui.KeyRight:
+			b.querySelected = false
+			return false
 		case ui.KeyUp:
 			a.searchBoxMove(-1)
 			return true
@@ -1157,12 +1199,25 @@ func (a *App) searchBoxKeys(c *ui.Context, in ui.Element) {
 		case ui.KeyPageDown:
 			a.searchBoxMove(10)
 			return true
+		case ui.KeyC:
+			if k.Mods&(ui.Ctrl|ui.Cmd) == 0 {
+				return false
+			}
+			// Let the query editor copy its own selection. With no selected
+			// text Ctrl+C copies the hit under the cursor instead.
+			if b.querySelected {
+				return false
+			}
+			if e, ok := b.hit(); ok && e.Path != "" && e.Path != pathThisPC {
+				b.copyPath = e.Path
+			}
+			return true
 		case ui.KeyEnter:
 			e, ok := b.hit()
 			if !ok {
 				return true
 			}
-			if mods&(ui.Ctrl|ui.Cmd) != 0 {
+			if k.Mods&(ui.Ctrl|ui.Cmd) != 0 {
 				a.revealSearchHit(e)
 			} else {
 				a.openSearchHit(e)

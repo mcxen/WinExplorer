@@ -27,8 +27,8 @@ var (
 // searchPanelSize is the panel's fixed size, in DIPs: wide enough for the
 // name, folder, size and date, short of a file-manager window.
 const (
-	searchPanelW = 760
-	searchPanelH = 520
+	searchPanelW = 960
+	searchPanelH = 560
 )
 
 // toggleSearchBox is Ctrl+K from anywhere: a second press hides the panel,
@@ -306,6 +306,8 @@ func (a *App) searchBoxCancel() {
 	b := &a.searchBox
 	b.gen++
 	b.query = ""
+	b.querySelected = false
+	b.copyPath = ""
 	b.walked = ""
 	b.walkedFilters = searchFilters{}
 	b.filters = searchFilters{}
@@ -313,6 +315,9 @@ func (a *App) searchBoxCancel() {
 	b.results = nil
 	b.rows = nil
 	b.seen = nil
+	b.scores = nil
+	b.kinds = nil
+	b.reasons = nil
 	b.busy = false
 	b.src = sourceNone
 	b.cursor, b.cursorPath = 0, ""

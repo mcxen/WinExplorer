@@ -154,7 +154,7 @@ func TestMetadataFilters(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			q := Parse(tc.q)
-			if got := q.Matches("notes", "/root/notes", tc.info); got != tc.want {
+			if got := q.MatchesAt("notes", "/root/notes", tc.info, now); got != tc.want {
 				t.Fatalf("%q = %v, want %v", tc.q, got, tc.want)
 			}
 		})

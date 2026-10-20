@@ -492,9 +492,6 @@ func TestSearchReasonBadge(t *testing.T) {
 	if got := reasonLabelOf(t, a, "notes.txt"); got != "文件名" {
 		t.Fatalf("name hit label = %q, want 文件名", got)
 	}
-	if !tt.HasText("文件名") || tt.HasText("路径") {
-		t.Fatalf("the window's labels = %v, want only 文件名", tt.Texts())
-	}
 
 	// The query starts over: notes is in the file name, so the old query
 	// would win the name match before path:alpha could be examined.
@@ -509,9 +506,6 @@ func TestSearchReasonBadge(t *testing.T) {
 	tt.Frame()
 	if got := reasonLabelOf(t, a, "notes.txt"); got != "路径" {
 		t.Fatalf("path hit label = %q, want 路径", got)
-	}
-	if !tt.HasText("路径") || tt.HasText("文件名") {
-		t.Fatalf("the window's labels = %v, want only 路径", tt.Texts())
 	}
 }
 

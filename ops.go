@@ -339,8 +339,29 @@ func (a *App) doCopyAsPath() {
 	if len(paths) == 0 {
 		return
 	}
-	mygo.Clipboard.WriteText(strings.Join(paths, "\n"))
+	if len(paths) == 1 {
+		copyPathText(paths[0])
+	} else {
+		mygo.Clipboard.WriteText(strings.Join(paths, "\n"))
+	}
 	a.statusMsg = "已复制路径"
+}
+
+// copyPathText puts one absolute path on the system clipboard. The search
+// preview uses the same rule as 复制为路径 without selecting the file first.
+func copyPathText(path string) bool {
+	return copyPathTextWith(path, mygo.Clipboard.WriteText)
+}
+
+// copyPathTextWith keeps the path validation and write rule shared by the
+// window commands and UI callbacks. A view callback supplies its context's
+// clipboard writer, which is the safe path under the headless tester.
+func copyPathTextWith(path string, write func(string)) bool {
+	if path == "" || path == pathThisPC {
+		return false
+	}
+	write(path)
+	return true
 }
 
 // doNewTextFile 新建一个空的文本文档，选中并进入内联重命名，对应

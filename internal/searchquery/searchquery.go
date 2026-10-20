@@ -217,6 +217,13 @@ func (q Query) HasMetadataFilter() bool {
 // present, and the file/folder, extension, time, size and kind filters
 // honored. info carries what the filters need.
 func (q Query) Matches(name, path string, info MatchInfo) bool {
+	return q.MatchesAt(name, path, info, time.Now())
+}
+
+// MatchesAt is Matches with the evaluation clock supplied by the caller.
+// Tests can pin date filters to a known day without making the production
+// query API carry a clock around.
+func (q Query) MatchesAt(name, path string, info MatchInfo, now time.Time) bool {
 	isDir, ext := info.IsDir, info.Ext
 	switch q.filtering {
 	case filterFile:
@@ -244,7 +251,7 @@ func (q Query) Matches(name, path string, info MatchInfo) bool {
 		}
 	}
 	if q.dm != timeAny {
-		if info.ModTime.IsZero() || !q.dm.matches(info.ModTime, time.Now()) {
+		if info.ModTime.IsZero() || !q.dm.matches(info.ModTime, now) {
 			return false
 		}
 	}

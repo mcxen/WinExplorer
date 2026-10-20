@@ -71,6 +71,26 @@ func volumeRoot(path string) string {
 // the walk itself.
 func sysSearchPrune() []string { return nil }
 
+// sysHiddenName applies Explorer's hidden rule to a folder entry. Dot names
+// remain hidden for compatibility, while the Win32 attribute is what makes
+// ordinary names such as AppData hidden in the address-bar completion.
+func sysHiddenName(dir string, e os.DirEntry) bool {
+	if strings.HasPrefix(e.Name(), ".") {
+		return true
+	}
+	if info, err := e.Info(); err == nil {
+		if fa, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
+			return fa.FileAttributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
+		}
+	}
+	if info, err := os.Stat(filepath.Join(dir, e.Name())); err == nil {
+		if fa, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
+			return fa.FileAttributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
+		}
+	}
+	return false
+}
+
 // sysVolumes lists the machine's drives with their labels, as Explorer's
 // This PC does, skipping empty card readers.
 func sysVolumes() []Place {

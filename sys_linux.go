@@ -111,6 +111,8 @@ func sysSearchPrune() []string {
 	return []string{"/proc", "/sys", "/dev", "/run", "/media", "/mnt"}
 }
 
+func sysHiddenName(_ string, e os.DirEntry) bool { return strings.HasPrefix(e.Name(), ".") }
+
 // sysVolumes lists the fixed root and the mounted media.
 func sysVolumes() []Place {
 	places := []Place{

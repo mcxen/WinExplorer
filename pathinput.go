@@ -287,7 +287,7 @@ func readFolderNames(dir string) ([]string, map[string]bool, error) {
 			continue
 		}
 		names = append(names, e.Name())
-		if strings.HasPrefix(e.Name(), ".") {
+		if sysHiddenName(dir, e) {
 			hidden[e.Name()] = true
 		}
 	}

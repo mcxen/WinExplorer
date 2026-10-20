@@ -38,3 +38,28 @@ func TestPathInputHelpers(t *testing.T) {
 		t.Fatalf("too long: %d", got)
 	}
 }
+
+// TestReadFolderNamesDotRule keeps the non-Windows hidden rule observable
+// through the same completion read the address bar uses.
+func TestReadFolderNamesDotRule(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{".dot-hidden", "Visible"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names, hidden, err := readFolderNames(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hidden[".dot-hidden"] || hidden["Visible"] {
+		t.Fatalf("hidden map = %v for %v", hidden, names)
+	}
+	all := dirNames{names: names, hidden: hidden}
+	if got := all.visibleNames(false); len(got) != 1 || got[0] != "Visible" {
+		t.Fatalf("visible names = %v, want only Visible", got)
+	}
+	if got := all.visibleNames(true); len(got) != 2 {
+		t.Fatalf("shown names = %v, want both", got)
+	}
+}

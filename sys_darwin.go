@@ -118,6 +118,8 @@ func sysAudioPlay(path string) (name string, args []string, dur time.Duration, o
 // the like.
 func sysSearchPrune() []string { return []string{"/Volumes", "/System/Volumes"} }
 
+func sysHiddenName(_ string, e os.DirEntry) bool { return strings.HasPrefix(e.Name(), ".") }
+
 // sysVolumes lists the root volume and the mounted ones.
 func sysVolumes() []Place {
 	root := "/"

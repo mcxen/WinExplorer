@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -44,6 +45,8 @@ func sysAudioPlay(path string) (string, []string, time.Duration, bool) {
 // sysSearchPrune are the directories a 全局 search skips: none on a platform
 // whose only root is the user's home (sysVolumes).
 func sysSearchPrune() []string { return nil }
+
+func sysHiddenName(_ string, e os.DirEntry) bool { return strings.HasPrefix(e.Name(), ".") }
 
 func sysVolumes() []Place {
 	home, _ := os.UserHomeDir()

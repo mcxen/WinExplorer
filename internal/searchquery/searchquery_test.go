@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // searchquery_test.go drives the query language on its own: parsing,
@@ -191,4 +192,54 @@ func spansText(spans []Span) string {
 		b.WriteString(s.Text)
 	}
 	return b.String()
+}
+
+func TestScore(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	home := "/Users/alice"
+	q := Parse("report")
+	tests := []struct {
+		name, path string
+		isDir      bool
+		mod        time.Time
+		wantKind   MatchKind
+		min, max   int
+		reason     string
+	}{
+		{"report.docx", home + "/Documents/project/report.docx", false, now.Add(-time.Hour), MatchName, 5990, 6030, "文件名完全匹配"},
+		{"report-final.docx", home + "/Documents/project/report-final.docx", false, now.Add(-time.Hour), MatchName, 3990, 4030, "文件名以“report”开头"},
+		{"final-report.docx", home + "/Documents/final-report.docx", false, now.Add(-40 * 24 * time.Hour), MatchName, 2495, 2525, "文件名包含“report”"},
+		{"report.json", "/Library/Caches/com.app/report.json", false, now.Add(-time.Hour), MatchName, 5970, 6030, "位于缓存或生成目录，降低排序"},
+	}
+	pathQuery := Parse("path:report")
+	if got, kind, reasons := pathQuery.Score("notes.txt", home+"/Documents/report/notes.txt", false, now, now, home); kind != MatchPath || got == 0 || len(reasons) == 0 || !strings.Contains(reasons[0].Text, "路径命中") {
+		t.Fatalf("path-only hit = score %d, kind %v, reasons %+v", got, kind, reasons)
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, kind, reasons := q.Score(tc.name, tc.path, tc.isDir, tc.mod, now, home)
+			if kind != tc.wantKind {
+				t.Fatalf("kind = %v, want %v", kind, tc.wantKind)
+			}
+			if got < tc.min || got > tc.max {
+				t.Fatalf("score = %d, want %d..%d (%+v)", got, tc.min, tc.max, reasons)
+			}
+			found := false
+			for _, r := range reasons {
+				if strings.Contains(r.Text, tc.reason) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("reasons = %+v, want one about %q", reasons, tc.reason)
+			}
+		})
+	}
+	// The deep cache hit stays below the ordinary home hit, as in the
+	// design's ordering.
+	ordinary, _, _ := q.Score("report.md", home+"/Documents/report.md", false, now, now, home)
+	cache, _, _ := q.Score("report.json", "/Library/Caches/com.app/report.json", false, now, now, "")
+	if ordinary <= cache {
+		t.Fatalf("ordinary score %d is not above cache %d", ordinary, cache)
+	}
 }

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"sunvale/internal/searchquery"
 )
 
 // searchbox_test.go drives the Ctrl+K palette in a laid-out window: the
@@ -204,56 +206,83 @@ func TestSearchBoxScopeSwitchIsTheWalkKey(t *testing.T) {
 	a.searchBoxClose() // the whole-machine walk stops with the box
 }
 
-// TestSearchBoxListsHitsByName: the list is in Everything's order — by name —
-// whatever order the walk found them in.
-func TestSearchBoxListsHitsByName(t *testing.T) {
-	a, tt, dir := keynavWindow(t, 1)
-	// Created out of order, so a walk that just appends cannot pass by luck.
-	for _, name := range []string{"delta.txt", "Alpha.txt", "bravo.txt"} {
-		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	a.reload()
-	tt.Key(ui.Ctrl, ui.KeyK)
-	tt.Frame()
-	a.searchBox.scope = scopeFolder
-	tt.Type("txt")
-	tt.Frame()
-	waitSearchBox(t, tt, a)
-	got := namesOf(a.searchBox.results)
-	want := []string{"Alpha.txt", "bravo.txt", "delta.txt", "f000.txt"}
-	if len(got) != len(want) {
-		t.Fatalf("the box lists %v, want %v", got, want)
-	}
+// TestSearchBoxSortSwitch: the palette starts by relevance and the 名称
+// switch restores Everything's name order without restarting the walk.
+func TestSearchBoxSortSwitch(t *testing.T) {
+	now := time.Now()
+	b := &searchBoxState{parsed: searchquery.Parse("report")}
+	b.addHits([]Entry{
+		{Name: "final-report.txt", Path: "/work/final-report.txt", ModTime: now},
+		{Name: "report.docx", Path: "/work/report.docx", ModTime: now},
+		{Name: "report-final.docx", Path: "/work/report-final.docx", ModTime: now},
+		{Name: "report.md", Path: "/work/report.md", ModTime: now},
+	})
+	got := hitNames(b.results)
+	want := []string{"report.docx", "report.md", "report-final.docx", "final-report.txt"}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("the box lists %v, want %v", got, want)
+			t.Fatalf("relevance order = %v, want %v", got, want)
 		}
+	}
+	b.sortBy = sortName
+	b.sortHits()
+	got = hitNames(b.results)
+	want = []string{"final-report.txt", "report-final.docx", "report.docx", "report.md"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("name order = %v, want %v", got, want)
+		}
+	}
+	b.sortBy = sortRelevance
+	b.sortHits()
+	if got := hitNames(b.results); got[0] != "report.docx" {
+		t.Fatalf("switching back to relevance = %v", got)
+	}
+}
+
+// TestSearchBoxSortSegmentIsOnScreen: the relevance/name switch is in the
+// query row and changing it reorders the visible hits.
+func TestSearchBoxSortSegmentIsOnScreen(t *testing.T) {
+	a, tt, _ := keynavWindow(t, 1)
+	tt.Key(ui.Ctrl, ui.KeyK)
+	tt.Frame()
+	sortLabels := append(tt.Texts()[:0:0], tt.Texts()...)
+	if !tt.HasText("相关度") || !tt.HasText("名称") {
+		t.Fatalf("the sort switch is missing: %v", tt.Texts())
+	}
+	// The pane's 名称 column has the same label earlier in the walk: click the
+	// segment after 相关度, which is the palette's switch.
+	first, ok := tt.Find("相关度")
+	if !ok {
+		t.Fatalf("the relevance segment is not built: %v", sortLabels)
+	}
+	// The label is narrower than its segment. The name segment starts about
+	// one label width after the relevance label.
+	tt.ClickAt(first.X+first.W*2+2, first.Y+first.H/2)
+	tt.Frame()
+	if a.searchBox.sortBy != sortName {
+		t.Fatalf("sort = %v, want name after clicking 名称", a.searchBox.sortBy)
 	}
 }
 
 // TestSearchBoxCursorStaysOnItsHit: a batch that sorts above the cursor moves
 // the rows but not the choice, and a cursor the user never moved stays on the
-// first name as hits arrive above it.
+// first row as hits arrive above it.
 func TestSearchBoxCursorStaysOnItsHit(t *testing.T) {
 	b := &searchBoxState{}
 	b.addHits([]Entry{{Name: "bravo", Path: "/b"}, {Name: "delta", Path: "/d"}})
 	if b.cursor != 0 || hitNames(b.results)[0] != "bravo" {
 		t.Fatalf("the list starts at %v with the cursor on %d", hitNames(b.results), b.cursor)
 	}
-	// Nothing chose a row yet: the first name stays chosen as hits sort in.
+	// Nothing chose a row yet: the first row stays chosen as hits sort in.
 	b.addHits([]Entry{{Name: "alpha", Path: "/a"}})
-	if got := hitNames(b.results); got[0] != "alpha" || b.cursor != 0 {
-		t.Fatalf("an unchosen cursor left the first name: row %d of %v", b.cursor, got)
+	if b.cursor != 0 {
+		t.Fatalf("an unchosen cursor left the first row: row %d of %v", b.cursor, hitNames(b.results))
 	}
 	// The user walks down to delta; the next batch keeps the cursor on it.
 	b.cursor, b.cursorPath = 2, "/d"
 	b.addHits([]Entry{{Name: "aaa", Path: "/aaa"}})
-	if got := hitNames(b.results); got[0] != "aaa" || got[3] != "delta" {
-		t.Fatalf("the batch did not sort into place: %v", got)
-	}
-	if b.cursor != 3 || b.results[b.cursor].Path != "/d" {
+	if b.results[b.cursor].Path != "/d" {
 		t.Fatalf("the cursor moved off its hit: row %d of %v", b.cursor, hitNames(b.results))
 	}
 	// A hit the list no longer holds leaves the cursor at the top.

@@ -598,9 +598,8 @@ func TestSearchBoxListsAHitOnce(t *testing.T) {
 	b.cursor, b.cursorPath = 1, "/a/same.txt"
 	b.addHits([]Entry{{Name: "same.txt", Path: "/a/same.txt"}, {Name: "later.txt", Path: "/a/later.txt"}})
 	got := namesOf(b.results)
-	want := []string{"later.txt", "other.txt", "same.txt"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
-		t.Fatalf("the list is %v, want %v", got, want)
+	if len(got) != 3 {
+		t.Fatalf("the list is %v, want one row per hit", got)
 	}
 	if b.results[b.cursor].Path != "/a/same.txt" {
 		t.Fatalf("the cursor moved off its hit to %q", b.results[b.cursor].Path)

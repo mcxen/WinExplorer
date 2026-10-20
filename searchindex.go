@@ -413,7 +413,7 @@ func searchIndexQuery(roots []string, query searchquery.Query, hidden bool) ([]E
 		// The scope is not in the index at all: a folder no walk reached.
 		return nil, false
 	}
-	sortHitsByName(hits)
+	sortHitsByQuery(hits, query)
 	return hits, true
 }
 

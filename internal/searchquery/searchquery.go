@@ -20,7 +20,11 @@
 // "alpha case:BETA" matches "alpha" insensitively and "BETA" strictly.
 package searchquery
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+	"time"
+)
 
 // Query is one parsed query: the conjunction every candidate name (or
 // path, for path:) must satisfy. The terms are already normalized:
@@ -222,6 +226,178 @@ func (q Query) Matches(name, path, ext string, isDir bool) bool {
 type Span struct {
 	Text string
 	Hit  bool
+}
+
+// MatchKind says why a hit matched: its name, or only its path.
+type MatchKind int
+
+const (
+	MatchNone MatchKind = iota
+	MatchName
+	MatchPath
+)
+
+// Reason is one contribution to a hit's relevance, in the words the preview
+// can show beside the score.
+type Reason struct {
+	Text   string
+	Weight int
+}
+
+// Score ranks a hit: higher is better. now is passed in so tests are stable,
+// and home lets common folders be favored without the package reading the
+// machine's state. The caller has already checked Matches; Score describes
+// why a matching hit deserves its place.
+//
+// Priority, highest first: the name match (exact stem, then prefix, then
+// substring), path-only hits below all of them, then recency, depth, a
+// cache penalty and a home bonus as tiebreakers.
+func (q Query) Score(name, path string, isDir bool, mod, now time.Time, home string) (int, MatchKind, []Reason) {
+	score := 0
+	kind := MatchNone
+	var reasons []Reason
+	nameBest := 0
+	nameTerm := ""
+	for _, t := range q.terms {
+		if t.kind == termPath {
+			continue
+		}
+		hay, needle := name, t.text
+		if !t.caseSensitive {
+			hay, needle = strings.ToLower(hay), strings.ToLower(needle)
+		}
+		if needle == "" || !strings.Contains(hay, needle) {
+			continue
+		}
+		kind = MatchName
+		weight := 25
+		stem := strings.TrimSuffix(hay, strings.ToLower(filepath.Ext(hay)))
+		switch {
+		case stem == needle:
+			weight = 60
+		case strings.HasPrefix(hay, needle):
+			weight = 40
+		}
+		if weight > nameBest {
+			nameBest, nameTerm = weight, needle
+		}
+	}
+	if kind == MatchName {
+		switch nameBest {
+		case 60:
+			reasons = append(reasons, Reason{Text: "文件名完全匹配", Weight: nameBest})
+		case 40:
+			reasons = append(reasons, Reason{Text: "文件名以“" + nameTerm + "”开头", Weight: nameBest})
+		default:
+			reasons = append(reasons, Reason{Text: "文件名包含“" + nameTerm + "”", Weight: nameBest})
+		}
+		// The name match dominates: score it in hundreds while its public
+		// weight stays the small number the reason label reads.
+		score += nameBest * 100
+	}
+	for _, t := range q.terms {
+		if t.kind != termPath {
+			continue
+		}
+		hay, needle := path, t.text
+		if !t.caseSensitive {
+			hay, needle = strings.ToLower(hay), strings.ToLower(needle)
+		}
+		if needle != "" && strings.Contains(hay, needle) {
+			if kind == MatchNone {
+				kind = MatchPath
+				score += 5
+				reasons = append(reasons, Reason{Text: "路径命中", Weight: 5})
+			}
+			break
+		}
+	}
+	// Two or more name terms are a stronger match than one, without
+	// overtaking the name/path distinction above.
+	extraName := 0
+	for _, t := range q.terms {
+		if t.kind == termPath {
+			continue
+		}
+		hay, needle := name, t.text
+		if !t.caseSensitive {
+			hay, needle = strings.ToLower(hay), strings.ToLower(needle)
+		}
+		if needle != "" && strings.Contains(hay, needle) {
+			extraName++
+		}
+	}
+	if extraName > 1 {
+		weight := min(extraName-1, 3) * 2
+		score += weight
+		reasons = append(reasons, Reason{Text: "多个查询词都在文件名中", Weight: weight})
+	}
+	if age := now.Sub(mod); !mod.IsZero() {
+		switch {
+		case age >= 0 && age <= 7*24*time.Hour:
+			score += 8
+			reasons = append(reasons, Reason{Text: "最近 7 天内修改", Weight: 8})
+		case age > 7*24*time.Hour && age <= 30*24*time.Hour:
+			score += 4
+			reasons = append(reasons, Reason{Text: "最近 30 天内修改", Weight: 4})
+		}
+	}
+	if penalizedPath(path) {
+		score -= 20
+		reasons = append(reasons, Reason{Text: "位于缓存或生成目录，降低排序", Weight: -20})
+	}
+	// The hit's own folder counts, but the search root does not. Without
+	// the root, a temp home's four leading folders would outweigh every
+	// name score; capping at ten keeps the penalty a tiebreaker.
+	if depth := pathDepth(filepath.Dir(path)); depth > 1 {
+		penalty := min(depth-1, 10)
+		score -= penalty
+		if penalty > 0 {
+			reasons = append(reasons, Reason{Text: "路径较深", Weight: -penalty})
+		}
+	}
+	if home != "" && pathWithin(path, home) {
+		score += 5
+		reasons = append(reasons, Reason{Text: "位于主文件夹，常用位置加权", Weight: 5})
+	}
+	return score, kind, reasons
+}
+
+func penalizedPath(path string) bool {
+	p := strings.ToLower(filepath.ToSlash(path))
+	for _, part := range []string{"/library/caches", "/appdata/", "/node_modules/", "/.git/", "/$recycle.bin/", "/.cache/"} {
+		if strings.Contains(p, part) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathDepth(path string) int {
+	volume := filepath.VolumeName(path)
+	clean := filepath.Clean(path)
+	parts := strings.FieldsFunc(clean, func(r rune) bool { return r == '/' || r == '\\' })
+	// A volume or UNC share is not a nested folder. On Unix the leading
+	// separator is already gone; on Windows filepath.VolumeName names it.
+	if volume != "" {
+		parts = strings.FieldsFunc(strings.TrimPrefix(filepath.ToSlash(clean), filepath.ToSlash(volume)),
+			func(r rune) bool { return r == '/' })
+	} else if len(parts) >= 2 && strings.HasPrefix(path, `\\`) {
+		parts = parts[2:]
+	}
+	return len(parts)
+}
+
+func pathWithin(path, root string) bool {
+	path, root = filepath.Clean(path), filepath.Clean(root)
+	// Fold both spellings on every platform: this is a relevance hint, and
+	// macOS's case-insensitive volumes make mixed case common too.
+	path, root = strings.ToLower(path), strings.ToLower(root)
+	if path == root {
+		return true
+	}
+	sep := string(filepath.Separator)
+	return strings.HasPrefix(path, strings.TrimSuffix(root, sep)+sep)
 }
 
 // Highlight splits name into runs around the query's matches, Everything's

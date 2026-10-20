@@ -85,7 +85,7 @@
   // Score ranks a hit: higher is better. now is passed in so tests are stable.
   func (q Query) Score(name, path string, isDir bool, mod, now time.Time) (int, MatchKind, []Reason)
   ```
-  建议权重：名称完全相等 +60；名称以词开头 +40；名称包含 +25；仅路径命中 +5；7 天内修改 +10，30 天内 +5；路径含 `/Library/Caches`、`AppData`、`node_modules`、`.git`、`$Recycle.Bin` 等 −20；路径层级每深一层 −1（上限 −10）；主文件夹内 +5（主文件夹由调用方传入或作为参数，避免包内调用 `os`——推荐给 `Score` 增加 `home string` 参数）。
+  实际权重：名称完全相等（去扩展名）+60；名称以词开头 +40；名称包含 +25；仅路径命中 +5；7 天内修改 +8，30 天内 +5；路径含 `/Library/Caches`、`AppData`、`node_modules`、`.git`、`$Recycle.Bin` 等 −20；路径层级每深一层 −1（上限 −10，搜索根本身不计）；主文件夹内 +5（主文件夹由调用方传入或作为参数，避免包内调用 `os`——推荐给 `Score` 增加 `home string` 参数）。名称档位整体乘 100 参与总分，保证任意名称命中都排在仅路径命中之前；`Reason` 保留原始小权重供后续预览展示。
 - `searchbox.go`：`searchBoxState` 增加 `score map[string]int`、`kind map[string]searchquery.MatchKind`、`sortBy searchSort`（`sortRelevance`/`sortName`）。`addHits` 计算并缓存分数，`sortHitsByScore` 稳定排序（分数降序，再名称，再路径）。批次到达时光标仍保持在 `cursorPath`（现有 `cursorRow` 逻辑不变）。
 - 查询行增加 `ui.Segmented(c, &sortIdx, "相关度", "名称")`。
 

@@ -68,6 +68,12 @@ type searchBoxState struct {
 	list    ui.ListState
 	busy    bool
 	started time.Time
+	// sortBy is the list's order: relevance (the default) or name.
+	sortBy searchSort
+	// scores and kinds cache what Score said when a hit arrived, so a
+	// streamed batch does not rescore every row.
+	scores map[string]int
+	kinds  map[string]searchquery.MatchKind
 	// src is the engine that answered the results on screen (searchSource).
 	src searchSource
 	// done is when the walk finished; zero while it runs, so the footer can
@@ -96,6 +102,13 @@ type searchBoxState struct {
 	seen map[string]bool
 }
 
+type searchSort int
+
+const (
+	sortRelevance searchSort = iota
+	sortName
+)
+
 // searchBoxFrame is called once per frame from view: it starts a search when
 // the query or the scope changed and applies what comes back — the index's
 // snapshot on the keystroke when it covers the scope (searchindex.go), else the
@@ -119,6 +132,8 @@ func (a *App) searchBoxFrame() {
 	b.parsed = searchquery.Parse(q)
 	b.results = nil
 	b.seen = nil
+	b.scores = nil
+	b.kinds = nil
 	b.cursor, b.cursorPath = 0, ""
 	b.done = time.Time{}
 	b.src = sourceNone
@@ -204,12 +219,20 @@ func (b *searchBoxState) hit() (Entry, bool) {
 	return b.results[b.cursor], true
 }
 
-// addHits folds a streamed batch into the list, which stays in Everything's
-// order — by name — and keeps the cursor on the hit it was on: rows above it
-// move as hits arrive, the choice does not. A hit already listed — the index and
-// the walk behind it can find the same file — is folded in once.
+// addHits folds a streamed batch into the list, in the order the switch asks
+// for, and keeps the cursor on the hit it was on: rows above it move as hits
+// arrive, the choice does not. A hit already listed — the index and the walk
+// behind it can find the same file — is folded in once.
 func (b *searchBoxState) addHits(batch []Entry) {
 	added := false
+	if b.scores == nil {
+		b.scores = make(map[string]int)
+	}
+	if b.kinds == nil {
+		b.kinds = make(map[string]searchquery.MatchKind)
+	}
+	now := time.Now()
+	home := homeForSearch()
 	for _, e := range batch {
 		if e.Path == "" || b.seen[e.Path] {
 			continue
@@ -219,16 +242,55 @@ func (b *searchBoxState) addHits(batch []Entry) {
 		}
 		b.seen[e.Path] = true
 		b.results = append(b.results, e)
+		score, kind, _ := b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
+		b.scores[e.Path], b.kinds[e.Path] = score, kind
 		added = true
 	}
 	if !added {
 		return
 	}
-	sortHitsByName(b.results)
+	b.sortHits()
 	if i := b.cursorRow(); i != b.cursor {
 		b.cursor = i
 		b.list.ScrollIntoView(i)
 	}
+}
+
+// sortHits puts the hits in the order the switch asks for. Relevance keeps
+// the name and then the path as ties, so the order is deterministic as
+// batches stream in; name is the Everything order.
+func (b *searchBoxState) sortHits() {
+	if b.sortBy == sortName {
+		sortHitsByName(b.results)
+		return
+	}
+	sortHitsByScore(b.results, b.scores)
+}
+
+// sortHitsByScore puts higher scores first, with name and path breaking ties.
+// The lookup is by path so a hit's score survives both orderings.
+func sortHitsByScore(hits []Entry, scores map[string]int) {
+	slices.SortStableFunc(hits, func(x, y Entry) int {
+		if c := scores[y.Path] - scores[x.Path]; c != 0 {
+			return c
+		}
+		if c := strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name)); c != 0 {
+			return c
+		}
+		return strings.Compare(x.Path, y.Path)
+	})
+}
+
+// sortHitsByQuery ranks a batch whose scores have not been cached yet. The
+// index uses it when it answers in one frame; the palette uses its cached
+// scores so streamed batches cost one score per new hit.
+func sortHitsByQuery(hits []Entry, q searchquery.Query) {
+	now, home := time.Now(), homeForSearch()
+	scores := make(map[string]int, len(hits))
+	for _, e := range hits {
+		scores[e.Path], _, _ = q.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
+	}
+	sortHitsByScore(hits, scores)
 }
 
 // sortHitsByName puts hits in Everything's order: by name, case-insensitively,
@@ -343,7 +405,15 @@ func (a *App) searchBoxBody(c *ui.Context) {
 				AutoFocus().
 				Placeholder("搜索全部磁盘：多个词是 AND，ext:txt  path:docs  \"完整短语\"  case:")
 			a.searchBoxKeys(c, in)
+			sortIdx := int(b.sortBy)
 			idx := scopeIndex(b.scope)
+			if ui.Segmented(c, &sortIdx, "相关度", "名称").Shrink(0).Changed() {
+				b.sortBy = searchSort(sortIdx)
+				b.sortHits()
+				b.cursor = b.cursorRow()
+				b.list.ScrollIntoView(b.cursor)
+				repaint()
+			}
 			if ui.Segmented(c, &idx, "本文件夹", "全部磁盘").Shrink(0).Changed() {
 				b.scope = scopeFromIndex(idx) // the next frame starts the walk
 				repaint()

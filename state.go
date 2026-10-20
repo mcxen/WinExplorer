@@ -105,6 +105,8 @@ type marqueeState struct {
 // fields are reached through cur() so the rest of the code reads a.path as
 // before.
 type App struct {
+	// addr is the address bar's edit and completion state (addressbar.go).
+	addr      addrState
 	tabs      []*tabState
 	activeTab int
 	// closedTabs is the reopen stack of 重新打开关闭的标签页, newest last.

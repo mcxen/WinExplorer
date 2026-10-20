@@ -58,7 +58,7 @@
 | `searchbox.go` 的快速搜索 | `components/command` 是在一份固定命令里过滤。这里是流式的文件结果，带路径、大小、日期 |
 | 无边框窗口的最小化 / 最大化 / 关闭 | mygo 和 Onevra 都没有这三颗标题按钮 |
 
-`components/chat` 只用于右侧助手：`FloatingConversation` 和 `GlassComposer` 画对话页，`Turn` 折叠工具过程，`Picker` 选择模型。`components/command`、`calendar`、`color` 拾色器、`time` 选择器、`rating`、`honeycomb`、`graph`、`shaders`，以及 mygo 的 `game`、`terminal`、`sqlite` 插件，文件管理器目前用不上。不要为了用而用。
+`components/chat` 只用于右侧助手：`FloatingConversation` 和 `GlassComposer` 画对话页，`Turn` 在回复进行时展开工具调用、完成后折叠，`Picker` 选择模型。回复里的 OpenUI 只用已有的按钮和表格画一个子集（`assistant_openui.go`），不嵌入 OpenUI 的 Web 运行时。`components/command`、`calendar`、`color` 拾色器、`time` 选择器、`rating`、`honeycomb`、`graph`、`shaders`，以及 mygo 的 `game`、`terminal`、`sqlite` 插件，文件管理器目前用不上。不要为了用而用。
 
 ## 加一个设置项
 

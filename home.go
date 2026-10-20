@@ -16,7 +16,7 @@ import (
 // same items the view renders.
 func (a *App) homeEntries() (pins, recents []Entry) {
 	for _, p := range a.pinnedPlaces() {
-		pins = append(pins, Entry{Name: p.Name, Path: p.Path, IsDir: true})
+		pins = append(pins, Entry{Name: p.Name, Path: p.Path, IsDir: p.Kind != "file"})
 	}
 	for _, path := range a.store.recentList() {
 		info, err := os.Lstat(path)
@@ -50,20 +50,38 @@ func (a *App) pinnedPlaces() []Place {
 	out := make([]Place, 0, len(a.store.pinnedList()))
 	for _, path := range a.store.pinnedList() {
 		info, err := os.Stat(path)
-		if err != nil || !info.IsDir() {
+		if err != nil {
 			continue
 		}
 		name := filepath.Base(path)
 		kind := "folder"
-		if n, ok := known[filepath.Clean(path)]; ok {
+		if !info.IsDir() {
+			// A file pinned from a drop stays in the list. Folders keep
+			// the known-folder name and icon; a file is just itself.
+			kind = "file"
+		} else if n, ok := known[filepath.Clean(path)]; ok {
 			name = n
 		}
-		if k, ok := icons[name]; ok {
-			kind = k
+		if kind != "file" {
+			if k, ok := icons[name]; ok {
+				kind = k
+			}
 		}
 		out = append(out, Place{Name: name, Path: path, Kind: kind})
 	}
 	return out
+}
+
+// openPinned opens a 快速访问 item. A folder is entered. A file has no
+// listing of its own, so the pane opens the folder it sits in and selects
+// it — the same thing the address bar does with a file path.
+func (a *App) openPinned(path string, dir bool) {
+	if dir {
+		a.navigate(path)
+		return
+	}
+	a.cur().selectPath = path
+	a.navigate(filepath.Dir(path))
 }
 
 // homeView renders the Home page: 快速访问 tiles, then 最近使用的文件.
@@ -81,9 +99,10 @@ func (a *App) homeView(c *ui.Context) {
 				a.homePin(c, pins, i)
 			}
 		}).FillWidth().Shrink(0)
+		a.bindPinDrop(grid)
 		grid.Children(func() {
 			if len(pins) == 0 {
-				a.paneMessage(c, "右键文件夹选择“固定到快速访问”")
+				a.paneMessage(c, "把文件或文件夹拖到这里即可固定")
 			}
 		})
 		a.homeSectionGap(c)
@@ -102,19 +121,29 @@ func (a *App) homeView(c *ui.Context) {
 }
 
 func (a *App) homeSection(c *ui.Context, title string) {
-	ui.Text(c, title).FontSize(13).FontWeight(600).TextColor(colorText()).
-		FillWidth().Padding(8, 4, 8, 6)
+	row := ui.ButtonBase(c.Key("home-section-"+title)).FillWidth().Height(32).
+		Padding(8, 4, 8, 6).AlignItems(ui.Center).Label(title)
+	row.Children(func() {
+		ui.Text(c, title).FontSize(13).FontWeight(600).TextColor(colorText()).
+			SingleLine()
+	})
+	// The heading is the pin target. A tile under it is still a folder:
+	// a drop on the tile moves into that folder, a drop on the heading
+	// or the gap around the tiles pins.
+	if title == "快速访问" {
+		a.bindPinDrop(row)
+	}
 }
 
 func (a *App) homeSectionGap(c *ui.Context) {
 	ui.Box(c).Height(14).FillWidth()
 }
 
-// homePin is one Quick Access tile: folder icon and name on one row. A
-// click navigates into the folder, as Explorer's Home tiles do.
+// homePin is one Quick Access tile: icon and name on one row. A click
+// opens it — a folder is entered, a file is shown in its folder.
 func (a *App) homePin(c *ui.Context, pins []Entry, i int) {
 	e := pins[i]
-	tile := ui.ButtonBase(c.Key(e.Path)).Fill().Height(40).Radius(4).
+	tile := ui.ButtonBase(c.Key("home-pin-"+e.Path)).Fill().Height(40).Radius(4).
 		Padding(0, 8).Gap(10).AlignItems(ui.Center).Label(e.Name)
 	if tile.Hovered() || a.isSelected(e.Path) {
 		tile.Background(colorHover())
@@ -127,13 +156,12 @@ func (a *App) homePin(c *ui.Context, pins []Entry, i int) {
 		ui.Text(c, e.Name).FontSize(12).TextColor(colorText()).
 			SingleLine().Grow(1).MinWidth(0)
 	})
-	if tile.Clicked() {
-		a.navigate(e.Path)
+	if tile.Clicked() || tile.DoubleClicked() {
+		a.openPinned(e.Path, e.IsDir)
 	}
-	if tile.DoubleClicked() {
-		a.navigate(e.Path)
+	if e.IsDir {
+		a.bindDropFolder(c, tile, e.Path)
 	}
-	a.bindDropFolder(c, tile, e.Path)
 	tile.ContextMenu(func(m *ui.Menu) {
 		a.pinMenu(m, e)
 	})
@@ -176,7 +204,7 @@ func (a *App) homeRecent(c *ui.Context, recents []Entry, i int) {
 // pinMenu is the Home tile's menu: open, unpin, properties.
 func (a *App) pinMenu(m *ui.Menu, e Entry) {
 	if m.Item("打开").Chosen() {
-		a.navigate(e.Path)
+		a.openPinned(e.Path, e.IsDir)
 	}
 	if m.Item("从快速访问取消固定").Chosen() {
 		if a.store.unpin(e.Path) {

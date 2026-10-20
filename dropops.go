@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/egoist/mygo/transfer"
@@ -13,11 +14,14 @@ import (
 
 // 拖拽：文件行既是窗口内拖拽源（Drag），也是系统拖拽源（DragDataFrom）——
 // 后者把 file URL 交给 Finder / 资源管理器 / 任何原生放置目标，文件因此
-// 能拖出窗口。文件夹行、侧边栏位置、面包屑、标签页是目标（Drop），把文件
-// 移动到对应层级；同一个目标也接原生放置（DataDrop），所以从 Finder /
-// 资源管理器拖进来的文件既落到目标文件夹，也能落在空白处（当前文件夹）。
-// 按住 Cmd/Ctrl 拖 = 复制，同左键拖到同文件夹是空操作——与 Explorer 的
-// 左键拖拽一致。
+// 能拖出窗口。侧边栏里的文件夹和固定项同样是拖拽源。文件夹行、侧边栏位置、
+// 面包屑、标签页是目标（Drop），把文件移动到对应层级；「快速访问」标题不是
+// 文件夹，拖上去是固定那些路径，不移动也不复制。右侧助手的对话记录和输入框
+// 同样不是文件夹：拖上去只把路径挂到这一轮（bindAssistDrop）。同一个目标也
+// 接原生放置（DataDrop），所以从 Finder / 资源管理器拖进来的文件既落到目标
+// 文件夹，也能落在空白处（当前文件夹），拖到「快速访问」上则固定，拖到助手上
+// 则指定。按住 Cmd/Ctrl 拖 = 复制，同左键拖到同文件夹是空操作——与 Explorer
+// 的左键拖拽一致。
 
 // dragPayload 是窗口内拖拽携带的路径集合。
 type dragPayload struct{ paths []string }
@@ -321,17 +325,98 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 
 // localPath reports whether p names a place on this machine's file system,
 // as a path or a file URL: a drop may hand either, and only local files can
-// be moved or copied where they land.
+// be moved, copied or pinned where they land.
 func localPath(p string) bool {
+	_, ok := localFilePath(p)
+	return ok
+}
+
+// localFilePath resolves p to a local absolute path. A file URL is accepted
+// only for this machine — a drag from another app sometimes offers those
+// instead of plain paths — and a remote URL is not a path to pin or move.
+func localFilePath(p string) (string, bool) {
 	if p == "" {
-		return false
+		return "", false
 	}
 	if strings.HasPrefix(p, "file://") {
 		u, err := url.Parse(p)
-		return err == nil && (u.Host == "" || u.Host == "localhost") && filepath.FromSlash(u.Path) != ""
+		if err != nil || (u.Host != "" && u.Host != "localhost") {
+			return "", false
+		}
+		p = filepath.FromSlash(u.Path)
+		// file:///C:/x arrives as \C:\x. The leading separator is the
+		// URL's empty host, not part of the drive path.
+		if runtime.GOOS == "windows" && len(p) >= 3 && (p[0] == '\\' || p[0] == '/') && p[2] == ':' {
+			p = p[1:]
+		}
+		if p == "" || !filepath.IsAbs(p) {
+			return "", false
+		}
+	} else if strings.Contains(p, "://") || !filepath.IsAbs(p) {
+		return "", false
 	}
-	if strings.Contains(p, "://") {
-		return false
+	return filepath.Clean(p), true
+}
+
+// bindPinDrop makes el the 快速访问 heading (or the empty part of that
+// section). A drop pins the paths and leaves the originals where they
+// are: the heading is not a folder, so moving into it would invent a
+// destination the user did not name.
+func (a *App) bindPinDrop(el ui.Element) {
+	if over, ok := ui.DragOver[dragPayload](el); ok && len(over.paths) > 0 {
+		el.Background(colorSelected().Alpha(0.75))
 	}
-	return filepath.IsAbs(p)
+	a.bindNativeDrop(el, func(paths []string) {
+		a.doPinDrop(paths)
+	})
+	if p, ok := ui.Drop[dragPayload](el); ok && len(p.paths) > 0 {
+		a.doPinDrop(p.paths)
+		a.dropTookOwnDrag = true
+	}
+	if files := el.DroppedFiles(); len(files) > 0 {
+		a.doPinDrop(files)
+	}
+}
+
+// doPinDrop pins paths onto 快速访问, newest first and in the dropped
+// order. Nothing is moved or copied: a pin is a pointer, and the file
+// the user dragged is still in the folder it came from.
+func (a *App) doPinDrop(paths []string) {
+	if len(paths) == 0 || a.store == nil {
+		return
+	}
+	added, already := 0, 0
+	rejected := false
+	for i := len(paths) - 1; i >= 0; i-- {
+		path, ok := localFilePath(paths[i])
+		if !ok || specialPath(path) {
+			rejected = true
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			rejected = true
+			continue
+		}
+		if a.store.isPinned(path) {
+			already++
+			continue
+		}
+		if a.store.pin(path) {
+			added++
+		} else {
+			already++
+		}
+	}
+	if added > 0 {
+		// reload clears the status line; the pin message is set after it.
+		a.reload()
+	}
+	switch {
+	case added > 0:
+		a.statusMsg = fmt.Sprintf("已固定 %d 个项目到快速访问", added)
+	case already > 0:
+		a.statusMsg = "已在快速访问中"
+	case rejected:
+		a.statusMsg = "无法固定到快速访问"
+	}
 }

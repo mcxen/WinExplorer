@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	officialmcp "github.com/cloudwego/eino-ext/components/tool/mcp/officialmcp"
@@ -43,7 +44,19 @@ type assistRun struct {
 	autopilot bool
 	hist      []*schema.Message
 	memories  []aiMemory
+	// onLive paints one transcript line as it grows. onStatus is the working
+	// label; onPending names a tool that has been chosen and not returned.
+	// onSwitched records a model that took over after the first one was
+	// rate-limited, so the next send does not walk into the same wall.
+	onLive     func(id int, turn aiTurn, partial bool)
+	onStatus   func(string)
+	onPending  func(string)
+	onSwitched func(model string)
 }
+
+// errAssistantStopped is a user stop, not a failed reply. Partial text
+// already painted stays on screen.
+var errAssistantStopped = errors.New("已停止")
 
 // assistRunResult is what a headless caller gets back. Text is the final
 // assistant answer, Events keeps tool output for an A2A artifact, and
@@ -57,10 +70,11 @@ type assistRunResult struct {
 }
 
 // assistantRunner is the model call behind both the pane and A2A. Tests
-// replace it with a stub; production uses runFileAssistant.
+// replace it with a stub; production retries a rate-limited model on
+// another route before it reports the failure.
 type assistantRunner func(context.Context, assistRun) (assistRunResult, error)
 
-var runAssistantHeadless assistantRunner = runFileAssistant
+var runAssistantHeadless assistantRunner = runWithRateFallback
 
 func (a *App) assistantSubmit() {
 	a.assist.ensure()
@@ -89,6 +103,9 @@ func (a *App) assistantSubmit() {
 	a.assist.draft = ""
 	a.assist.files = nil
 	a.assist.folder = root
+	a.assist.halted = false
+	a.assist.pending = ""
+	a.assist.resetLive()
 	a.assist.turns = append(a.assist.turns, aiTurn{Role: "user", Text: text, Files: files})
 	a.assist.persistSession(root)
 	a.assist.running = true
@@ -114,6 +131,10 @@ func (a *App) assistantSubmit() {
 		book: append([]archivePassword(nil), a.assist.passwords...), selected: selected,
 		files: paths, autopilot: a.assist.autopilot, hist: a.assistHistory(),
 		memories: append([]aiMemory(nil), a.assist.memories...),
+	}
+	run.onSwitched = func(model string) {
+		id := prov.ID
+		a.postAssist(func() { a.assist.useModel(id, model) })
 	}
 	go a.runAssistant(ctx, run)
 }
@@ -145,9 +166,9 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 			}
 			a.assist.running = false
 			a.assist.stop = nil
-			if a.assist.status == "正在思考…" || a.assist.status == "全托管进行中…" {
-				a.assist.status = ""
-			}
+			a.assist.pending = ""
+			a.assist.resetLive()
+			a.assist.status = ""
 			a.reload()
 			for _, id := range plans {
 				a.assistantApplyPlan(id)
@@ -174,18 +195,30 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 	}
 
 	before = sunvaleToolState.planIDs()
-	result, err := runFileAssistant(ctx, run)
-	if err != nil {
+	run.onLive = func(id int, turn aiTurn, partial bool) {
+		a.noteAssistLive(id, turn, partial)
+	}
+	run.onStatus = func(status string) {
+		a.noteAssistStatus(status)
+	}
+	run.onPending = func(name string) {
+		a.noteAssistPending(name)
+	}
+	result, err := runAssistantHeadless(ctx, run)
+	asked = result.Asked
+	if err != nil && !errors.Is(err, errAssistantStopped) {
 		failed = true
 		a.failAssist(err)
 		return
 	}
-	asked = result.Asked
-	for _, t := range result.Events {
-		turn := t
+	if errors.Is(err, errAssistantStopped) {
 		a.postAssist(func() {
-			a.assist.turns = append(a.assist.turns, turn)
-			a.assist.scroll.JumpToLatest()
+			a.assist.halted = true
+			a.assist.pending = ""
+			if n := len(a.assist.turns); n > 0 {
+				a.assist.turns[n-1].Stopped = true
+			}
+			a.assist.persistSession(run.root)
 		})
 	}
 }
@@ -201,7 +234,8 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		APIKey:  run.prov.APIKey,
 		BaseURL: run.prov.BaseURL,
 		Model:   run.prov.Model,
-		Timeout: 90 * time.Second,
+		// A client-wide deadline would cut a long stream off. Stop cancels
+		// this context, and that is what closes the socket.
 	})
 	if err != nil {
 		return assistRunResult{}, err
@@ -233,7 +267,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 	if err != nil {
 		return assistRunResult{}, err
 	}
-	runner := adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent})
+	runner := adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true})
 	iter := runner.Run(ctx, assistModelHistory(run), adk.WithSessionValues(map[string]any{
 		"folder":    sessionPlain(run.root),
 		"mode":      mode,
@@ -241,36 +275,69 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		"memory":    memoryPrompt(run.memories),
 	}))
 	var result assistRunResult
+	nextID := 0
 	for {
+		if ctx.Err() != nil {
+			return result, errAssistantStopped
+		}
 		ev, ok := iter.Next()
 		if !ok {
 			break
 		}
 		if ev.Err != nil {
+			if assistantStopped(ctx, ev.Err) {
+				return result, errAssistantStopped
+			}
 			return result, ev.Err
 		}
-		if ev.Output != nil && ev.Output.MessageOutput != nil && ev.Output.MessageOutput.IsStreaming {
-			msg, err := ev.Output.MessageOutput.GetMessage()
-			if err != nil {
-				return result, err
-			}
-			evCopy := *ev
-			output := *ev.Output
-			variant := *ev.Output.MessageOutput
-			variant.Message = msg
-			variant.MessageStream = nil
-			variant.IsStreaming = false
-			output.MessageOutput = &variant
-			evCopy.Output = &output
-			ev = &evCopy
-		}
-		turn, has, choice := assistEventTurn(ev)
-		if !has {
+		if ev.Output == nil || ev.Output.MessageOutput == nil {
 			continue
 		}
-		result.Events = append(result.Events, turn)
-		result.Text = turn.Text
-		result.Plan = turn.Plan
+		mv := ev.Output.MessageOutput
+		id := nextID
+		nextID++
+		msg := mv.Message
+		var streamErr error
+		if mv.IsStreaming && mv.MessageStream != nil {
+			toolSeen := map[string]bool{}
+			msg, streamErr = readMessageStream(ctx, mv.MessageStream, func(full, reasoning string) {
+				if mv.Role == schema.Tool {
+					turn := aiTurn{Role: "tool", Text: full, Tool: mv.ToolName, Plan: planIDFrom(full)}
+					publishAssist(run, id, turn, true, &result)
+					return
+				}
+				if reasoning != "" && strings.TrimSpace(full) == "" && run.onStatus != nil {
+					run.onStatus(reasoningLabel(reasoning))
+				}
+				shown := streamShown(full)
+				if strings.TrimSpace(shown) == "" {
+					return
+				}
+				publishAssist(run, id, aiTurn{Role: "assistant", Text: shown}, true, &result)
+			}, func(name string) {
+				if toolSeen[name] || run.onPending == nil {
+					return
+				}
+				toolSeen[name] = true
+				run.onPending(name)
+			})
+		}
+		if streamErr != nil && !errors.Is(streamErr, errAssistantStopped) {
+			return result, streamErr
+		}
+		turn, has, choice := messageTurn(mv.Role, mv.ToolName, msg)
+		if has {
+			if errors.Is(streamErr, errAssistantStopped) {
+				turn.Stopped = true
+			}
+			publishAssist(run, id, turn, false, &result)
+			if mv.Role == schema.Tool && run.onPending != nil {
+				run.onPending("")
+			}
+		}
+		if errors.Is(streamErr, errAssistantStopped) {
+			return result, errAssistantStopped
+		}
 		if choice != nil {
 			result.Choice = choice
 			result.Asked = true
@@ -278,6 +345,142 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		}
 	}
 	return result, nil
+}
+
+// publishAssist paints a line and, once it is finished, keeps it for the
+// headless result. Partials only update the open slot.
+func publishAssist(run assistRun, id int, turn aiTurn, partial bool, result *assistRunResult) {
+	if run.onLive != nil {
+		run.onLive(id, turn, partial)
+	}
+	if partial {
+		return
+	}
+	if result == nil {
+		return
+	}
+	result.Events = append(result.Events, turn)
+	if turn.Text != "" {
+		result.Text = turn.Text
+	}
+	if turn.Plan != "" {
+		result.Plan = turn.Plan
+	}
+	if turn.Choice != nil {
+		result.Choice = turn.Choice
+		result.Asked = true
+	}
+}
+
+func assistantStopped(ctx context.Context, err error) bool {
+	if ctx != nil && ctx.Err() != nil {
+		return true
+	}
+	return err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, adk.ErrStreamCanceled))
+}
+
+// readMessageStream drains one model or tool stream. onText sees the text
+// so far and any reasoning accumulated beside it. Cancel keeps the partial
+// message and returns errAssistantStopped.
+func readMessageStream(ctx context.Context, stream *schema.StreamReader[*schema.Message], onText func(full, reasoning string), onTool func(name string)) (*schema.Message, error) {
+	if stream == nil {
+		return nil, nil
+	}
+	defer stream.Close()
+	var chunks []*schema.Message
+	var text, reasoning strings.Builder
+	stopped := false
+	for {
+		if ctx.Err() != nil {
+			stopped = true
+			break
+		}
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			if assistantStopped(ctx, err) {
+				stopped = true
+				break
+			}
+			return nil, err
+		}
+		if chunk == nil {
+			continue
+		}
+		chunks = append(chunks, chunk)
+		if chunk.Content != "" {
+			text.WriteString(chunk.Content)
+		}
+		if chunk.ReasoningContent != "" {
+			reasoning.WriteString(chunk.ReasoningContent)
+		}
+		if onText != nil && (chunk.Content != "" || chunk.ReasoningContent != "") {
+			onText(text.String(), reasoning.String())
+		}
+		if onTool != nil {
+			for _, call := range chunk.ToolCalls {
+				name := strings.TrimSpace(call.Function.Name)
+				if name != "" {
+					onTool(name)
+				}
+			}
+		}
+	}
+	if len(chunks) == 0 {
+		if stopped {
+			return nil, errAssistantStopped
+		}
+		return nil, nil
+	}
+	msg, err := schema.ConcatMessages(chunks)
+	if err != nil || msg == nil {
+		msg = &schema.Message{Role: schema.Assistant, Content: text.String()}
+	} else if msg.Content == "" {
+		msg.Content = text.String()
+	}
+	if stopped {
+		return msg, errAssistantStopped
+	}
+	return msg, nil
+}
+
+// streamShown hides an unfinished choice or OpenUI block so the markers do
+// not flash as separate tokens before the block is complete.
+func streamShown(text string) string {
+	cut, hide := len(text), false
+	if i := strings.Index(text, choiceOpen); i >= 0 && !strings.Contains(text[i:], choiceClose) && i < cut {
+		cut, hide = i, true
+	}
+	if i := strings.Index(text, "```choices"); i >= 0 && strings.Count(text[i:], "```") < 2 && i < cut {
+		cut, hide = i, true
+	}
+	if i := unclosedFence(text); i >= 0 && i < cut {
+		cut, hide = i, true
+	}
+	if i := strings.Index(text, openUIMarkerOpen); i >= 0 && !strings.Contains(text[i:], openUIMarkerEnd) && i < cut {
+		cut, hide = i, true
+	}
+	if hide {
+		return strings.TrimSpace(text[:cut])
+	}
+	return text
+}
+
+func reasoningLabel(text string) string {
+	text = strings.TrimSpace(text)
+	if i := strings.LastIndex(text, "\n"); i >= 0 {
+		text = strings.TrimSpace(text[i+1:])
+	}
+	rs := []rune(text)
+	if len(rs) > 36 {
+		text = "…" + string(rs[len(rs)-36:])
+	}
+	if text == "" {
+		return "正在思考…"
+	}
+	return "思考中 " + text
 }
 
 // assistModelHistory appends the named-file excerpts to the last user
@@ -306,24 +509,38 @@ func assistEventTurn(ev *adk.AgentEvent) (aiTurn, bool, *aiChoice) {
 		return aiTurn{}, false, nil
 	}
 	mv := ev.Output.MessageOutput
-	if mv.Message == nil || mv.Message.Content == "" {
+	return messageTurn(mv.Role, mv.ToolName, mv.Message)
+}
+
+// messageTurn is the visible form of one finished model or tool message.
+// A tool line is kept even when its text is empty, so the call itself shows.
+func messageTurn(role schema.RoleType, tool string, msg *schema.Message) (aiTurn, bool, *aiChoice) {
+	if msg == nil {
 		return aiTurn{}, false, nil
 	}
-	text := mv.Message.Content
-	display, choice := parseChoices(text)
+	if tool == "" {
+		tool = msg.ToolName
+	}
+	content := msg.Content
+	// Tool output can quote fences from a file. Only assistant prose hides
+	// an unfinished choice or OpenUI block.
+	if role != schema.Tool {
+		content = streamShown(content)
+	}
+	display, choice := parseChoices(content)
 	if choice != nil && strings.TrimSpace(display) == "" {
 		display = choice.Prompt
+	}
+	if role == schema.Tool {
+		if strings.TrimSpace(display) == "" && tool == "" && choice == nil {
+			return aiTurn{}, false, nil
+		}
+		return aiTurn{Role: "tool", Text: display, Tool: tool, Plan: planIDFrom(display), Choice: choice}, true, choice
 	}
 	if strings.TrimSpace(display) == "" && choice == nil {
 		return aiTurn{}, false, nil
 	}
-	role := "assistant"
-	plan := ""
-	if mv.Role == schema.Tool {
-		role = "tool"
-		plan = planIDFrom(display)
-	}
-	return aiTurn{Role: role, Text: display, Plan: plan, Choice: choice}, true, choice
+	return aiTurn{Role: "assistant", Text: display, Choice: choice}, true, choice
 }
 
 func selectionText(paths []string) string {
@@ -415,12 +632,50 @@ func (a *App) failAssist(err error) {
 	})
 }
 
+func (a *App) noteAssistLive(id int, turn aiTurn, partial bool) {
+	a.postAssist(func() {
+		follow := a.assist.scroll.AtLatest()
+		a.assist.applyLive(id, turn, partial)
+		if turn.Role == "tool" && !partial {
+			a.assist.pending = ""
+		}
+		if !partial {
+			a.assist.persistSession(a.assist.folder)
+		}
+		if follow {
+			a.assist.scroll.JumpToLatest()
+		}
+	})
+}
+
+func (a *App) noteAssistStatus(status string) {
+	if status == "" {
+		return
+	}
+	a.postAssist(func() { a.assist.status = status })
+}
+
+func (a *App) noteAssistPending(name string) {
+	a.postAssist(func() {
+		a.assist.pending = name
+		if name != "" {
+			a.assist.status = "正在调用 " + name
+		}
+	})
+}
+
 func (a *App) postAssist(fn func()) {
+	run := func() {
+		fn()
+		if a.win != nil && !a.win.IsDestroyed() {
+			a.win.Invalidate()
+		}
+	}
 	if !mygo.App.IsReady() {
 		fn()
 		return
 	}
-	mygo.RunOnMain(fn)
+	mygo.RunOnMain(run)
 }
 
 func (a *App) assistantApplyPlan(id string) {

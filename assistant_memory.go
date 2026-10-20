@@ -143,6 +143,8 @@ func (u *assistantUI) loadSessionLocked(id string) error {
 	u.created = file.Created
 	u.folder = file.Folder
 	u.turns = normalizeTurns(file.Turns)
+	u.halted = false
+	u.resetLive()
 	return nil
 }
 
@@ -152,6 +154,8 @@ func (u *assistantUI) clearSession() {
 	u.created = time.Time{}
 	u.folder = ""
 	u.turns = nil
+	u.halted = false
+	u.resetLive()
 }
 
 // persistSession writes the current transcript. An empty unsaved chat is not
@@ -464,6 +468,7 @@ func diskTurns(in []aiTurn) []aiTurn {
 			ch.On = append([]bool(nil), t.Choice.On...)
 			t.Choice = &ch
 		}
+		t.OpenSent = append([]string(nil), t.OpenSent...)
 		out[i] = t
 	}
 	return out

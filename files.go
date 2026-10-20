@@ -1254,7 +1254,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 			sysOpenWithMenu(a, n, sel[0])
 		})
 	}
-	if oneDir && !onSpecial {
+	if one && !onSpecial {
 		if a.store.isPinned(sel[0].Path) {
 			if m.Item("从快速访问取消固定").Chosen() {
 				if a.store.unpin(sel[0].Path) {

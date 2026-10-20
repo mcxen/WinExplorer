@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -129,6 +130,10 @@ func (s *a2aTaskStore) finish(id, text, errText string, events []aiTurn, choice 
 		return
 	}
 	if t.State == "canceled" {
+		if t.Text == "" && text != "" {
+			t.Text = text
+			t.Events = events
+		}
 		t.cancel = nil
 		return
 	}
@@ -417,11 +422,12 @@ func (a *App) a2aMessageSend(w http.ResponseWriter, req a2aRPCRequest) {
 		if len(saved)+len(memAdd)+len(memDrop) > 0 {
 			a.assistantApplyHeadlessSideEffects(saved, memAdd, memDrop)
 		}
-		if runErr != nil {
-			assistantA2ATasks.finish(taskID, "", runErr.Error(), nil, nil, ctx.Err() != nil)
+		canceled := ctx.Err() != nil || errors.Is(runErr, errAssistantStopped)
+		if runErr != nil && !canceled {
+			assistantA2ATasks.finish(taskID, "", runErr.Error(), nil, nil, false)
 			return
 		}
-		assistantA2ATasks.finish(taskID, result.Text, "", result.Events, result.Choice, ctx.Err() != nil)
+		assistantA2ATasks.finish(taskID, result.Text, "", result.Events, result.Choice, canceled)
 	}(task.ID)
 	view, _ := assistantA2ATasks.view(task.ID)
 	a2aWriteResult(w, req.ID, view)

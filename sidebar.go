@@ -36,6 +36,7 @@ const (
 	navRowFolder
 	navRowDisks
 	navRowTrash
+	navRowSection
 )
 
 // navRow is one row gathered before any of them is built. The pane is a
@@ -59,11 +60,19 @@ type navRow struct {
 	// under it, and whether it may have any.
 	open    bool
 	hasKids bool
+	// file is a pinned file. A click reveals it in its folder; the row is
+	// not a directory a drop can move into.
+	file bool
+	// pinDrop is the 快速访问 heading: a drop pins paths instead of moving
+	// them. The heading is not itself a place.
+	pinDrop bool
 }
 
-// sidebar is the navigation pane: 主文件夹, the plugins' pages, the pinned
-// places, then 此电脑 as a folder tree — its volumes, and the folders under
-// every one of them the user opens. The tree follows the tab: navigating the
+// sidebar is the navigation pane: 主文件夹, the plugins' pages, 快速访问
+// (pinned files and folders), 最近位置, then 此电脑 as a folder tree — its
+// volumes, and the folders under every one of them the user opens. Folder
+// rows can be dragged, and a drop on the 快速访问 heading pins instead of
+// moving. The tree follows the tab: navigating the
 // pane opens the current folder's ancestors and scrolls its row into view
 // (navtree.go). components.Split (main.go's bodyRow) gives the pane its width
 // and the divider on its right edge, which draws the hairline and resizes the
@@ -178,18 +187,29 @@ func (a *App) navTreeShownAt(shown map[string]bool, path string) {
 	}
 }
 
-// navRows gathers the pane's rows: 主文件夹, the plugins' pages, the pinned
-// places, 最近位置, then 此电脑 with its volumes and the folders under them
-// the user opened. The current location's row is noted for the reveal.
+// navRows gathers the pane's rows: 主文件夹, the plugins' pages, the 快速访问
+// heading and the pinned places under it, 最近位置 when there are any, then
+// 此电脑 with its volumes and the folders under them the user opened. The
+// heading stays when nothing is pinned, so a drop still has a target. The
+// current location's row is noted for the reveal.
 func (a *App) navRows() []navRow {
 	rows := []navRow{{kind: navRowHome, key: "nav-home", label: "主文件夹", icon: "home", path: pathHome}}
 	for _, it := range a.pluginNavItems() {
 		rows = append(rows, navRow{kind: navRowPlugin, key: it.Key, label: it.Label, icon: it.Kind, path: it.Path, act: it.Run})
 	}
+	rows = append(rows, navRow{
+		kind: navRowSection, key: "nav-quick-access", label: "快速访问", pinDrop: true,
+	})
 	for _, p := range a.pinnedPlaces() {
-		rows = append(rows, navRow{kind: navRowPlace, key: "nav-" + p.Path, label: p.Name, icon: p.Kind, path: p.Path})
+		rows = append(rows, navRow{
+			kind: navRowPlace, key: "nav-" + p.Path, label: p.Name, icon: p.Kind, path: p.Path,
+			file: p.Kind == "file",
+		})
 	}
-	rows = append(rows, a.recentPlaceRows()...)
+	if recent := a.recentPlaceRows(); len(recent) > 0 {
+		rows = append(rows, navRow{kind: navRowSection, key: "nav-recent-head", label: "最近位置"})
+		rows = append(rows, recent...)
+	}
 	rows = append(rows, navRow{
 		kind: navRowThisPC, key: "nav-thispc", label: "此电脑", icon: "thispc",
 		path: pathThisPC, open: a.navPCExpanded,
@@ -245,8 +265,25 @@ func (a *App) navPaneRow(c *ui.Context, r navRow) {
 		a.navThisPCRow(c, r)
 	case navRowFolder:
 		a.navFolderRow(c, r)
+	case navRowSection:
+		a.navSectionRow(c, r)
 	default:
 		a.navPlaceRow(c, r)
+	}
+}
+
+// navSectionRow is a heading: 快速访问 or 最近位置. It does not navigate.
+// 快速访问 takes a drop and pins it. A folder row under the heading still
+// moves a drop into that folder; only the heading pins.
+func (a *App) navSectionRow(c *ui.Context, r navRow) {
+	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
+		Radius(4).Padding(0, 8).AlignItems(ui.Center).Label(r.label)
+	row.Children(func() {
+		ui.Text(c, r.label).FontSize(11).FontWeight(600).TextColor(colorMuted()).
+			SingleLine()
+	})
+	if r.pinDrop {
+		a.bindPinDrop(row)
 	}
 }
 
@@ -268,12 +305,25 @@ func (a *App) navPlaceRow(c *ui.Context, r navRow) {
 			r.act()
 			return
 		}
-		a.navigate(r.path)
+		a.openPinned(r.path, !r.file)
 	}
-	a.bindDropFolder(c, row, r.path)
+	// A pinned file is not a directory, so a drop on it must not try to
+	// move other files into it. A folder row still accepts that drop.
+	if !r.file {
+		a.bindDropFolder(c, row, r.path)
+	}
+	if navCanDrag(r) {
+		a.bindDragSource(row, r.path)
+	}
 	if r.kind == navRowPlace {
-		a.navFolderMenu(row, r.label, r.path)
+		a.navFolderMenu(row, r.label, r.path, r.file)
 	}
+}
+
+// navCanDrag reports whether the row names a real file or folder. Pages
+// such as 主文件夹, 此电脑 and a plugin are not dragged out of the pane.
+func navCanDrag(r navRow) bool {
+	return r.path != "" && !specialPath(r.path)
 }
 
 // navThisPCRow is 此电脑: a twist that shows the volumes and the folders under
@@ -329,7 +379,10 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 		a.navigate(r.path)
 	}
 	a.bindDropFolder(c, row, r.path)
-	a.navFolderMenu(row, r.label, r.path)
+	if navCanDrag(r) {
+		a.bindDragSource(row, r.path)
+	}
+	a.navFolderMenu(row, r.label, r.path, false)
 }
 
 // navTwist is the chevron that opens and closes a folder, with the label the
@@ -356,6 +409,10 @@ func navTwistSlot(c *ui.Context) {
 func (a *App) navRowGlyph(c *ui.Context, r navRow) {
 	glyph := ui.Box(c).Size(16, 16).Shrink(0)
 	glyph.Children(func() {
+		if r.file {
+			a.fileIcon(c, Entry{Name: r.label, Path: r.path}, 16)
+			return
+		}
 		if r.icon == "folder" {
 			a.fileIcon(c, Entry{Name: r.label, Path: r.path, IsDir: true}, 16)
 			return
@@ -378,10 +435,10 @@ func (a *App) paintNavRow(row ui.Element, r navRow) {
 // navFolderMenu is the context menu a folder row of the pane carries, pinned
 // places and tree folders alike: open, unpin, a terminal, the plugins' folder
 // actions, and the properties dialog.
-func (a *App) navFolderMenu(row ui.Element, name, path string) {
+func (a *App) navFolderMenu(row ui.Element, name, path string, file bool) {
 	row.ContextMenu(func(m *ui.Menu) {
 		if m.Item("打开").Chosen() {
-			a.navigate(path)
+			a.openPinned(path, !file)
 		}
 		if a.store.isPinned(path) {
 			if m.Item("从快速访问取消固定").Chosen() {
@@ -390,16 +447,18 @@ func (a *App) navFolderMenu(row ui.Element, name, path string) {
 				}
 			}
 		}
-		m.Separator()
-		if m.Item("在终端中打开").Chosen() {
-			a.openInTerminal(path)
-		}
-		// The plugins' folder actions — usage's treemap of this folder —
-		// the same collectors the pane's menus read.
-		sel := []Entry{{Name: name, Path: path, IsDir: true}}
-		for _, it := range a.pluginMenuItems(sel) {
-			if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
-				it.Run()
+		// A pinned file has no folder to open a terminal in, and the
+		// plugins' folder actions do not apply to it.
+		if !file {
+			m.Separator()
+			if m.Item("在终端中打开").Chosen() {
+				a.openInTerminal(path)
+			}
+			sel := []Entry{{Name: name, Path: path, IsDir: true}}
+			for _, it := range a.pluginMenuItems(sel) {
+				if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+					it.Run()
+				}
 			}
 		}
 		m.Separator()

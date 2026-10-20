@@ -24,6 +24,10 @@ import (
 // The pane's width drags; 全屏 takes the room to the right of the sidebar.
 // Closing the pane does not drop the transcript. The current session is
 // reloaded from the user config directory the next time a window opens.
+// A drop on the transcript or the composer names those files for the next
+// message and leaves them where they were. A fenced OpenUI block in a reply
+// is drawn with the controls in assistant_openui.go. Its buttons send the
+// next message and do not change files themselves.
 
 const (
 	assistantPaneW float32 = 380
@@ -42,6 +46,12 @@ type aiTurn struct {
 	Plan   string     `json:"plan,omitempty"`
 	Files  []aiAttach `json:"files,omitempty"`
 	Choice *aiChoice  `json:"choice,omitempty"`
+	// OpenSent is the @ToAssistant text already posted from this reply.
+	OpenSent []string `json:"openSent,omitempty"`
+	// Tool is the MCP tool that produced a tool line. Stopped marks a reply
+	// the user cut off; the partial text stays in the transcript.
+	Tool    string `json:"tool,omitempty"`
+	Stopped bool   `json:"stopped,omitempty"`
 }
 
 // aiAttach is a file the user named for this turn. Detail is a size or
@@ -88,6 +98,14 @@ type assistantUI struct {
 	passwords []archivePassword
 	diskPath  string
 	stop      context.CancelFunc
+	// pending is a tool the model has named and not finished. halted is the
+	// last turn being cut off before the stopped bit is written onto it.
+	// liveOn replaces one growing line instead of appending every token.
+	pending string
+	halted  bool
+	liveOn  bool
+	liveID  int
+	liveAt  int
 
 	// sessionID is empty until the first message of a new chat is saved.
 	sessionID       string
@@ -159,10 +177,17 @@ func (a *App) assistantPane(c *ui.Context) {
 				})
 				ui.Box(c).Height(1).FillWidth().Shrink(0).Background(colorDivider())
 			}
-			chat.FloatingConversation(c, &a.assist.floatLay, &a.assist.scroll, "回到底部",
-				func(*ui.Context) { a.assistantTranscript(c) },
-				func(*ui.Context) { a.assistantComposer(c) },
-			)
+			// The column, not the card, takes a drag from this window and a
+			// native file list. The card only sees DroppedFiles, so a drop
+			// on the composer would otherwise miss both.
+			conv := ui.Column(c).Grow(1).FillWidth().MinHeight(0).MinWidth(0)
+			conv.Children(func() {
+				chat.FloatingConversation(c, &a.assist.floatLay, &a.assist.scroll, "回到底部",
+					func(*ui.Context) { a.assistantTranscript(c) },
+					func(*ui.Context) { a.assistantComposer(c) },
+				)
+			})
+			a.bindAssistDrop(conv)
 		})
 	})
 	a.assist.noteChrome()
@@ -197,14 +222,14 @@ func (a *App) assistantComposer(c *ui.Context) {
 		},
 	})
 	comp.Root.FillWidth().Shrink(0)
+	// FileDrop on the card itself. Native and in-window drops land on the
+	// conversation column (bindAssistDrop), so this is not a second copy.
 	if len(comp.Dropped) > 0 {
-		n := a.assist.addFiles(comp.Dropped)
-		if n > 0 {
-			a.statusMsg = "已加入 " + itoa(n) + " 个文件"
-		}
+		a.attachDroppedPaths(comp.Dropped)
 	}
 	if comp.Stop && a.assist.stop != nil {
 		a.assist.stop()
+		a.assist.status = "正在停止…"
 	}
 	if comp.Send && !a.assist.running {
 		a.assistantSubmit()
@@ -364,6 +389,26 @@ func (u *assistantUI) paintFor(i int) *assistPaint {
 
 func (u *assistantUI) resetPaint() { u.paint = nil }
 
+// applyLive appends a transcript line, or replaces the one still streaming
+// under the same id. partial keeps that slot open for the next token.
+func (u *assistantUI) applyLive(id int, turn aiTurn, partial bool) {
+	if u.liveOn && u.liveID == id && u.liveAt >= 0 && u.liveAt < len(u.turns) {
+		u.turns[u.liveAt] = turn
+	} else {
+		u.turns = append(u.turns, turn)
+		u.liveAt = len(u.turns) - 1
+		u.liveID = id
+	}
+	u.liveOn = partial
+}
+
+func (u *assistantUI) resetLive() {
+	u.liveOn = false
+	u.liveID = 0
+	u.liveAt = 0
+	u.pending = ""
+}
+
 func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 	turns := a.assist.turns
 	key := ex.User
@@ -373,6 +418,7 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 	paint := a.assist.paintFor(key)
 	var tools []int
 	var answer strings.Builder
+	var openBlocks []openPiece
 	for _, i := range ex.Rest {
 		t := turns[i]
 		switch t.Role {
@@ -383,25 +429,39 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			if t.Choice != nil && strings.TrimSpace(text) == t.Choice.Prompt {
 				text = ""
 			}
-			if strings.TrimSpace(text) == "" {
-				continue
+			prose, blocks := splitOpenUI(text)
+			if strings.TrimSpace(prose) != "" {
+				if answer.Len() > 0 {
+					answer.WriteString("\n\n")
+				}
+				answer.WriteString(prose)
 			}
-			if answer.Len() > 0 {
-				answer.WriteString("\n\n")
+			for _, block := range blocks {
+				openBlocks = append(openBlocks, openPiece{turn: i, src: block})
 			}
-			answer.WriteString(text)
 		}
 	}
 	final := answer.String()
 	last := key == a.assist.lastExchangeKey(ex)
 	status := chat.Completed
 	working := ""
+	stopped := false
+	for _, i := range ex.Rest {
+		if turns[i].Stopped {
+			stopped = true
+		}
+	}
+	if last && a.assist.halted {
+		stopped = true
+	}
 	if last && a.assist.running {
 		status = chat.Running
 		working = a.assist.status
 		if working == "" {
 			working = "正在思考"
 		}
+	} else if stopped {
+		status = chat.Cancelled
 	}
 	var prompt chat.View
 	if ex.User >= 0 {
@@ -420,8 +480,9 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		}
 	}
 	var steps []chat.Step
-	if len(tools) > 0 {
-		activities := make([]chat.Activity, 0, len(tools))
+	if len(tools) > 0 || (last && a.assist.running && a.assist.pending != "") {
+		activities := make([]chat.Activity, 0, len(tools)+1)
+		names := make([]string, 0, len(tools))
 		for _, i := range tools {
 			t := turns[i]
 			text := t.Text
@@ -430,34 +491,74 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 				st = &chat.ActivityState{}
 				paint.acts[i] = st
 			}
-			action := "工具"
+			action := t.Tool
+			if action == "" {
+				action = "工具"
+			}
 			if t.Plan != "" {
 				action = "重命名方案"
 			}
+			if t.Tool != "" {
+				names = append(names, t.Tool)
+			}
+			actStatus := chat.Completed
+			if last && a.assist.running && a.assist.liveOn && a.assist.liveAt == i {
+				actStatus = chat.Running
+			}
+			detail := assistFirstLine(text)
+			if detail == "" && actStatus == chat.Running {
+				detail = "进行中"
+			}
 			activities = append(activities, chat.Activity{
-				ID: itoa(i), Action: action, Detail: assistFirstLine(text),
-				Status: chat.Completed, Mono: true, State: st, MaxHeight: 220,
+				ID: itoa(i), Action: action, Detail: detail,
+				Status: actStatus, Mono: true, State: st, MaxHeight: 220,
 				Content: func(c *ui.Context) {
 					ui.Text(c, text).FontSize(12).TextColor(colorText()).Wrap()
 				},
 			})
 		}
-		title := "调用了 " + itoa(len(tools)) + " 个工具"
+		if last && a.assist.running && a.assist.pending != "" {
+			activities = append(activities, chat.Activity{
+				ID: "pending", Action: a.assist.pending, Detail: "进行中", Status: chat.Running,
+			})
+			names = append(names, a.assist.pending)
+		}
+		title := assistSummary(len(tools))
+		if label := assistCallSummary(names, last && a.assist.running); label != "" {
+			title = label
+		}
 		steps = []chat.Step{{
 			ID: "tools", Title: title, Activities: activities, Group: &paint.group,
 		}}
 	}
 	var finalView chat.View
-	if final != "" {
+	if final != "" || len(openBlocks) > 0 {
 		finalView = func(c *ui.Context) {
-			ui.Text(c, final).FontSize(13.5).TextColor(colorText()).Wrap()
+			ui.Column(c).FillWidth().MinWidth(0).Gap(8).Children(func() {
+				if final != "" {
+					ui.Text(c, final).FontSize(13.5).TextColor(colorText()).Wrap()
+				}
+				for n, block := range openBlocks {
+					a.paintOpenBlock(c.Key("openui-"+itoa(block.turn)+"-"+itoa(n)), block.src, block.turn)
+				}
+			})
 		}
 	}
+	summary := assistSummary(len(tools))
+	if len(steps) == 1 && steps[0].Title != "" {
+		summary = steps[0].Title
+	}
+	if stopped && status == chat.Cancelled {
+		summary = "已停止"
+	}
 	chat.Turn(c, &paint.turn, chat.TurnOptions{
-		ID: itoa(key), Status: status, Summary: assistSummary(len(tools)), Working: working,
+		ID: itoa(key), Status: status, Summary: summary, Working: working,
 		Prompt: prompt, Steps: steps, Final: finalView,
 		HoldOpen: !a.assist.scroll.AtLatest(),
 		Footer: func(c *ui.Context) {
+			if stopped && status == chat.Cancelled {
+				ui.Text(c, "已停止").FontSize(12).TextColor(colorMuted())
+			}
 			for _, i := range ex.Rest {
 				t := turns[i]
 				if t.Plan != "" && !a.assist.applied[t.Plan] {
@@ -491,6 +592,35 @@ func assistSummary(tools int) string {
 		return "已回复"
 	}
 	return "调用了 " + itoa(tools) + " 个工具"
+}
+
+// assistCallSummary is the fold line once tool names are known. While the
+// turn is still running it says what is happening instead of a past count.
+func assistCallSummary(names []string, running bool) string {
+	seen := map[string]bool{}
+	var uniq []string
+	for _, name := range names {
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		uniq = append(uniq, name)
+	}
+	if len(uniq) == 0 {
+		return ""
+	}
+	shown := uniq
+	if len(shown) > 3 {
+		shown = shown[:3]
+	}
+	label := strings.Join(shown, "、")
+	if running {
+		return "正在调用 " + label
+	}
+	if len(uniq) > len(shown) {
+		return "调用了 " + label + " 等"
+	}
+	return "调用了 " + label
 }
 
 func assistFirstLine(text string) string {
@@ -539,8 +669,12 @@ func (a *App) assistantTurn(c *ui.Context, i int) {
 		}
 		a.assistantChoices(c, i)
 	default:
-		if text != "" {
-			ui.Text(c.Key("ai-"+itoa(i)), text).FontSize(13).TextColor(colorText()).Wrap()
+		prose, blocks := splitOpenUI(text)
+		if prose != "" {
+			ui.Text(c.Key("ai-"+itoa(i)), prose).FontSize(13).TextColor(colorText()).Wrap()
+		}
+		for n, block := range blocks {
+			a.paintOpenBlock(c.Key("openui-"+itoa(i)+"-"+itoa(n)), block, i)
 		}
 		a.assistantChoices(c, i)
 	}
@@ -691,6 +825,60 @@ func (a *App) attachPastedPaths(text string) {
 	n := a.assist.addFiles(paths)
 	if n > 0 {
 		a.statusMsg = "已加入 " + itoa(n) + " 个文件"
+	}
+}
+
+// bindAssistDrop makes the transcript and the composer one target. A drop
+// names the paths for the next message (addFiles). It does not move or
+// copy: the conversation is not a folder. The card keeps AcceptFiles for
+// the FileDrop path; registering DropOptions there too would take the
+// native drop away from this column and skip dropTookOwnDrag.
+func (a *App) bindAssistDrop(el ui.Element) {
+	if over, ok := ui.DragOver[dragPayload](el); ok && len(over.paths) > 0 {
+		el.Background(colorSelected().Alpha(0.75))
+	}
+	a.bindNativeDrop(el, func(paths []string) {
+		a.attachDroppedPaths(paths)
+	})
+	if el.FileDragOver() {
+		el.Background(colorSelected().Alpha(0.75))
+	}
+	if p, ok := ui.Drop[dragPayload](el); ok && len(p.paths) > 0 {
+		a.attachDroppedPaths(p.paths)
+		a.dropTookOwnDrag = true
+	}
+	if files := el.DroppedFiles(); len(files) > 0 {
+		a.attachDroppedPaths(files)
+	}
+}
+
+// attachDroppedPaths hangs local paths on the assistant. A file URL from
+// another application is a path; a remote link is not, and is said so.
+func (a *App) attachDroppedPaths(paths []string) {
+	if len(paths) == 0 {
+		return
+	}
+	local := make([]string, 0, len(paths))
+	rejected := false
+	for _, p := range paths {
+		path, ok := localFilePath(p)
+		if !ok {
+			rejected = true
+			continue
+		}
+		local = append(local, path)
+	}
+	n := 0
+	if len(local) > 0 {
+		n = a.assist.addFiles(local)
+	}
+	switch {
+	case n > 0:
+		a.statusMsg = "已加入 " + itoa(n) + " 个文件"
+	case len(local) > 0:
+		a.statusMsg = "没有新的文件"
+	case rejected:
+		a.statusMsg = "只能指定本地文件或文件夹"
 	}
 }
 

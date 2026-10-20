@@ -40,21 +40,6 @@ func parseChoices(text string) (string, *aiChoice) {
 	return text, nil
 }
 
-func cutBlock(text, open, close string) (block, rest string, ok bool) {
-	i := strings.Index(text, open)
-	if i < 0 {
-		return "", "", false
-	}
-	from := i + len(open)
-	j := strings.Index(text[from:], close)
-	if j < 0 {
-		return "", "", false
-	}
-	block = text[from : from+j]
-	rest = strings.TrimSpace(text[:i] + text[from+j+len(close):])
-	return block, rest, true
-}
-
 func parseChoiceBlock(block string) *aiChoice {
 	ch := &aiChoice{Multi: true}
 	for _, line := range strings.Split(block, "\n") {

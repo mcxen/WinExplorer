@@ -67,7 +67,7 @@
 | R3 | fsops 剩余：freeName/placeItem/absPath/undo 类型 | 中 | 已完成 | 03 §2 | — | `refactor/fsops-rest` |
 | R4 | 拆分 diskhealth.go | 低 | 已完成 | 03 §5 | F1 | `refactor/diskhealth-split` |
 | R5 | internal/search | 低 | 已完成 | 03 §4 | R2、S1–S8 全部 | `refactor/internal-search` |
-| R6 | internal/assistant（6a–6d） | 低 | 待开发 | 03 §6 | R3、A1–A3 | `refactor/internal-assistant` |
+| R6 | internal/assistant（6a–6d） | 低 | 进行中 | 03 §6 | R3、A1–A3 | `refactor/internal-assistant` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 

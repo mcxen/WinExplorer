@@ -48,6 +48,10 @@ type tabState struct {
 	// reveal is the path the keyboard moved to: the view showing it scrolls
 	// it into view in that frame (handleKeys clears it each frame).
 	reveal string
+	// selectPath is the folder a backward move came out of: the listing it
+	// lands on selects that row once, then clears it (navigate's
+	// selectAfterNav).
+	selectPath string
 
 	// marquee is the rubber-band selection's state while the pointer drags
 	// on the pane's empty space, and itemBounds the window box of every row

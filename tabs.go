@@ -33,7 +33,29 @@ func (a *App) navigate(path string) {
 	}
 	a.store.pushVisit(t.path)
 	a.reload()
+	a.selectAfterNav(t)
 	a.requestPreview()
+}
+
+// selectAfterNav applies the pending selection a backward move left: 上一级
+// and 后退 both land on the folder that was just left, so it should be
+// selected there, as Explorer does. The path is only taken when the listing
+// really holds it — a folder deleted meanwhile leaves nothing selected.
+func (a *App) selectAfterNav(t *tabState) {
+	if t.selectPath == "" {
+		return
+	}
+	path := t.selectPath
+	t.selectPath = ""
+	for _, e := range t.entries {
+		if e.Path == path {
+			a.selectOnly(path)
+			// The row may sit below the fold in a long listing: raise it
+			// into view the way a keyboard move does.
+			t.reveal = path
+			return
+		}
+	}
 }
 
 func (a *App) canBack() bool { return a.cur().histIdx > 0 }
@@ -48,6 +70,8 @@ func (a *App) back() {
 	if t.histIdx <= 0 {
 		return
 	}
+	// 后退 lands on the folder just left; select it there, as 上一级 does.
+	t.selectPath = t.path
 	t.histIdx--
 	a.restoreHistory()
 }
@@ -57,6 +81,7 @@ func (a *App) forward() {
 	if t.histIdx < 0 || t.histIdx+1 >= len(t.history) {
 		return
 	}
+	t.selectPath = t.path
 	t.histIdx++
 	a.restoreHistory()
 }
@@ -76,17 +101,24 @@ func (a *App) restoreHistory() {
 		a.disksUnwatch()
 	}
 	a.reload()
+	a.selectAfterNav(t)
 	a.requestPreview()
 }
 
-// up opens the parent of the active tab's folder. A volume root or "/" goes to
-// This PC; This PC itself has no parent.
+// up opens the parent of the active tab's folder, with the folder left
+// behind selected there — Explorer's behavior, so going up and back down is
+// one click. A volume root or "/" goes to This PC; This PC itself has no
+// parent.
 func (a *App) up() {
-	switch a.cur().path {
+	t := a.cur()
+	switch t.path {
 	case pathThisPC, pathHome, pathGallery, pathTrash, pathDisks:
 		return
 	}
-	a.navigate(parentPath(a.cur().path))
+	// The listing is rebuilt by navigate, which selects this row once the
+	// parent's entries are in hand.
+	t.selectPath = t.path
+	a.navigate(parentPath(t.path))
 }
 
 func (a *App) canUp() bool {

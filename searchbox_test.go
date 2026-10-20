@@ -35,7 +35,19 @@ func waitSearchBox(t *testing.T, tt *ui.Tester, a *App) {
 // — the whole machine is far too big to walk in a test, so it takes the folder
 // scope the switch offers — and opens a hit.
 func TestCtrlKSearchBox(t *testing.T) {
-	a, tt, _ := keynavWindow(t, 3)
+	a, tt, dir := keynavWindow(t, 1)
+	// Nested hits keep the palette's labels unique: the pane shows the
+	// folders but not the files below them.
+	for _, sub := range []string{"alpha-dir", "beta-dir", "gamma-dir"} {
+		subdir := filepath.Join(dir, sub)
+		if err := os.Mkdir(subdir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(subdir, "nested-"+sub+".txt"), []byte("hello"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.reload()
 	tt.Key(ui.Ctrl, ui.KeyK)
 	tt.Frame()
 	if !a.searchBox.open {
@@ -46,27 +58,46 @@ func TestCtrlKSearchBox(t *testing.T) {
 		t.Fatalf("the box opened at scope %v, want 全部磁盘", a.searchBox.scope)
 	}
 	a.searchBox.scope = scopeFolder
-	tt.Type("f00")
+	tt.Type("nested")
 	tt.Frame()
 	waitSearchBox(t, tt, a)
 	if len(a.searchBox.results) != 3 {
 		t.Fatalf("the box found %d hits, want the folder's three", len(a.searchBox.results))
 	}
-	if !tt.HasText("f000") {
+	if !tt.HasText("nested-") {
 		t.Fatalf("the list does not show its hits; the window shows %v", tt.Texts())
 	}
 	// The hits are laid out as rows: two of them stack at the same left edge,
-	// about a row apart — the list inside the dialog has a real height.
-	firstRow, okFirst := tt.Find(a.displayName(a.searchBox.results[0]))
-	secondRow, okSecond := tt.Find(a.displayName(a.searchBox.results[1]))
+	// 44 DIP apart — the list inside the dialog has a real height.
+	firstBreadcrumb := searchPathText(searchPathSegments(a.searchBox.results[0].Dir, homeForSearch(), 5))
+	secondBreadcrumb := searchPathText(searchPathSegments(a.searchBox.results[1].Dir, homeForSearch(), 5))
+	firstRow, okFirst := tt.Find(firstBreadcrumb)
+	secondRow, okSecond := tt.Find(secondBreadcrumb)
 	if !okFirst || !okSecond {
 		t.Fatalf("the hits are not in the window: %v / %v", firstRow, secondRow)
 	}
 	if firstRow.X != secondRow.X {
 		t.Fatalf("the rows are not in one column: %v / %v", firstRow, secondRow)
 	}
-	if d := secondRow.Y - firstRow.Y; d < 20 || d > 40 {
-		t.Fatalf("the rows are %v apart, want about one row", d)
+	if d := secondRow.Y - firstRow.Y; d < 40 || d > 50 {
+		t.Fatalf("the rows are %v apart, want a 44 DIP row", d)
+	}
+	for _, hit := range a.searchBox.results {
+		if _, ok := tt.Find(hit.Name); !ok {
+			t.Fatalf("the palette does not show the complete name %q: %v", hit.Name, tt.Texts())
+		}
+	}
+	// The row's tooltip is its full path, not the breadcrumb it can shorten.
+	row, ok := tt.Find(a.searchBox.results[0].Name)
+	if !ok {
+		t.Fatal("the first palette row vanished")
+	}
+	tt.Move(2, 2)
+	tt.Advance(time.Second)
+	tt.Move(row.X+row.W/2, row.Y+row.H/2)
+	tt.Advance(time.Second)
+	if !tt.HasText(a.searchBox.results[0].Path) {
+		t.Fatalf("the row does not show its full path as a tooltip: %v", tt.Texts())
 	}
 
 	// The cursor walks the hits and holds at the ends. The keys stay with the
@@ -117,6 +148,29 @@ func TestCtrlKSearchBox(t *testing.T) {
 	}
 	if a.searchBox.query != "" || len(a.searchBox.results) != 0 {
 		t.Fatalf("the closed box kept query %q and %d hits", a.searchBox.query, len(a.searchBox.results))
+	}
+}
+
+// TestSearchDetailsShowRelativeLocation: the pane's 位置 column keeps the
+// folders below the search root, not just the folder holding the hit.
+func TestSearchDetailsShowRelativeLocation(t *testing.T) {
+	a, tt, dir := keynavWindow(t, 1)
+	nested := filepath.Join(dir, "reports", "2026", "q4")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "needle.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.mode = ViewDetails
+	a.reload()
+	tt.Key(ui.Ctrl, ui.KeyE)
+	tt.Type("needle")
+	tt.Frame()
+	waitSearch(t, a)
+	tt.Frame()
+	if !tt.HasText("reports › 2026 › q4") {
+		t.Fatalf("the 位置 column does not keep the relative path: %v", tt.Texts())
 	}
 }
 

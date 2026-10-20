@@ -54,7 +54,7 @@ func TestSearchMarksThePaneRows(t *testing.T) {
 	tt.Frame()
 	waitSearch(t, a)
 	tt.Frame()
-	row, ok := tt.Find(a.displayName(listedEntry(t, a, "f000.txt")))
+	row, ok := tt.Find(listedEntry(t, a, "f000.txt").Name)
 	if !ok {
 		t.Fatalf("the row is not in the window: %v", tt.Texts())
 	}
@@ -72,7 +72,7 @@ func TestSearchMarksTheTiles(t *testing.T) {
 	tt.Frame()
 	waitSearch(t, a)
 	tt.Frame()
-	tile, ok := tt.Find(a.displayName(listedEntry(t, a, "f000.txt")))
+	tile, ok := tt.Find(listedEntry(t, a, "f000.txt").Name)
 	if !ok {
 		t.Fatalf("the tile is not in the window: %v", tt.Texts())
 	}

@@ -7,7 +7,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -287,7 +286,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 		})
 		a.detailText(c, formatModTime(e.ModTime), a.dateColW(), false)
 		if searching {
-			a.detailText(c, searchLocation(e), a.locColW(), false)
+			a.detailText(c, searchLocationText(e, a.cur().path, homeForSearch()), a.locColW(), false)
 		} else {
 			a.detailText(c, typeLabel(e), a.typColW(), false)
 		}
@@ -321,15 +320,6 @@ func sizeColumnText(e Entry) string {
 		return "…"
 	}
 	return ""
-}
-
-// searchLocation is the 位置 column: the folder the hit was found in,
-// relative to the search root when it is under it.
-func searchLocation(e Entry) string {
-	if e.Dir == "" {
-		return ""
-	}
-	return filepath.Base(e.Dir)
 }
 
 // driveCapCell is the 此电脑 page's drive usage cell: a slim capacity bar

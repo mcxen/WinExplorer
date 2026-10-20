@@ -280,10 +280,14 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 		a.renameField(c, font)
 		return
 	}
-	// A live search marks the runs it matched, Everything-style. A query whose
-	// terms all sit in the path (path:docs) marks nothing in a name, and falls
-	// through to the plain text.
-	label := searchNameText(c, a.activeSearchQuery(), a.displayName(e), font).
+	// A live search shows complete names: hiding the extension would make
+	// report.docx, report.md and report.txt indistinguishable. It also marks
+	// the runs matched, Everything-style; path-only terms mark nothing.
+	name := a.displayName(e)
+	if strings.TrimSpace(a.cur().query) != "" {
+		name = e.Name
+	}
+	label := searchNameText(c, a.activeSearchQuery(), name, font).
 		SingleLine().Grow(1).MinWidth(0)
 	if l := aiFx.look(e.Path); l.flash > 0 {
 		label.TextColor(flashColor(colorText(), l))

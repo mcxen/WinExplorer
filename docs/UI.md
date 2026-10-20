@@ -62,7 +62,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 预览窗格 | 宽 220–460 | `preview.go:previewMinW/previewMaxW` |
 | 状态栏 | 高 28，字号 12 | `status.go` |
 | 助手面板 | 默认宽 380，最小 320 | `assistant.go:assistantPaneW/assistantMinW` |
-| 快速搜索 | 760 宽（独立面板 760×480），列表高 120–384，行高 26 | `searchbox.go` 常量、`searchHitRow` |
+| 快速搜索 | 760 宽（独立面板 760×480），列表高 120–384，两行行高 44：24px 图标、完整文件名与相对路径、150px 右对齐的“大小 · 类型 / 修改日期” | `searchbox.go:searchHitRowH`、`searchHitRow`、`searchHitMetaW` |
 | 地址建议下拉 | 与地址栏同宽，最高 360，行高 28 | `addressbar.go:pathDropdown` |
 | 按钮最小宽 | 80 | `uikit.go:btnMinW` |
 
@@ -82,7 +82,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **预览窗格**（`preview_pane.go`）：右侧可调宽。
 - **状态栏**（`status.go`）：左侧项目数/选中数与大小，搜索时为搜索状态（`search.go:searchStatusLabel`）；右侧当前视图名。
 - **助手面板**（`assistant.go`）：右侧，Markdown 回复与 OpenUI 卡片。
-- **快速搜索 Ctrl+K**（`searchbox.go`）：有应用运行时为独立无边框磨砂面板（`ensureSearchPanel`），测试中为窗口内对话框（`searchBoxModal`）。
+- **快速搜索 Ctrl+K**（`searchbox.go`）：有应用运行时为独立无边框磨砂面板（`ensureSearchPanel`），测试中为窗口内对话框（`searchBoxModal`）。每行第一行显示完整文件名（扩展名用次要文字色），第二行显示相对搜索根的面包屑，悬停显示完整路径。
 
   ![快速搜索现状](assets/ui/search-palette.png)
 - **对话框**：统一走 `glass.go:floatDialog` / Onevra `components.Dialog`；底部按钮用 `uikit.go:uikitDialogButtons`（主按钮在右）。

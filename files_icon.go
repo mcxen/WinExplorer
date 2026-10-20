@@ -6,6 +6,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 
@@ -219,7 +220,11 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 				a.renameField(c, font)
 				return
 			}
-			label := searchNameText(c, a.activeSearchQuery(), tileName(a.displayName(e), tileNameRunes(box)), font).
+			name := a.displayName(e)
+			if strings.TrimSpace(a.cur().query) != "" {
+				name = e.Name
+			}
+			label := searchNameText(c, a.activeSearchQuery(), tileName(name, tileNameRunes(box)), font).
 				TextAlign(ui.Center).MaxLines(2).FillWidth()
 			if look.flash > 0 {
 				label.TextColor(flashColor(colorText(), look))

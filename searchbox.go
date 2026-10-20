@@ -37,9 +37,11 @@ const (
 	// searchBoxListMin what it keeps when the window is short.
 	searchBoxListMax float32 = 384
 	searchBoxListMin float32 = 120
-	// searchBoxNameW is the 名称 column's width: the folder, size and date
-	// columns follow it, so names line up.
-	searchBoxNameW float32 = 300
+	// searchHitRowH gives each hit a name and a breadcrumb line, the shape
+	// Explorer's search results use.
+	searchHitRowH float32 = 44
+	// searchHitMetaW is the right-hand size/type and date column.
+	searchHitMetaW float32 = 150
 )
 
 // searchSource is which engine answered the list on screen, which the footer
@@ -377,15 +379,17 @@ func (a *App) searchBoxNotice(c *ui.Context, height float32) {
 		})
 }
 
-// searchHitRow is one hit: its icon and name, the folder it lives in, its size,
-// its date and the 位置 button. The row under the cursor is highlighted; a click
-// moves the cursor to it, a double click opens it, as Enter does, and 位置
-// jumps to the folder it lives in with it selected, as Ctrl+Enter does.
+// searchHitRow is one hit: its icon, complete name and parent breadcrumb, then
+// its type/size and date. The row under the cursor is highlighted; a click moves
+// the cursor to it, a double click opens it, as Enter does, and 位置 jumps to
+// the folder it lives in with it selected, as Ctrl+Enter does.
 func (a *App) searchHitRow(c *ui.Context, i int) {
 	b := &a.searchBox
 	e := b.results[i]
-	row := ui.ButtonBase(c.Key("hit-"+e.Path)).FillWidth().Height(26).
-		Padding(0, 4).Gap(8).AlignItems(ui.Center).Radius(4).Label(e.Name)
+	row := ui.ButtonBase(c.Key("hit-"+e.Path)).FillWidth().Height(searchHitRowH).
+		MinHeight(searchHitRowH).Padding(0, 6).Gap(8).AlignItems(ui.Center).
+		Radius(4).Label(e.Name)
+	row.Tooltip(e.Path)
 	switch {
 	case i == b.cursor:
 		row.Background(colorSelected())
@@ -393,20 +397,30 @@ func (a *App) searchHitRow(c *ui.Context, i int) {
 		row.Background(colorHover())
 	}
 	row.Children(func() {
-		glyph := ui.Box(c).Size(16, 16).Shrink(0)
+		glyph := ui.Box(c).Size(24, 24).Shrink(0)
 		glyph.Children(func() {
-			a.fileIcon(c, e, 16)
+			a.fileIcon(c, e, 24)
 		})
-		searchNameText(c, b.parsed, a.displayName(e), 12).
-			SingleLine().Width(searchBoxNameW).Shrink(0)
-		ui.Text(c, tailRunes(e.Dir, 42)).FontSize(11).TextColor(colorMuted()).SingleLine().
-			Grow(1).MinWidth(0)
-		if !e.IsDir {
-			ui.Text(c, sizeColumnText(e)).FontSize(11).TextColor(colorMuted()).SingleLine().
-				Width(72).Shrink(0).TextAlign(ui.End)
-		}
-		ui.Text(c, formatModTime(e.ModTime)).FontSize(11).TextColor(colorMuted()).SingleLine().
-			Width(84).Shrink(0)
+		main := ui.Column(c).Grow(1).MinWidth(0).Height(searchHitRowH).Justify(ui.Center)
+		main.Children(func() {
+			ui.RichText(c, searchNameSpans(b.parsed, e.Name, e.IsDir, 12)...).
+				SingleLine().MinWidth(0)
+			ui.Text(c, searchPathText(searchPathSegments(e.Dir, homeForSearch(), 5))).
+				FontSize(11).TextColor(colorMuted()).SingleLine().MinWidth(0)
+		})
+		meta := ui.Column(c).Width(searchHitMetaW).Shrink(0).Height(searchHitRowH).Justify(ui.Center)
+		meta.Children(func() {
+			kind := typeLabel(e)
+			if e.IsDir {
+				kind = "文件夹"
+			} else if size := sizeColumnText(e); size != "" {
+				kind = size + " · " + kind
+			}
+			ui.Text(c, kind).FontSize(11).TextColor(colorMuted()).SingleLine().
+				Width(searchHitMetaW).TextAlign(ui.End)
+			ui.Text(c, formatModTime(e.ModTime)).FontSize(11).TextColor(colorMuted()).SingleLine().
+				Width(searchHitMetaW).TextAlign(ui.End)
+		})
 		// 位置 is the mouse's Ctrl+Enter: the hit's folder, with the hit in it.
 		// The button takes its own clicks (the innermost element does), so it
 		// neither moves the cursor nor opens the hit.
@@ -565,15 +579,4 @@ func scopeFromIndex(i int) searchScope {
 		return scopeGlobal
 	}
 	return scopeFolder
-}
-
-// tailRunes is s cut to n runes from the end, with an ellipsis where the cut
-// was: a hit's folder reads from the folders nearest it, which is what tells
-// two hits apart.
-func tailRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return "…" + string(r[len(r)-n:])
 }

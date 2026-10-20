@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"slices"
 	"strings"
 	"time"
@@ -13,17 +14,20 @@ import (
 	"sunvale/internal/searchquery"
 )
 
-// searchbox.go is the Ctrl+K box: Everything's search window, raised over this
-// one. Ctrl+K (Cmd+K) puts a palette over the dimmed window with its own query
-// box, a 本文件夹 / 全部磁盘 switch — it starts at every disk, which is the
-// point of it — and a live list of hits, streamed by the same walk the pane's
-// search box uses (search.go) with Everything's query language
-// (searchquery.go) — or answered on the keystroke by the search index
-// (searchindex.go) when it covers the scope. ↑/↓ walk the hits, PageUp/
-// PageDown by a page, Enter opens one (a folder is entered, a file opens in the
-// folder it lives in), Ctrl+Enter shows it there instead — the tab navigates to
-// the folder with the hit selected — the 位置 button on a row does the same
-// with the mouse, and Escape closes the box.
+// searchbox.go is the Ctrl+K box: Everything's search, in its own panel —
+// the kind of window Raycast and Spotlight use. Ctrl+K (Cmd+K) shows a
+// frameless frosted panel above every app, on the current Space, with its
+// own query box and a 本文件夹 / 全部磁盘 switch — it starts at every disk,
+// which is the point of it — and a live list of hits, streamed by the same
+// walk the pane's search box uses (search.go) with Everything's query
+// language (searchquery.go), or answered on the keystroke by the search
+// index (searchindex.go) when it covers the scope. ↑/↓ walk the hits,
+// PageUp/PageDown by a page, Enter opens one (a folder is entered, a file
+// opens in the folder it lives in), Ctrl+Enter shows it there instead — the
+// tab navigates to the folder with the hit selected — the 位置 button on a
+// row does the same with the mouse, and Escape or a click elsewhere hides
+// the panel. A headless test has no app run, so the same body is drawn as
+// a dialog inside the window under test instead.
 
 const (
 	// searchBoxWidth is the palette's width. It is a fixed request, as the
@@ -91,20 +95,217 @@ type searchBoxState struct {
 	seen map[string]bool
 }
 
+// searchPanel is the process's one launcher panel. searchPanelApp is the
+// window whose folder the 本文件夹 scope means, and whose tabs a hit opens
+// in. searchHotkey is whether Ctrl+K is bound for the whole desktop; the
+// window's own shortcut stays for a run where that bind failed, and for
+// headless tests, which never register it.
+var (
+	searchPanel    *mygo.Window
+	searchPanelApp *App
+	searchHotkey   bool
+)
+
+// searchPanelSize is the panel's fixed size, in DIPs: wide enough for the
+// name, folder, size and date, short of a file-manager window.
+const (
+	searchPanelW = 760
+	searchPanelH = 480
+)
+
+// toggleSearchBox is Ctrl+K from anywhere: a second press hides the panel,
+// the same way a launcher does. Two deliveries of one key — the global
+// bind and the focused window — share this call, so a re-entry does not
+// open and immediately close it.
+func toggleSearchBox() {
+	if searchPanelApp != nil && searchPanelApp.searchBox.open {
+		searchPanelApp.searchBoxClose()
+		return
+	}
+	searchHostApp().openSearchBox()
+}
+
+// searchHostApp is who a global Ctrl+K searches from: the focused file
+// window, else a live one left in the tray, else a new one. It does not
+// surface a hidden window — the panel is the thing being summoned.
+func searchHostApp() *App {
+	if mygo.App.IsReady() {
+		for _, w := range mygo.Windows() {
+			if w == searchPanel || !w.IsFocused() {
+				continue
+			}
+			if a := appByWindow(w); a != nil {
+				return a
+			}
+		}
+	}
+	appsMu.Lock()
+	var app *App
+	for _, a := range apps {
+		if a.win != nil && !a.win.IsDestroyed() {
+			app = a
+			break
+		}
+	}
+	appsMu.Unlock()
+	if app != nil {
+		return app
+	}
+	// No file window left: make one to own the search and to open a hit
+	// into, and leave it in the tray until a hit is actually chosen.
+	app = trayMainApp()
+	if app.win != nil {
+		app.win.Hide()
+	}
+	return app
+}
+
+func appByWindow(w *mygo.Window) *App {
+	appsMu.Lock()
+	defer appsMu.Unlock()
+	for _, a := range apps {
+		if a.win == w {
+			return a
+		}
+	}
+	return nil
+}
+
+// registerSearchHotkey binds Ctrl+K / Cmd+K for the whole desktop. A
+// failure leaves the window shortcut in place.
+func registerSearchHotkey() {
+	if err := mygo.GlobalShortcut.Register("CmdOrCtrl+K", toggleSearchBox); err != nil {
+		log.Printf("全局搜索快捷键：%v", err)
+		return
+	}
+	searchHotkey = true
+}
+
 // openSearchBox raises the palette, at 全部磁盘 with an empty query: the box is
-// the machine-wide search, and 本文件夹 is the switch to narrow it.
+// the machine-wide search, and 本文件夹 is the switch to narrow it. With an
+// app running it is the frosted panel; a headless test only marks it open
+// and the window under test draws the body.
 func (a *App) openSearchBox() {
 	b := &a.searchBox
+	if b.open && searchPanelApp == a {
+		a.focusSearchPanel()
+		return
+	}
+	searchPanelApp = a
 	a.searchBoxCancel()
 	b.scope = scopeGlobal
 	b.list = ui.ListState{}
 	b.open = true
+	if !mygo.App.IsReady() {
+		return
+	}
+	a.ensureSearchPanel()
+	a.placeSearchPanel()
+	searchPanel.Show()
+	searchPanel.Focus()
 }
 
 // searchBoxClose takes the palette down; the next Ctrl+K starts clean.
 func (a *App) searchBoxClose() {
 	a.searchBox.open = false
 	a.searchBoxCancel()
+	if searchPanelApp == a && searchPanel != nil && searchPanel.IsVisible() {
+		searchPanel.Hide()
+	}
+}
+
+// showExplorer brings the file window forward for a hit the user chose.
+// Summoning the panel itself does not: it floats over whatever they were
+// doing.
+func (a *App) showExplorer() {
+	if a.win == nil {
+		return
+	}
+	if a.win.IsMinimized() {
+		a.win.Restore()
+	}
+	a.win.Show()
+	a.win.Focus()
+}
+
+func (a *App) focusSearchPanel() {
+	if searchPanel == nil {
+		return
+	}
+	searchPanel.Show()
+	searchPanel.Focus()
+}
+
+// ensureSearchPanel builds the launcher window the first time it is
+// summoned. It is a panel: above other apps, off the Dock and the taskbar,
+// and on the Space the user is on. VibrancyAcrylic is the frosted glass —
+// what is behind the panel, blurred — and where a desktop has no material
+// the view paints the window color instead.
+func (a *App) ensureSearchPanel() {
+	if searchPanel != nil {
+		return
+	}
+	win := mygo.NewWindow(mygo.WindowOptions{
+		Title:         "快速搜索",
+		Panel:         true,
+		Hidden:        true,
+		Frameless:     true,
+		Transparent:   true,
+		Vibrancy:      mygo.VibrancyAcrylic,
+		Width:         searchPanelW,
+		Height:        searchPanelH,
+		DisableResize: true,
+		Content:       ui.View(searchPanelView),
+	})
+	// Escape, Cmd+W and Alt+F4 hide the panel. A real quit must still be
+	// able to destroy it, or the quit would be cancelled by this.
+	win.OnClose(func(e *mygo.CloseEvent) {
+		if appQuitting {
+			return
+		}
+		e.PreventDefault()
+		if searchPanelApp != nil {
+			searchPanelApp.searchBoxClose()
+		}
+	})
+	win.OnBlur(func() {
+		// Creating the window can blur it before it is ever shown. Only a
+		// panel the user is looking at hides itself by losing focus.
+		if appQuitting || searchPanel == nil || !searchPanel.IsVisible() || searchPanelApp == nil {
+			return
+		}
+		searchPanelApp.searchBoxClose()
+	})
+	searchPanel = win
+}
+
+// placeSearchPanel sits the panel on the display under the pointer, a
+// third of the way down the work area, where a launcher is looked for.
+func (a *App) placeSearchPanel() {
+	d := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint())
+	w, h := searchPanel.Size()
+	if w == 0 || h == 0 {
+		w, h = searchPanelW, searchPanelH
+	}
+	x := d.WorkArea.X + (d.WorkArea.Width-w)/2
+	y := d.WorkArea.Y + (d.WorkArea.Height-h)/3
+	searchPanel.SetPosition(x, y)
+}
+
+// searchPanelView is the panel's page: the same body the dialog draws in
+// a test, on the material where the desktop has one.
+func searchPanelView(c *ui.Context) {
+	a := searchPanelApp
+	if a == nil || !a.searchBox.open {
+		return
+	}
+	c.SetTheme(appTheme(c))
+	a.searchBoxFrame()
+	root := ui.Box(c).Fill().Padding(8, 10)
+	if !c.Vibrancy() {
+		root.Background(colorWindow())
+	}
+	root.Children(func() { a.searchBoxBody(c) })
 }
 
 // searchBoxCancel drops the box's walk and results, however it closed. The
@@ -308,8 +509,9 @@ func (a *App) openSearchHit(e Entry) {
 	if e.Path == "" {
 		return
 	}
+	a.searchBoxClose()
+	a.showExplorer()
 	if e.IsDir {
-		a.searchBoxClose()
 		a.navigate(e.Path)
 		return
 	}
@@ -325,6 +527,7 @@ func (a *App) revealSearchHit(e Entry) {
 	}
 	dir := e.Dir
 	a.searchBoxClose()
+	a.showExplorer()
 	if dir != "" {
 		a.navigate(dir)
 	}
@@ -333,9 +536,14 @@ func (a *App) revealSearchHit(e Entry) {
 }
 
 // searchBoxModal draws the palette while it is open, from view with the
-// window's other overlays. A close from outside the body — a click on the
+// window's other overlays. The running app draws it in the panel instead,
+// so this is the headless path: a test lays the same body out inside the
+// window it drives. A close from outside the body — a click on the
 // backdrop, DialogBase's own Escape — cancels the walk here.
 func (a *App) searchBoxModal(c *ui.Context) {
+	if searchPanel != nil {
+		return
+	}
 	b := &a.searchBox
 	if !b.open {
 		return
@@ -353,9 +561,9 @@ func (a *App) searchBoxModal(c *ui.Context) {
 func (a *App) searchBoxBody(c *ui.Context) {
 	b := &a.searchBox
 	_, h := c.Size()
-	listH := min(searchBoxListMax, max(searchBoxListMin, h-260))
-	ui.Column(c).Gap(0).Width(searchBoxWidth).MinWidth(420).Children(func() {
-		row := ui.Row(c).FillWidth().Height(36).Gap(8).AlignItems(ui.Center)
+	listH := min(searchBoxListMax, max(searchBoxListMin, h-140))
+	ui.Column(c).Gap(0).FillWidth().MinWidth(420).Children(func() {
+		row := ui.Row(c).FillWidth().Height(44).Gap(8).AlignItems(ui.Center)
 		row.Children(func() {
 			components.Icon(c, lucide.Search).Size(16, 16).TextColor(colorMuted())
 			in := ui.TextInputBase(c, &b.query).Grow(1).MinWidth(0).Height(28).FontSize(13).

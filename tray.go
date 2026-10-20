@@ -111,7 +111,7 @@ func trayMenuItems(rep diskhealth.Report, s appSettings) []*mygo.MenuItem {
 			// The palette Ctrl+K opens (searchbox.go), at its 全部磁盘
 			// scope: a window is brought up to carry it when none lives.
 			Label: "快速搜索…",
-			Click: func(*mygo.MenuItem, *mygo.Window) { trayMainApp().openSearchBox() },
+			Click: func(*mygo.MenuItem, *mygo.Window) { searchHostApp().openSearchBox() },
 		},
 		{
 			Label: "显示晴谷",

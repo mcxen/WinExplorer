@@ -120,6 +120,9 @@ func main() {
 		if _, err := setupTray(); err != nil {
 			log.Printf("托盘初始化失败：%v", err)
 		}
+		// Ctrl+K summons the search panel from any app, not only from a
+		// focused file window. A bind that fails leaves the window shortcut.
+		registerSearchHotkey()
 	})
 	// remoteStop waits for the requests in flight, so it runs once the
 	// windows are gone and the event loop is about to stop, not per window.
@@ -409,7 +412,12 @@ func (a *App) handleKeys(c *ui.Context) {
 		c.Shortcut(ui.Ctrl, ui.KeyF), c.Shortcut(ui.Cmd, ui.KeyF), c.Shortcut(0, ui.KeyF3):
 		a.focusSearch = true
 	case c.Shortcut(ui.Ctrl, ui.KeyK), c.Shortcut(ui.Cmd, ui.KeyK):
-		a.openSearchBox()
+		// The global bind already toggles the panel, and it is delivered
+		// even while this window is focused. Handling it here as well would
+		// open and close on the one key.
+		if !searchHotkey {
+			a.openSearchBox()
+		}
 	case c.Shortcut(0, ui.KeyEscape):
 		// The inline rename's editor (components.Text) owns only its caret and
 		// lets Escape through to the shortcuts, so the window cancels the edit

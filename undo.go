@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+
+	"sunvale/internal/fsops"
 )
 
 // undo.go is the Ctrl+Z stack, Explorer's 撤销: every operation records
@@ -11,19 +13,12 @@ import (
 // and files moved (paste-cut, drag move, rename, delete to trash,
 // restore).
 
-type undoMove struct {
-	From, To string
-}
-
-type undoOp struct {
-	desc    string
-	created []string   // undo removes these
-	moved   []undoMove // undo moves each back From←To
-}
+type undoMove = fsops.Move
+type undoOp = fsops.Undo
 
 // pushUndo records an operation, newest last, capped at maxUndoKeep.
 func (a *App) pushUndo(op undoOp) {
-	if len(op.created) == 0 && len(op.moved) == 0 {
+	if len(op.Created) == 0 && len(op.Moved) == 0 {
 		return
 	}
 	a.undoSeq++
@@ -48,8 +43,8 @@ func (a *App) doUndo() {
 
 	var failed []string
 	// Moves go back first, newest operation's moves in reverse order.
-	for i := len(op.moved) - 1; i >= 0; i-- {
-		m := op.moved[i]
+	for i := len(op.Moved) - 1; i >= 0; i-- {
+		m := op.Moved[i]
 		if _, err := os.Lstat(m.To); err != nil {
 			failed = append(failed, filepath.Base(m.From))
 			continue
@@ -67,7 +62,7 @@ func (a *App) doUndo() {
 		}
 	}
 	// Then created files are removed.
-	for _, p := range op.created {
+	for _, p := range op.Created {
 		if err := os.RemoveAll(p); err != nil {
 			failed = append(failed, filepath.Base(p))
 		}
@@ -78,7 +73,7 @@ func (a *App) doUndo() {
 	if len(failed) > 0 {
 		a.statusMsg = "部分项目已撤销；无法撤销：" + joinComma(failed)
 	} else {
-		a.statusMsg = "已撤销：" + op.desc
+		a.statusMsg = "已撤销：" + op.Desc
 	}
 }
 

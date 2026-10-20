@@ -186,7 +186,7 @@ func (a *App) doPaste() {
 		if n > 1 {
 			desc = fmt.Sprintf("%s %d 个项目", desc, n)
 		}
-		a.pushUndo(undoOp{desc: desc, created: undoCreated, moved: undoMoved})
+		a.pushUndo(undoOp{Desc: desc, Created: undoCreated, Moved: undoMoved})
 	}
 	a.reload()
 	if len(pasted) > 0 {
@@ -231,7 +231,7 @@ func (a *App) doDelete() {
 		if n > 1 {
 			desc = fmt.Sprintf("删除 %d 个项目", n)
 		}
-		a.pushUndo(undoOp{desc: desc, moved: moved})
+		a.pushUndo(undoOp{Desc: desc, Moved: moved})
 	}
 	a.reload()
 	a.clearSelection()
@@ -298,7 +298,7 @@ func (a *App) commitRenameIn(t *tabState) error {
 		}
 		return fmt.Errorf("重命名失败：%w", err)
 	}
-	a.pushUndo(undoOp{desc: "重命名", moved: []undoMove{{From: oldPath, To: newPath}}})
+	a.pushUndo(undoOp{Desc: "重命名", Moved: []undoMove{{From: oldPath, To: newPath}}})
 	if t == a.cur() {
 		a.reload()
 		a.selectOnly(newPath)
@@ -337,7 +337,7 @@ func (a *App) doNewFolder() {
 		a.statusMsg = "新建文件夹失败：" + err.Error()
 		return
 	}
-	a.pushUndo(undoOp{desc: "新建文件夹", created: []string{dir}})
+	a.pushUndo(undoOp{Desc: "新建文件夹", Created: []string{dir}})
 	a.reload()
 	a.selectOnly(dir)
 	a.cur().reveal = dir
@@ -413,7 +413,7 @@ func (a *App) doNewTextFile() {
 		a.statusMsg = "新建文件失败：" + err.Error()
 		return
 	}
-	a.pushUndo(undoOp{desc: "新建文本文档", created: []string{path}})
+	a.pushUndo(undoOp{Desc: "新建文本文档", Created: []string{path}})
 	a.reload()
 	a.selectOnly(path)
 	a.cur().reveal = path

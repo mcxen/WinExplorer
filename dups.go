@@ -419,7 +419,7 @@ func (a *App) dupsTrash(victims []Entry) (int, []string) {
 		}
 	}
 	if len(moved) > 0 {
-		a.pushUndo(undoOp{desc: "删除多余项", moved: moved})
+		a.pushUndo(undoOp{Desc: "删除多余项", Moved: moved})
 	}
 	return len(moved), failed
 }

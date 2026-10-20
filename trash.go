@@ -87,8 +87,8 @@ func (a *App) doRestore() {
 		}
 		a.store.forgetTrash(sysTrashKey(e.Path))
 		a.pushUndo(undoOp{
-			desc:  "还原 " + filepath.Base(original),
-			moved: []undoMove{{From: e.Path, To: dst}},
+			Desc:  "还原 " + filepath.Base(original),
+			Moved: []undoMove{{From: e.Path, To: dst}},
 		})
 		restored = append(restored, dst)
 	}

@@ -148,7 +148,7 @@ func TestInlineRenameCommitsWhenTabLeaves(t *testing.T) {
 		if _, err := os.Stat(newPath); err != nil {
 			t.Fatalf("the switched-away rename did not land: %v", err)
 		}
-		if len(a.undo) != undoBefore+1 || len(a.undo[len(a.undo)-1].moved) != 1 {
+		if len(a.undo) != undoBefore+1 || len(a.undo[len(a.undo)-1].Moved) != 1 {
 			t.Fatalf("undo = %+v, want one rename move", a.undo)
 		}
 		if a.tabs[0].renaming != "" || a.tabs[0].renameBuf != "" {

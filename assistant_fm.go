@@ -92,7 +92,7 @@ func (s *sunvaleTools) mkdir(_ context.Context, _ *mcp.CallToolRequest, args nam
 	if err := os.Mkdir(path, 0o755); err != nil {
 		return mcpErr(err), nil, nil
 	}
-	s.noteUndo(undoOp{desc: "新建文件夹", created: []string{path}})
+	s.noteUndo(undoOp{Desc: "新建文件夹", Created: []string{path}})
 	return mcpText("已新建文件夹 " + path), nil, nil
 }
 
@@ -116,7 +116,7 @@ func (s *sunvaleTools) newTextFile(_ context.Context, _ *mcp.CallToolRequest, ar
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		return mcpErr(err), nil, nil
 	}
-	s.noteUndo(undoOp{desc: "新建文本文档", created: []string{path}})
+	s.noteUndo(undoOp{Desc: "新建文本文档", Created: []string{path}})
 	return mcpText("已新建 " + path), nil, nil
 }
 
@@ -186,7 +186,7 @@ func (s *sunvaleTools) transfer(args transferArgs, move bool) (*mcp.CallToolResu
 	if move {
 		desc = "移动"
 	}
-	s.noteUndo(undoOp{desc: desc, created: created, moved: moved})
+	s.noteUndo(undoOp{Desc: desc, Created: created, Moved: moved})
 	return mcpText(strings.Join(lines, "\n")), nil, nil
 }
 
@@ -217,7 +217,7 @@ func (s *sunvaleTools) trashItems(_ context.Context, _ *mcp.CallToolRequest, arg
 	if len(moved) == 0 {
 		return mcpErr(fmt.Errorf("没有要删除的项目")), nil, nil
 	}
-	s.noteUndo(undoOp{desc: "删除", moved: moved})
+	s.noteUndo(undoOp{Desc: "删除", Moved: moved})
 	return mcpText(strings.Join(lines, "\n")), nil, nil
 }
 
@@ -240,7 +240,7 @@ func (s *sunvaleTools) renameItem(_ context.Context, _ *mcp.CallToolRequest, arg
 		return mcpErr(err), nil, nil
 	}
 	aiFx.markRenamed(src, dst)
-	s.noteUndo(undoOp{desc: "重命名", moved: []undoMove{{From: src, To: dst}}})
+	s.noteUndo(undoOp{Desc: "重命名", Moved: []undoMove{{From: src, To: dst}}})
 	return mcpText("已重命名为 " + dst), nil, nil
 }
 
@@ -311,14 +311,6 @@ func (s *sunvaleTools) resolveDest(p string) (string, error) {
 	return s.resolveEither(p)
 }
 
-func absPath(p string) (string, error) {
-	p = strings.TrimSpace(p)
-	if !filepath.IsAbs(p) {
-		return "", fmt.Errorf("需要绝对路径")
-	}
-	return filepath.Clean(p), nil
-}
-
 func listDirText(dir string, hidden bool) (*mcp.CallToolResult, any, error) {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
@@ -352,38 +344,6 @@ func refuseRootish(path string) error {
 	p := filepath.Clean(path)
 	if p == "" || p == "." || p == "/" || specialPath(p) || filepath.Dir(p) == p {
 		return fmt.Errorf("不能对这个位置做修改")
-	}
-	return nil
-}
-
-func freeName(dir, name string, isDir bool) (string, error) {
-	if _, err := os.Lstat(filepath.Join(dir, name)); os.IsNotExist(err) {
-		return name, nil
-	} else if err != nil {
-		return "", err
-	}
-	return uniqueCopyName(dir, name, isDir)
-}
-
-func placeItem(src, dst string, move bool) error {
-	if move {
-		if err := os.Rename(src, dst); err == nil {
-			return nil
-		}
-	}
-	info, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		if err := copyDir(src, dst); err != nil {
-			return err
-		}
-	} else if err := copyFile(src, dst, info); err != nil {
-		return err
-	}
-	if move {
-		return os.RemoveAll(src)
 	}
 	return nil
 }

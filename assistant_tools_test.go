@@ -80,7 +80,7 @@ func TestAssistantSpecifiedFilesAndChoices(t *testing.T) {
 		t.Fatalf("wrote %q %v", data, err)
 	}
 	undos := sunvaleToolState.drainUndos()
-	if len(undos) != 1 || len(undos[0].created) != 1 {
+	if len(undos) != 1 || len(undos[0].Created) != 1 {
 		t.Fatalf("undo: %+v", undos)
 	}
 	// No path denylist: a credential-looking path is writable like any other.

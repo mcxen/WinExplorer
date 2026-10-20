@@ -316,7 +316,7 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 		if n > 1 {
 			desc = fmt.Sprintf("%s %d 个项目", desc, n)
 		}
-		a.pushUndo(undoOp{desc: desc, created: undoCreated, moved: undoMoved})
+		a.pushUndo(undoOp{Desc: desc, Created: undoCreated, Moved: undoMoved})
 	}
 	a.reload()
 	if moved > 0 {

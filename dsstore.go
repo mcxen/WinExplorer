@@ -184,7 +184,7 @@ func (a *App) dsstoreTrash(files []Entry) (moved int, failed []string) {
 		}
 	}
 	if len(undoes) > 0 {
-		a.pushUndo(undoOp{desc: fmt.Sprintf("清理 .DS_Store（%d 个）", len(undoes)), moved: undoes})
+		a.pushUndo(undoOp{Desc: fmt.Sprintf("清理 .DS_Store（%d 个）", len(undoes)), Moved: undoes})
 	}
 	a.reload()
 	switch {

@@ -361,7 +361,7 @@ func (s *sunvaleTools) writeText(_ context.Context, _ *mcp.CallToolRequest, args
 		return mcpErr(err), nil, nil
 	}
 	if !existed {
-		s.noteUndo(undoOp{desc: "新建文本", created: []string{path}})
+		s.noteUndo(undoOp{Desc: "新建文本", Created: []string{path}})
 		return mcpText("已新建 " + path), nil, nil
 	}
 	return mcpText("已覆盖 " + path + "。撤销不会恢复原文。"), nil, nil

@@ -797,9 +797,9 @@ func (a *App) assistantApplyPlan(id string) {
 	}
 	a.assist.applied[id] = true
 	if len(moved) > 0 {
-		op := undoOp{desc: "重命名"}
+		op := undoOp{Desc: "重命名"}
 		for _, m := range moved {
-			op.moved = append(op.moved, undoMove{From: m.From, To: m.To})
+			op.Moved = append(op.Moved, undoMove{From: m.From, To: m.To})
 		}
 		a.pushUndo(op)
 	}

@@ -436,6 +436,7 @@ func newSunvaleServer() *mcp.Server {
 	addSunvaleTool(s, server, &mcp.Tool{Name: "remember", Description: "记住一句用户明确要求留下的事实，供以后的会话使用。不要记密码、密钥或文件内容。"}, s.remember)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "forget", Description: "按原文忘掉一条记忆。有多条相似时先让用户说完整的一句。"}, s.forget)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "memory_list", Description: "列出已经记住的短事实。"}, s.memoryList)
+	registerScheduleTools(s, server)
 	return server
 }
 

@@ -418,5 +418,6 @@ func sunvaleBuiltinToolNames() []string {
 		"search_names", "grep_text", "write_text", "folder_summary", "disk_space",
 		"current_selection", "navigate_to", "offer_choices",
 		"remember", "forget", "memory_list",
+		"schedule_list", "schedule_create", "schedule_update", "schedule_delete", "schedule_run",
 	}
 }

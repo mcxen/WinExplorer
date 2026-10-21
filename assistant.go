@@ -120,6 +120,11 @@ type assistantUI struct {
 	widthDragging    bool
 	files            []aiAttach
 	picking          bool
+
+	// slashIdx is the highlighted row in the “/” popup; slashHide keeps
+	// the menu closed after Esc until the draft is no longer a slash query.
+	slashIdx  int
+	slashHide bool
 }
 
 func (a *App) toggleAssistant() { a.assistantOpen = !a.assistantOpen }
@@ -173,42 +178,57 @@ func (a *App) assistantComposer(c *ui.Context) {
 	if len(a.assist.files) > 0 {
 		attachments = func(c *ui.Context) { a.assistantAttachments(c) }
 	}
-	comp := chat.GlassComposer(c, &a.assist.floatLay, &a.assist.draft, chat.ComposerOptions{
-		Label:       "给助手的消息",
-		Placeholder: "让助手整理这个文件夹…",
-		SendLabel:   "发送",
-		StopLabel:   "停止",
-		Running:     a.assist.running,
-		AcceptFiles: true,
-		Attachments: attachments,
-		Accessory: func(c *ui.Context) {
-			a.assistantModelPicker(c)
-			chat.SwitchChip(c, &a.assist.autopilot, "全托管")
-			if chat.IconAction(c, "指定文件", lucide.Paperclip).Clicked() {
-				a.assistantPickFiles()
-			}
-			if chat.IconAction(c, "带上选中", lucide.ListChecks).Clicked() {
-				a.assistantAttachSelection()
-			}
-		},
-		OnPaste: func(text string) bool {
-			a.attachPastedPaths(text)
-			return false
-		},
+	slashOpen := a.assistSlashOpen()
+	slashItems := a.assistSlashItems()
+	if slashOpen {
+		a.assistSlashClamp(len(slashItems))
+	}
+	ui.Column(c).FillWidth().MinWidth(0).Shrink(0).Gap(6).Children(func() {
+		if slashOpen {
+			a.assistantSlashMenu(c, slashItems)
+		}
+		comp := chat.GlassComposer(c, &a.assist.floatLay, &a.assist.draft, chat.ComposerOptions{
+			Label:        "给助手的消息",
+			Placeholder:  "让助手整理这个文件夹…",
+			SendLabel:    "发送",
+			StopLabel:    "停止",
+			Running:      a.assist.running,
+			AcceptFiles:  true,
+			SendDisabled: slashOpen,
+			Attachments:  attachments,
+			Trailing:     a.assistantComposerTrailing,
+			Accessory: func(c *ui.Context) {
+				a.assistantModelPicker(c)
+				chat.SwitchChip(c, &a.assist.autopilot, "全托管")
+				if chat.IconAction(c, "指定文件", lucide.Paperclip).Clicked() {
+					a.assistantPickFiles()
+				}
+				if chat.IconAction(c, "带上选中", lucide.ListChecks).Clicked() {
+					a.assistantAttachSelection()
+				}
+			},
+			OnPaste: func(text string) bool {
+				a.attachPastedPaths(text)
+				return false
+			},
+		})
+		comp.Root.FillWidth().Shrink(0)
+		if slashOpen {
+			a.assistantSlashKeys(comp.Input, slashItems)
+		}
+		// FileDrop on the card itself. Native and in-window drops land on the
+		// conversation column (bindAssistDrop), so this is not a second copy.
+		if len(comp.Dropped) > 0 {
+			a.attachDroppedPaths(comp.Dropped)
+		}
+		if comp.Stop && a.assist.stop != nil {
+			a.assist.stop()
+			a.assist.status = "正在停止…"
+		}
+		if comp.Send && !a.assist.running {
+			a.assistantSubmit()
+		}
 	})
-	comp.Root.FillWidth().Shrink(0)
-	// FileDrop on the card itself. Native and in-window drops land on the
-	// conversation column (bindAssistDrop), so this is not a second copy.
-	if len(comp.Dropped) > 0 {
-		a.attachDroppedPaths(comp.Dropped)
-	}
-	if comp.Stop && a.assist.stop != nil {
-		a.assist.stop()
-		a.assist.status = "正在停止…"
-	}
-	if comp.Send && !a.assist.running {
-		a.assistantSubmit()
-	}
 }
 
 func (a *App) assistantAttachments(c *ui.Context) {

@@ -36,3 +36,7 @@
 9. **界面文字一律简体中文**，不使用 emoji；颜色只用 `theme.go` 的 `colorXxx()` 函数，不写死色值。
 10. 注释用英文，解释“为什么”；新文件顶部写一段分工说明。
 11. 不新增第三方依赖，除非规格明确要求。
+
+## A5 助手斜杠命令（已完成）
+
+见 `TASK.md` A5 与 `docs/UI.md` 键盘节；实现 `assistant_slash.go`。截图 `docs/assets/shots/A5/`。

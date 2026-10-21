@@ -63,6 +63,7 @@
 | A1 | 提示词与工具同步检查 + 真实模型回归 | 中 | 已完成 | [05 A、C6](docs/specs/05-assistant-followups.md) | — | `feat/assistant-eval` |
 | A2 | OpenUI/Markdown 遗留修复 | 中 | 已完成 | 05 C1–C5 | — | `fix/assistant-render` |
 | A3 | 回复中的目录树组件 | 低 | 已完成 | 05 B | A2 | `feat/assistant-tree` |
+| A4 | 助手配置迁入系统设置 | 高 | 已完成 | [06](docs/specs/06-assistant-settings.md) | A1–A3、R6 | `feat/assistant-settings` |
 | R2 | Entry 移出 state.go | 中 | 已完成 | 03 §1 | — | `refactor/entry` |
 | R3 | fsops 剩余：freeName/placeItem/absPath/undo 类型 | 中 | 已完成 | 03 §2 | — | `refactor/fsops-rest` |
 | R4 | 拆分 diskhealth.go | 低 | 已完成 | 03 §5 | F1 | `refactor/diskhealth-split` |

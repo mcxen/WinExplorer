@@ -432,6 +432,7 @@ func newSunvaleServer() *mcp.Server {
 	addSunvaleTool(s, server, &mcp.Tool{Name: "disk_space", Description: "查看路径所在磁盘还剩多少空间。"}, s.diskSpace)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "current_selection", Description: "这次发送时用户选中的路径，不含之后新点的项目。"}, s.currentSelection)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "navigate_to", Description: "本轮结束后让窗口打开一个文件夹，本轮里的工具仍用原来的文件夹。"}, s.navigateTo)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "present_form", Description: "向用户出示可填写的规范表单（时间、路径、开关、分段等）。缺路径/时间时先调用；调用后停止本轮等用户提交。preset=schedule 可直接给出定时任务表单。"}, s.presentForm)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "offer_choices", Description: "把可多选的做法交给用户。用户要求选择或比较方案时必须调用；调用后停止本轮，等用户勾选。"}, s.offerChoices)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "remember", Description: "记住一句用户明确要求留下的事实，供以后的会话使用。不要记密码、密钥或文件内容。"}, s.remember)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "forget", Description: "按原文忘掉一条记忆。有多条相似时先让用户说完整的一句。"}, s.forget)

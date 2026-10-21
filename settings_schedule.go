@@ -11,12 +11,13 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 
+	"sunvale/internal/forms"
 	"sunvale/internal/schedule"
 )
 
 // settings_schedule.go is the 定时任务 category: list of jobs, enable
-// switches, next/last run,「立即运行」, and a create/edit form. Persistence
-// is schedules.json via ensureScheduleStore.
+// switches, next/last run,「立即运行」, and a schema-driven create/edit form
+// (internal/forms.ScheduleAdd) painted with the shared form controls.
 
 type settingsScheduleForm struct {
 	editID string
@@ -209,7 +210,7 @@ func containsWeekday(days []int, d int) bool {
 	return false
 }
 
-func (a *App) settingsScheduleFormGroup() components.SettingsGroup {
+func (a *App) settingsScheduleDefaults() {
 	f := &a.settingsSchedule
 	if f.time == "" {
 		f.time = "19:00"
@@ -239,67 +240,45 @@ func (a *App) settingsScheduleFormGroup() components.SettingsGroup {
 			f.dest = filepath.Join(home, "Documents")
 		}
 	}
+}
+
+func (a *App) settingsScheduleFormGroup() components.SettingsGroup {
+	a.settingsScheduleDefaults()
+	f := &a.settingsSchedule
 	title := "添加任务"
 	if f.editID != "" {
 		title = "编辑任务"
 	}
+	schema := forms.ScheduleAdd(a.settingsSchedulePrefill())
+	vis := forms.VisibleForAction(f.action)
 	return components.SettingsGroup{
 		ID: "sched-form", Title: title,
 		Items: []components.SettingsItem{{
 			ID: "sched-form-body", Title: "任务内容",
-			Description: "时间按本机时区。文件规则只处理源目录下的直接子项（不递归）。",
-			Keywords:    []string{"定时", "备份", "脚本", "助手", "cron"},
+			Description: schema.Description,
+			Keywords:    []string{"定时", "备份", "脚本", "助手", "cron", "表单"},
 			Stacked:     true,
 			Build: func(c *ui.Context) {
-				a.settingsScheduleField(c, "名称", &f.name, "每晚整理下载文档")
-				a.settingsScheduleField(c, "时间", &f.time, "19:00")
-				ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "重复").FontSize(11).TextColor(colorMuted()).Width(36).Shrink(0)
-					cur := f.days
-					sel := ui.Select(c, &cur, []string{"每天", "工作日", "周末"}).Shrink(0)
-					if sel.Changed() {
-						f.days = cur
+				ptrs := a.settingsSchedulePtrs()
+				for i, field := range schema.Fields {
+					if !vis[field.ID] {
+						continue
 					}
-				})
-				ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, "动作").FontSize(11).TextColor(colorMuted()).Width(36).Shrink(0)
-					cur := f.action
-					sel := ui.Select(c, &cur, []string{"文件规则", "运行脚本", "助手执行"}).Shrink(0)
-					if sel.Changed() {
-						f.action = cur
+					ptr := ptrs[field.ID]
+					if ptr == nil {
+						continue
 					}
-				})
-				switch f.action {
-				case "运行脚本":
-					a.settingsScheduleField(c, "脚本", &f.scriptPath, "留空则用下方内联脚本")
-					components.TextBox(c, &f.inline, components.TextBoxOptions{Multiline: true}).
-						FillWidth().MinHeight(72).FontSize(12).Lines(1, 5).
-						Placeholder("内联 Python / Shell，保存到 sunvale/scripts/").Label("内联脚本")
-					a.settingsScheduleField(c, "超时", &f.timeout, "秒")
-				case "助手执行":
-					components.TextBox(c, &f.prompt, components.TextBoxOptions{Multiline: true}).
-						FillWidth().MinHeight(64).FontSize(12).Lines(1, 4).
-						Placeholder("例如：整理下载文件夹里的截图到图片/截图").Label("提示词")
-					a.settingsScheduleField(c, "目录", &f.folder, "助手工作目录，可空")
-					a.settingsScheduleField(c, "超时", &f.timeout, "秒")
-				default:
-					a.settingsScheduleField(c, "源目录", &f.source, "~/Downloads")
-					a.settingsScheduleField(c, "目标", &f.dest, "~/Documents")
-					a.settingsScheduleField(c, "匹配", &f.match, ".pdf,.docx 或 *.md")
-					ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "操作").FontSize(11).TextColor(colorMuted()).Width(36).Shrink(0)
-						cur := f.op
-						sel := ui.Select(c, &cur, []string{"移动", "复制"}).Shrink(0)
-						if sel.Changed() {
-							f.op = cur
-						}
-						ds := f.dateStamp
-						sw := ui.Switch(c, &ds).Shrink(0).Label("按日期建子文件夹")
-						if sw.Changed() {
-							f.dateStamp = ds
-						}
+					label := field.Label
+					if field.Required {
+						label += " *"
+					}
+					a.paintFormField(c.Key(i), field.Kind, label, ptr, formFieldOpts{
+						PathMode: field.PathMode,
+						Options:  field.Options,
+						Hint:     field.Placeholder,
 					})
 				}
+				a.settingsScheduleSyncDateStamp()
 				ui.Row(c).FillWidth().Gap(6).Children(func() {
 					label := "保存"
 					if f.editID == "" {
@@ -324,29 +303,62 @@ func (a *App) settingsScheduleFormGroup() components.SettingsGroup {
 	}
 }
 
-func (a *App) settingsScheduleField(c *ui.Context, label string, value *string, hint string) {
-	ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, label).FontSize(11).TextColor(colorMuted()).Width(36).Shrink(0)
-		components.TextBox(c, value, components.TextBoxOptions{}).Grow(1).MinWidth(0).
-			Height(28).FontSize(12).Placeholder(hint)
-	})
+func (a *App) settingsSchedulePrefill() map[string]string {
+	f := a.settingsSchedule
+	return map[string]string{
+		"edit_id": f.editID, "name": f.name, "time": f.time, "days": f.days,
+		"action": f.action, "source": f.source, "dest": f.dest, "match": f.match,
+		"op": f.op, "date_stamp": boolString(f.dateStamp),
+		"script_path": f.scriptPath, "inline": f.inline,
+		"prompt": f.prompt, "folder": f.folder, "timeout": f.timeout,
+	}
+}
+
+func (a *App) settingsSchedulePtrs() map[string]*string {
+	f := &a.settingsSchedule
+	dateStamp := boolString(f.dateStamp)
+	// date_stamp is mirrored through a side string each frame; Switch writes
+	// back into dateStamp via a dedicated binder below.
+	_ = dateStamp
+	return map[string]*string{
+		"name": &f.name, "time": &f.time, "days": &f.days, "action": &f.action,
+		"source": &f.source, "dest": &f.dest, "match": &f.match, "op": &f.op,
+		"script_path": &f.scriptPath, "inline": &f.inline,
+		"prompt": &f.prompt, "folder": &f.folder, "timeout": &f.timeout,
+		"date_stamp": a.settingsScheduleDateStampPtr(),
+	}
+}
+
+// settingsScheduleDateStampPtr keeps the switch on a string the shared
+// painter understands while the form struct stores a bool.
+func (a *App) settingsScheduleDateStampPtr() *string {
+	f := &a.settingsSchedule
+	if a.settingsScheduleDateStampStr == nil {
+		a.settingsScheduleDateStampStr = new(string)
+	}
+	*a.settingsScheduleDateStampStr = boolString(f.dateStamp)
+	// The painter mutates the string; sync back after paint would be too late.
+	// Instead wrap: we sync on next frame from the string before painting, and
+	// after Switch.Changed the string is updated — read it back at end of Build.
+	return a.settingsScheduleDateStampStr
+}
+
+func (a *App) settingsScheduleSyncDateStamp() {
+	if a.settingsScheduleDateStampStr != nil {
+		a.settingsSchedule.dateStamp = parseBoolString(*a.settingsScheduleDateStampStr)
+	}
 }
 
 func (a *App) settingsScheduleFillExample() {
-	home, _ := os.UserHomeDir()
+	ex := forms.ScheduleExampleFill()
 	a.settingsSchedule = settingsScheduleForm{
-		name:   "每晚整理下载文档",
-		time:   "19:00",
-		days:   "每天",
-		action: "文件规则",
-		source: filepath.Join(home, "Downloads"),
-		dest:   filepath.Join(home, "Documents", "来自下载"),
-		match:  ".pdf,.docx,.doc,.xlsx,.pptx,.txt,.md",
-		op:     "移动",
+		name: ex["name"], time: ex["time"], days: ex["days"], action: ex["action"],
+		source: ex["source"], dest: ex["dest"], match: ex["match"], op: ex["op"],
 	}
 }
 
 func (a *App) settingsScheduleSave() {
+	a.settingsScheduleSyncDateStamp()
 	f := a.settingsSchedule
 	name := strings.TrimSpace(f.name)
 	if name == "" {

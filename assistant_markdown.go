@@ -100,6 +100,13 @@ func (a *App) assistMarkdownOptions(md *assistMD) *markdown.Options {
 			src := strings.TrimSpace(b.Code())
 			a.paintOpenBlock(c.Key("oui-"+openBlockKey(src)), src, a.openTurnFor(md.turns, src))
 		},
+		"form": func(c *ui.Context, b *markdown.CodeBlockView) {
+			if b.Open {
+				assistOpenPlaceholder(c)
+				return
+			}
+			a.paintFormFence(c, strings.TrimSpace(b.Code()), md.turns)
+		},
 	}
 	return o
 }

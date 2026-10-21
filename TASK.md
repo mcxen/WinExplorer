@@ -73,6 +73,7 @@
 | R6 | internal/assistant（6a–6d） | 低 | 已完成 | 03 §6 | R3、A1–A3 | `refactor/internal-assistant` |
 | SCH1 | 定时任务：每日钟点 + 文件规则/脚本/助手 + 设置页 + MCP | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | A4 | `feat/scheduled-tasks` |
 | FORM1 | 规范表单组件：共享 schema + OpenUI 扩展 + present_form + 定时任务表单 v2 | 高 | 已完成 | [08](docs/specs/08-forms.md) | SCH1、A5 | `feat/form-components` |
+| SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
@@ -238,4 +239,9 @@
 - **目标**：设置 → 定时任务；进程内分钟调度；文件规则/脚本/助手三种动作；助手可通过 MCP 创建任务。
 - **范围**：见 `docs/specs/07-scheduled-tasks.md`。持久化 `sunvale/schedules.json`。
 - **验收**：`go test ./internal/schedule ./...`；`TestPromptListsAllTools` 含 schedule_*；手动或 MCP 可建「每晚 19:00 移动下载文档」。
+
+### SCH2 AI 任务立刻跑
+- **目标**：助手预设（分类下载 / 收件箱整理 / 按内容重命名）；`assistant_task_run` 一次性全托管；`schedule_run` 与提示词引导「现在跑」；斜杠 `/分类` `/立即执行`。
+- **范围**：见 `docs/specs/07-scheduled-tasks.md` SCH2。按内容分类仅走助手预设，不扩展 `file_rule`。
+- **验收**：预设单测；`TestPromptListsAllTools` 含 `assistant_task_run`；斜杠测试；截图 `docs/assets/shots/SCH2/`。
 

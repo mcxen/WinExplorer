@@ -68,6 +68,18 @@ func (a *App) assistSlashCatalog() []assistSlashItem {
 			Kind: slashFill, Fill: "按拍摄日期重命名照片",
 		},
 		{
+			ID: "classify", Trigger: "/分类", Label: "分类", Detail: "填入按内容分类下载的提示",
+			Kind: slashFill, Fill: assistSlashClassifyFill(),
+		},
+		{
+			ID: "run-now", Trigger: "/立即执行", Label: "立即执行", Detail: "运行最近的定时任务，或打开定时任务页",
+			Kind: slashAction,
+			Run: func(app *App) {
+				app.assist.draft = ""
+				app.assistSlashRunLastSchedule()
+			},
+		},
+		{
 			ID: "clear", Trigger: "/清空会话", Label: "清空会话", Detail: "结束当前对话并开新会话",
 			Kind: slashAction,
 			Run: func(app *App) {
@@ -270,4 +282,28 @@ func (a *App) assistantComposerTrailing(c *ui.Context) {
 		a.assist.stop()
 		a.assist.status = "正在停止…"
 	}
+}
+
+func assistSlashClassifyFill() string {
+	return "现在把下载文件夹按内容分类到文档、图片、安装包、其他（用助手任务，不要只按扩展名移动）"
+}
+
+// assistSlashRunLastSchedule runs the most recently run job, else the first
+// job in the store; with no jobs it opens Settings → 定时任务.
+func (a *App) assistSlashRunLastSchedule() {
+	st := ensureScheduleStore()
+	jobs := st.Jobs()
+	if len(jobs) == 0 {
+		a.openScheduleSettings()
+		a.statusMsg = "暂无定时任务，已打开设置"
+		return
+	}
+	best := jobs[0]
+	for _, j := range jobs[1:] {
+		if j.LastRunAt.After(best.LastRunAt) {
+			best = j
+		}
+	}
+	runScheduledJobNow(best.ID)
+	a.statusMsg = "已开始运行：" + best.Name
 }

@@ -33,29 +33,91 @@ header a:hover{background:var(--hover)}
 .tbtn{width:32px;height:32px;padding:0;justify-content:center;background:none;border-color:transparent;color:var(--muted);flex:none}
 .tbtn:hover{background:var(--hover);color:var(--text)}
 .tbtn .ic{width:16px;height:16px}
-.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 18px 0;max-width:940px;margin:0 auto;width:100%}
-#breadcrumb{display:flex;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
-.crumb{cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:6px;white-space:nowrap;font-size:13px}
+html,body{height:100%}
+#app{height:100vh;height:100dvh;display:flex;flex-direction:column}
+header{padding:6px 12px;gap:4px}
+header h1{font-size:14px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 12px;background:var(--card);border-bottom:1px solid var(--border)}
+.toolbar input,.toolbar select,.toolbar button{height:28px;padding:2px 8px;font-size:12px}
+.toolbar select{font:inherit;font-size:12px;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:6px}
+#breadcrumb{display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:center;flex:1 1 240px;min-width:0;scrollbar-width:none}
+.crumb{cursor:pointer;color:var(--muted);padding:2px 6px;border-radius:5px;white-space:nowrap;font-size:13px}
+.crumb:last-child{color:var(--text);font-weight:600}
+.crumb+.crumb::before{content:"›";color:var(--muted);margin-right:6px}
 .crumb:hover{background:var(--hover);color:var(--text)}
-#searchForm{display:flex;gap:8px}
-#searchInput{width:170px}
-main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
-#hint{padding:2px 2px 10px;color:var(--muted);font-size:13px}
-#storages{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
-.st{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;cursor:pointer}
-.st:hover{background:var(--hover)}
-.st .ic{width:16px;height:16px;color:var(--accent)}
-.st.on{border-color:var(--accent)}
-#btnHidden.on{color:var(--accent);border-color:var(--accent)}
-#list{list-style:none;margin:0;padding:6px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 2px 10px var(--shadow)}
-#list:empty{display:none}
-.row{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-radius:6px}
-.row:hover{background:var(--hover)}
-.row .ic{width:18px;height:18px;color:var(--muted)}
-.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.meta{color:var(--muted);font-size:12px;flex:none}
-.sz{width:72px;text-align:right}
-.tm{width:150px;text-align:right}
+#filterInput{width:160px}
+#searchForm{display:flex;gap:4px}
+#searchInput{width:150px}
+#viewBtn.on{color:var(--accent);border-color:var(--accent)}
+#batchbar{display:flex;flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;align-items:center;gap:6px;padding:4px 12px;background:var(--hover);border-bottom:1px solid var(--border);font-size:12px}
+#batchbar button{flex:none;white-space:nowrap;height:26px;padding:2px 10px;font-size:12px}
+#batchbar b{margin-right:6px}
+#body3{flex:1;min-height:0;display:grid;grid-template-columns:184px minmax(0,1fr) 260px}
+#quick{border-right:1px solid var(--border);overflow:auto;padding:8px 6px;font-size:12px}
+#quick h4{margin:8px 6px 4px;font-size:11px;color:var(--muted);font-weight:500}
+#quick h4:first-child{margin-top:0}
+.qi{display:flex;align-items:center;gap:6px;width:100%;padding:4px 8px;border:0;background:none;border-radius:5px;font-size:12px;justify-content:flex-start;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.qi .ic{width:14px;height:14px;color:var(--accent)}
+.qi.on{background:var(--hover);font-weight:600}
+#storages,#recent{display:flex;flex-direction:column}
+main{min-width:0;overflow:auto;background:var(--card)}
+#hint{padding:6px 12px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--border)}
+#tbl{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+#tbl th{position:sticky;top:0;z-index:1;background:var(--card);text-align:left;font-weight:500;color:var(--muted);padding:5px 8px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+#tbl td{padding:3px 8px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tbl .cb{width:30px;text-align:center}
+#tbl .c-sz{width:84px;text-align:right}
+#tbl .c-ty{width:90px}
+#tbl .c-tm{width:178px}
+#tbl .c-op{width:132px}
+.row{cursor:default}
+.row:hover td{background:var(--hover)}
+.row.sel td{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.row .ic{width:16px;height:16px;color:var(--muted);display:inline-block;vertical-align:-3px;margin-right:6px}
+.nm{cursor:pointer}
+.nm:hover{color:var(--accent);text-decoration:underline}
+.meta{color:var(--muted)}
+.op{color:var(--accent);cursor:pointer;margin-right:8px}
+#tbl.grid,#tbl.grid tbody{display:block}
+#tbl.grid thead{display:none}
+#tbl.grid tbody{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px;padding:8px}
+#tbl.grid tr{display:flex;flex-direction:column;align-items:center;border:1px solid var(--border);border-radius:6px;padding:8px 4px;position:relative}
+#tbl.grid td{border:0;padding:0;max-width:100%;text-align:center}
+#tbl.grid .c-ty,#tbl.grid .c-tm,#tbl.grid .c-op{display:none}
+#tbl.grid .cb{position:absolute;left:4px;top:4px;width:auto}
+#tbl.grid .c-nm{display:flex;flex-direction:column;align-items:center;width:100%}
+#tbl.grid .c-nm .ic{width:34px;height:34px;margin:6px 0}
+#tbl.grid .nm{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+#tbl.grid .c-sz{width:auto;font-size:11px}
+#detail{border-left:1px solid var(--border);overflow:auto;padding:10px 12px;font-size:12px}
+#detail h3{margin:0 0 8px;font-size:13px;word-break:break-all}
+#detail .big{display:flex;justify-content:center;align-items:center;height:120px;background:var(--chrome);border-radius:6px;margin-bottom:8px;overflow:hidden}
+#detail .big .ic{width:48px;height:48px;color:var(--muted)}
+#detail .big img{max-width:100%;max-height:100%}
+#detail dl{display:grid;grid-template-columns:56px 1fr;gap:3px 8px;margin:0 0 10px}
+#detail dt{color:var(--muted)}
+#detail dd{margin:0;word-break:break-all}
+#detail .acts{display:flex;flex-wrap:wrap;gap:4px}
+#detail .acts button{height:26px;padding:2px 10px;font-size:12px}
+#statusbar{display:flex;gap:14px;padding:3px 12px;font-size:11.5px;color:var(--muted);background:var(--card);border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;padding-bottom:calc(3px + env(safe-area-inset-bottom))}
+#statusbar span:last-child{margin-left:auto;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1100px){#body3{grid-template-columns:168px minmax(0,1fr)}#detail{display:none}}
+@media(max-width:720px){
+ #body3{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+ #quick{border-right:0;border-bottom:1px solid var(--border);display:flex;gap:4px;overflow-x:auto;padding:5px 8px;scrollbar-width:none}
+ #quick h4{display:none}
+ #storages,#recent{flex-direction:row;gap:4px}
+ .qi{width:auto;flex:none;border:1px solid var(--border);padding:4px 10px}
+ #tbl .c-ty,#tbl .c-tm,#tbl th.c-ty,#tbl th.c-tm{display:none}
+ #tbl .c-op{width:48px}
+ #tbl .c-op .op+.op{display:none}
+ #batchbar b{flex:none}
+ #tbl td{padding:8px 6px}
+ #tbl .c-sz{width:70px}
+ #filterInput{flex:1 1 40%;width:auto;font-size:16px}
+ #searchForm{flex:1 1 50%}#searchInput{flex:1;width:auto;font-size:16px}
+ #statusbar span.opt{display:none}
+}
 .loading,#msg{padding:52px 18px;text-align:center;color:var(--muted)}
 .spin{display:inline-block;width:18px;height:18px;vertical-align:-4px;margin-right:8px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -82,7 +144,7 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
 .toast.err{border-left-color:var(--danger)}
 .toast.out{opacity:0;transform:translateX(24px);transition:all .25s}
 @keyframes tin{from{opacity:0;transform:translateX(40px)}}
-@media(max-width:600px){.tm{display:none}header{padding:calc(10px + env(safe-area-inset-top)) 12px}.toolbar{padding:12px 12px 0;gap:8px}main{padding:0 12px;margin:10px auto 32px;padding-bottom:calc(32px + env(safe-area-inset-bottom))}.row{padding:11px 8px}#searchForm{flex:1 1 100%;min-width:0}#searchInput{flex:1;width:auto;font-size:16px}#searchForm button{padding:8px 14px}.crumb{padding:6px 8px}header a,header button{padding:8px 10px}.pv-bar{padding:calc(10px + env(safe-area-inset-top)) 12px 10px;flex-wrap:wrap}#pvName{flex:1 1 100%;order:-1;font-size:13px}.pv-bar a,.pv-bar button{padding:8px 12px;font-size:13px}#pvBody{padding:0 8px calc(8px + env(safe-area-inset-bottom));touch-action:pan-y}#toasts{left:12px;right:12px;top:auto;bottom:calc(16px + env(safe-area-inset-bottom))}.toast{max-width:none}}
+@media(max-width:600px){header{padding:calc(6px + env(safe-area-inset-top)) 10px 6px}.pv-bar{padding:calc(10px + env(safe-area-inset-top)) 12px 10px;flex-wrap:wrap}#pvName{flex:1 1 100%;order:-1;font-size:13px}.pv-bar a,.pv-bar button{padding:8px 12px;font-size:13px}#pvBody{padding:0 8px calc(8px + env(safe-area-inset-bottom));touch-action:pan-y}#toasts{left:12px;right:12px;top:auto;bottom:calc(16px + env(safe-area-inset-bottom))}.toast{max-width:none}}
 @media(hover:none) and (pointer:coarse){.row,.crumb,header a,header button,.pv-bar a,.pv-bar button{touch-action:manipulation}}
 </style>
 </head>
@@ -103,15 +165,36 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
  <header><h1 id="siteTitle">晴谷</h1><button id="btnHidden" class="tbtn" title="显示隐藏的项目">隐藏</button><button id="btnTheme" class="tbtn" title="切换浅色/深色主题"></button><a href="/@manage">管理</a><button id="logoutBtn">退出</button></header>
  <div class="toolbar">
   <nav id="breadcrumb"></nav>
-  <form id="searchForm"><input id="searchInput" placeholder="搜索当前目录"><button>搜索</button></form>
+  <input id="filterInput" type="search" placeholder="筛选当前列表">
+  <select id="sortSel" title="排序">
+   <option value="name:1">名称 ↑</option><option value="name:-1">名称 ↓</option>
+   <option value="modified:-1">修改时间 新→旧</option><option value="modified:1">修改时间 旧→新</option>
+   <option value="size:-1">大小 大→小</option><option value="size:1">大小 小→大</option>
+   <option value="type:1">类型</option>
+  </select>
+  <button id="viewBtn" type="button" title="网格/列表切换">网格</button>
+  <form id="searchForm"><input id="searchInput" placeholder="搜索子目录"><button>搜索</button></form>
  </div>
- <main>
-  <div id="hint" class="hidden"></div>
-  <div id="storages" class="hidden"></div>
-  <div id="loading" class="loading hidden"><span class="spin"></span>加载中…</div>
-  <ul id="list"></ul>
-  <div id="msg" class="hidden"></div>
- </main>
+ <div id="batchbar" class="hidden"><b id="batchN"></b><button id="bDownload" type="button">下载</button><button id="bShare" type="button">分享</button><button id="bLinks" type="button">复制链接</button><button id="bClear" type="button">取消选择</button></div>
+ <div id="body3">
+  <aside id="quick">
+   <h4>快速入口</h4>
+   <button class="qi" id="qHome" type="button">主文件夹</button>
+   <a class="qi" id="qShares" href="/@manage/shares">我的分享</a>
+   <h4>挂载</h4>
+   <div id="storages" class="hidden"></div>
+   <h4>最近</h4>
+   <div id="recent"></div>
+  </aside>
+  <main>
+   <div id="hint" class="hidden"></div>
+   <div id="loading" class="loading hidden"><span class="spin"></span>加载中…</div>
+   <table id="tbl"><thead><tr><th class="cb"><input type="checkbox" id="selAll" title="全选"></th><th class="c-nm" data-k="name">名称</th><th class="c-sz" data-k="size">大小</th><th class="c-ty" data-k="type">类型</th><th class="c-tm" data-k="modified">修改时间</th><th class="c-op">操作</th></tr></thead><tbody id="list"></tbody></table>
+   <div id="msg" class="hidden"></div>
+  </main>
+  <aside id="detail"></aside>
+ </div>
+ <footer id="statusbar"><span id="sbCount">—</span><span id="sbSel"></span><span id="sbSize" class="opt"></span><span id="sbPath"></span></footer>
 </div>
 <div id="pwdBox" class="hidden">
  <div class="pwdCard">
@@ -191,15 +274,166 @@ function renderBC(){
  let acc='';
  currentPath.split('/').filter(Boolean).forEach(seg=>{acc+='/'+seg;const p=acc;add(seg,()=>loadDir(p))});
 }
-function rowEl(it,onClick){
- const li=document.createElement('li');li.className='row';li.onclick=onClick;
- const ic=document.createElement('span');ic.className='ic';ic.innerHTML=iconSvg(KIND2ICON[itemKind(it.name,!!it.is_dir,it.type)]);
- const nm=document.createElement('span');nm.className='nm';nm.textContent=it.name;
- const sz=document.createElement('span');sz.className='meta sz';sz.textContent=it.is_dir?'':fmtSize(it.size);
- const tm=document.createElement('span');tm.className='meta tm';tm.textContent=fmtTime(it.modified);
- li.append(ic,nm,sz,tm);
- return li;
+// ---- 列表状态：当前项、选择、排序、视图 ----
+let curItems=[],sel=new Set(),focusPath='',searchMode=false;
+let sortKey='name',sortDir=1,viewMode='list';
+try{const v=(localStorage.getItem('sunvale_web_sort')||'name:1').split(':');sortKey=v[0];sortDir=+v[1]||1;viewMode=localStorage.getItem('sunvale_web_view')||'list'}catch(e){}
+const KIND_LABEL={dir:'文件夹',video:'视频',audio:'音频',image:'图片',text:'文本',pdf:'PDF',other:'文件'};
+function itPath(it){return it._p||(it._p=joinPath(it.parent||currentPath,it.name))}
+function extOf(n){const i=n.lastIndexOf('.');return i>0?n.slice(i+1).toUpperCase():''}
+function typeLabel(it){const k=itemKind(it.name,!!it.is_dir,it.type);return k==='dir'?'文件夹':(extOf(it.name)||KIND_LABEL[k])}
+function openItem(it){if(it.is_dir)loadDir(itPath(it));else openPreview(itPath(it))}
+async function rawOf(path){
+ const j=await api('/api/fs/get','POST',{path:path,password:sharePwd});
+ if(!j||j.code!==200||!j.data)return'';
+ let raw=j.data.raw_url||'';
+ if(raw&&j.data.sign&&raw.indexOf('sign=')<0)raw+=(raw.indexOf('?')<0?'?':'&')+'sign='+encodeURIComponent(j.data.sign);
+ return raw;
 }
+async function downloadItems(list){
+ const files=list.filter(it=>!it.is_dir);
+ if(!files.length){toast('文件夹不能直接下载，请进入后选择文件',0);return}
+ for(const it of files){
+  const raw=await rawOf(itPath(it));
+  if(!raw)continue;
+  const a=document.createElement('a');a.href=raw;a.download=it.name;document.body.appendChild(a);a.click();a.remove();
+  await new Promise(r=>setTimeout(r,250));
+ }
+ if(files.length<list.length)toast('已跳过 '+(list.length-files.length)+' 个文件夹',1);
+}
+async function copyLinks(list){
+ const out=[];
+ for(const it of list){const r=it.is_dir?location.origin+itPath(it):await rawOf(itPath(it));if(r)out.push(r.indexOf('http')===0?r:location.origin+r)}
+ try{await navigator.clipboard.writeText(out.join('\n'));toast('已复制 '+out.length+' 个链接',1)}catch(e){toast('复制失败',0)}
+}
+async function shareItems(list){
+ const j=await api('/api/share/create','POST',{files:list.map(itPath),pwd:'',expires:null,max_accessed:0,remark:''});
+ if(!j||j.code!==200){toast('创建分享失败：'+(j&&j.message||'网络错误'),0);return}
+ const link=location.origin+'/@s/'+((j.data&&j.data.id!=null)?j.data.id:'');
+ try{await navigator.clipboard.writeText(link)}catch(e){}
+ toast('分享已创建，链接已复制：'+link,1);
+}
+function selItems(){return curItems.filter(it=>sel.has(itPath(it)))}
+function sumSize(list){return list.reduce((n,it)=>n+(it.is_dir?0:(it.size||0)),0)}
+function rowEl(it){
+ const p=itPath(it);
+ const tr=document.createElement('tr');tr.className='row'+(sel.has(p)?' sel':'');
+ const td=(c)=>{const d=document.createElement('td');d.className=c;tr.appendChild(d);return d};
+ const cb=document.createElement('input');cb.type='checkbox';cb.checked=sel.has(p);
+ cb.onclick=e=>{e.stopPropagation();if(cb.checked)sel.add(p);else sel.delete(p);focusPath=p;paintSel()};
+ td('cb').appendChild(cb);
+ const n=td('c-nm');n.title=it.name;
+ const ic=document.createElement('span');ic.className='ic';ic.innerHTML=iconSvg(KIND2ICON[itemKind(it.name,!!it.is_dir,it.type)]);
+ const nm=document.createElement('span');nm.className='nm';nm.textContent=it.name;nm.onclick=e=>{e.stopPropagation();openItem(it)};
+ n.append(ic,nm);
+ const sz=td('c-sz meta');sz.textContent=it.is_dir?'—':fmtSize(it.size);
+ td('c-ty meta').textContent=typeLabel(it);
+ const tm=td('c-tm meta');tm.textContent=fmtTime(it.modified);
+ const op=td('c-op');
+ const o=(t,f)=>{const a=document.createElement('span');a.className='op';a.textContent=t;a.onclick=e=>{e.stopPropagation();f()};op.appendChild(a)};
+ o(it.is_dir?'打开':'预览',()=>openItem(it));
+ if(!it.is_dir)o('下载',()=>downloadItems([it]));
+ o('链接',()=>copyLinks([it]));
+ tr.onclick=e=>{
+  if(e.ctrlKey||e.metaKey){if(sel.has(p))sel.delete(p);else sel.add(p)}
+  else if(matchMedia('(hover:none) and (pointer:coarse)').matches){openItem(it);return}
+  else{sel.clear();sel.add(p)}
+  focusPath=p;paintSel();
+ };
+ tr.ondblclick=()=>openItem(it);
+ return tr;
+}
+function sortedFiltered(){
+ const q=$('filterInput').value.trim().toLowerCase();
+ const arr=curItems.filter(it=>!q||it.name.toLowerCase().includes(q));
+ const key=it=>sortKey==='size'?(it.size||0):sortKey==='modified'?(Date.parse(it.modified)||0):sortKey==='type'?typeLabel(it):it.name;
+ arr.sort((a,b)=>{
+  if(!searchMode&&a.is_dir!==b.is_dir)return a.is_dir?-1:1;
+  const x=key(a),y=key(b);
+  const c=typeof x==='number'?x-y:String(x).localeCompare(String(y),'zh');
+  return (c||a.name.localeCompare(b.name,'zh'))*sortDir;
+ });
+ return arr;
+}
+function renderList(){
+ const tb=$('list');tb.innerHTML='';
+ $('tbl').classList.toggle('grid',viewMode==='grid');
+ $('viewBtn').textContent=viewMode==='grid'?'列表':'网格';
+ $('sortSel').value=sortKey+':'+sortDir;
+ const arr=sortedFiltered();
+ for(const it of arr)tb.appendChild(rowEl(it));
+ if(curItems.length&&!arr.length)showMsg('没有匹配“'+$('filterInput').value.trim()+'”的项目');
+ else if(curItems.length)hideMsg();
+ paintSel();
+}
+function paintSel(){
+ const rows=$('list').children,arr=sortedFiltered();
+ for(let i=0;i<rows.length&&i<arr.length;i++){const on=sel.has(itPath(arr[i]));rows[i].classList.toggle('sel',on);const c=rows[i].querySelector('input');if(c)c.checked=on}
+ const s=selItems();
+ $('selAll').checked=!!arr.length&&s.length===arr.length;
+ $('batchbar').classList.toggle('hidden',s.length<1);
+ $('batchN').textContent='已选 '+s.length+' 项'+(sumSize(s)?'（'+fmtSize(sumSize(s))+'）':'');
+ const nd=curItems.filter(it=>it.is_dir).length;
+ $('sbCount').textContent=curItems.length+' 项 · '+nd+' 个文件夹 · '+(curItems.length-nd)+' 个文件';
+ $('sbSel').textContent=s.length?('已选 '+s.length+' 项'):'';
+ $('sbSize').textContent='文件合计 '+fmtSize(sumSize(curItems));
+ $('sbPath').textContent=searchMode?('搜索：'+$('searchInput').value.trim()):currentPath;
+ renderDetail(s);
+}
+async function renderDetail(s){
+ const d=$('detail');d.innerHTML='';
+ const h=document.createElement('h3');
+ const dl=document.createElement('dl');
+ const kv=(k,v)=>{const a=document.createElement('dt');a.textContent=k;const b=document.createElement('dd');b.textContent=v;dl.append(a,b)};
+ const acts=document.createElement('div');acts.className='acts';
+ const ab=(t,f)=>{const b=document.createElement('button');b.type='button';b.textContent=t;b.onclick=f;acts.appendChild(b)};
+ if(s.length===1){
+  const it=s[0],k=itemKind(it.name,!!it.is_dir,it.type);
+  const big=document.createElement('div');big.className='big';
+  big.innerHTML='<span class="ic">'+iconSvg(KIND2ICON[k])+'</span>';
+  h.textContent=it.name;
+  kv('类型',typeLabel(it));kv('大小',it.is_dir?'—':fmtSize(it.size));kv('修改',fmtTime(it.modified));kv('位置',itPath(it));
+  ab(it.is_dir?'打开':'预览',()=>openItem(it));
+  if(!it.is_dir)ab('下载',()=>downloadItems([it]));
+  ab('分享',()=>shareItems([it]));ab('复制链接',()=>copyLinks([it]));
+  d.append(big,h,dl,acts);
+  if(k==='image'){const raw=await rawOf(itPath(it));if(raw&&sel.size===1&&sel.has(itPath(it))){big.innerHTML='';const i=document.createElement('img');i.src=raw;i.alt=it.name;big.appendChild(i)}}
+  return;
+ }
+ if(s.length>1){
+  h.textContent='已选 '+s.length+' 项';
+  kv('文件夹',String(s.filter(x=>x.is_dir).length));kv('文件',String(s.filter(x=>!x.is_dir).length));kv('大小',fmtSize(sumSize(s)));
+  ab('下载',()=>downloadItems(s));ab('分享',()=>shareItems(s));ab('复制链接',()=>copyLinks(s));
+  d.append(h,dl,acts);return;
+ }
+ h.textContent=searchMode?'搜索结果':(currentPath==='/'?(siteTitle||'主文件夹'):currentPath.slice(currentPath.lastIndexOf('/')+1));
+ const nd=curItems.filter(it=>it.is_dir).length;
+ kv('路径',searchMode?'—':currentPath);kv('文件夹',String(nd));kv('文件',String(curItems.length-nd));kv('合计',fmtSize(sumSize(curItems)));
+ const latest=curItems.reduce((m,it)=>Math.max(m,Date.parse(it.modified)||0),0);
+ if(latest)kv('最近修改',fmtTime(new Date(latest).toISOString()));
+ const tip=document.createElement('p');tip.className='meta';tip.textContent='单击选中，双击或点名称打开；Ctrl 单击多选。';
+ d.append(h,dl,tip);
+}
+function pushRecent(p){
+ if(p==='/')return;
+ let r=[];try{r=JSON.parse(localStorage.getItem('sunvale_recent_dirs')||'[]')}catch(e){}
+ r=[p].concat(r.filter(x=>x!==p)).slice(0,8);
+ try{localStorage.setItem('sunvale_recent_dirs',JSON.stringify(r))}catch(e){}
+ renderRecent();
+}
+function renderRecent(){
+ const box=$('recent');box.textContent='';
+ let r=[];try{r=JSON.parse(localStorage.getItem('sunvale_recent_dirs')||'[]')}catch(e){}
+ for(const p of r){
+  const b=document.createElement('button');b.type='button';b.className='qi'+(p===currentPath?' on':'');b.title=p;
+  b.innerHTML='<span class="ic">'+iconSvg(KIND2ICON.folder)+'</span>';
+  b.append(document.createTextNode(p.slice(p.lastIndexOf('/')+1)||p));
+  b.onclick=()=>loadDir(p);box.appendChild(b);
+ }
+ if(!r.length){const s=document.createElement('span');s.className='meta';s.style.padding='4px 8px';s.textContent='暂无';box.appendChild(s)}
+ $('qHome').classList.toggle('on',currentPath==='/');
+}
+function demoSelect(){const a=sortedFiltered();sel.clear();a.slice(6,9).forEach(it=>sel.add(itPath(it)));paintSel()}
 let showHidden=false;
 function paintHidden(){
  const b=$('btnHidden');
@@ -223,14 +457,13 @@ async function toggleHidden(){
 async function renderStorages(){
  const box=$('storages');
  box.textContent='';
- if(currentPath!=='/'){box.classList.add('hidden');return}
  const j=await api('/api/fs/storage_list','GET');
  const items=(j&&j.data&&j.data.content)||[];
  if(!items.length){box.classList.add('hidden');return}
  box.classList.remove('hidden');
  for(const it of items){
   const b=document.createElement('button');
-  b.className='st'+(it.path===currentPath?' on':'');
+  b.className='qi'+(it.path===currentPath?' on':'');
   b.type='button';
   const ic=document.createElement('span');ic.className='ic';ic.innerHTML=iconSvg(KIND2ICON.folder);
   b.append(ic,document.createTextNode(it.name));
@@ -248,6 +481,7 @@ async function loadDir(path){
  renderStorages();
  hideMsg();
  $('list').innerHTML='';
+ curItems=[];sel.clear();searchMode=false;$('filterInput').value='';
  showLoading(true);
  const j=await api('/api/fs/list','POST',{path:currentPath,page:1,per_page:0,password:sharePwd});
  showLoading(false);
@@ -263,34 +497,27 @@ async function loadDir(path){
   showMsg(!j||!j.message?'加载失败':'加载失败：'+j.message);return
  }
  initPending=false;
- const items=(j.data&&j.data.content)||[];
- if(!items.length){showMsg('此文件夹为空');return}
- const dirs=[],files=[];
- for(const it of items)(it.is_dir?dirs:files).push(it);
- const byName=(a,b)=>a.name.localeCompare(b.name,'zh');
- dirs.sort(byName);files.sort(byName);
- for(const it of dirs.concat(files)){
-  $('list').appendChild(rowEl(it,()=>{
-   if(it.is_dir)loadDir(joinPath(currentPath,it.name));
-   else openPreview(joinPath(currentPath,it.name));
-  }));
- }
+ pushRecent(currentPath);
+ curItems=(j.data&&j.data.content)||[];
+ if(!curItems.length){showMsg('此文件夹为空');paintSel();return}
+ renderList();
 }
 async function doSearch(){
  const q=$('searchInput').value.trim();
  if(!q){loadDir(currentPath);return}
  hideMsg();
- $('list').innerHTML='';
- $('hint').textContent='“'+q+'”的搜索结果';
+ $('list').innerHTML='';curItems=[];sel.clear();
+ $('hint').textContent='“'+q+'”的搜索结果（'+currentPath+' 及子目录）';
  $('hint').classList.remove('hidden');
  renderBC();
  showLoading(true);
- const j=await api('/api/fs/search','POST',{parent:currentPath,keywords:q,scope:0,page:1,per_page:50});
+ const j=await api('/api/fs/search','POST',{parent:currentPath,keywords:q,scope:0,page:1,per_page:200});
  showLoading(false);
  if(!j||j.code!==200){showMsg(!j||!j.message?'搜索失败':'搜索失败：'+j.message);return}
- const items=(j.data&&j.data.content)||[];
- if(!items.length){showMsg('未找到相关文件');return}
- for(const it of items)$('list').appendChild(rowEl(it,()=>loadDir(it.parent||'/')));
+ searchMode=true;
+ curItems=(j.data&&j.data.content)||[];
+ if(!curItems.length){showMsg('未找到相关文件');paintSel();return}
+ renderList();
 }
 function openOverlay(name){
  $('pvName').textContent=name;
@@ -402,6 +629,17 @@ $('btnHidden').onclick=toggleHidden;
 paintHidden();
 $('searchForm').addEventListener('submit',e=>{e.preventDefault();doSearch()});
 $('pvClose').onclick=closePreview;
+$('filterInput').addEventListener('input',renderList);
+$('sortSel').onchange=()=>{const v=$('sortSel').value.split(':');sortKey=v[0];sortDir=+v[1];try{localStorage.setItem('sunvale_web_sort',$('sortSel').value)}catch(e){}renderList()};
+document.querySelectorAll('#tbl th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortKey===k)sortDir=-sortDir;else{sortKey=k;sortDir=k==='name'||k==='type'?1:-1}try{localStorage.setItem('sunvale_web_sort',sortKey+':'+sortDir)}catch(e){}renderList()});
+$('viewBtn').onclick=()=>{viewMode=viewMode==='grid'?'list':'grid';try{localStorage.setItem('sunvale_web_view',viewMode)}catch(e){}renderList()};
+$('selAll').onclick=()=>{const a=sortedFiltered();if($('selAll').checked)a.forEach(it=>sel.add(itPath(it)));else sel.clear();paintSel()};
+$('bDownload').onclick=()=>downloadItems(selItems());
+$('bShare').onclick=()=>shareItems(selItems());
+$('bLinks').onclick=()=>copyLinks(selItems());
+$('bClear').onclick=()=>{sel.clear();paintSel()};
+$('qHome').onclick=()=>loadDir('/');
+renderRecent();
 $('pwdForm').addEventListener('submit',e=>{
  e.preventDefault();
  sharePwd=$('pwdInput').value;
@@ -409,7 +647,11 @@ $('pwdForm').addEventListener('submit',e=>{
  if(pwdKind==='list')loadDir(pwdPath);else openPreview(pwdPath);
 });
 $('pwdCancel').onclick=closePwd;
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePwd();closePreview()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePwd();closePreview()}
+ const t=e.target&&e.target.tagName;if(t==='INPUT'||t==='SELECT'||!$('preview').classList.contains('hidden'))return;
+ if((e.ctrlKey||e.metaKey)&&e.key==='a'){e.preventDefault();sortedFiltered().forEach(it=>sel.add(itPath(it)));paintSel()}
+ else if(e.key==='Enter'&&sel.size===1){const it=selItems()[0];if(it)openItem(it)}
+ else if(e.key==='Backspace'&&currentPath!=='/'){loadDir(currentPath.slice(0,currentPath.lastIndexOf('/'))||'/')}});
 boot();
 </script>
 </body>

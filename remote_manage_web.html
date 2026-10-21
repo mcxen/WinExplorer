@@ -292,6 +292,30 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
 #pvBody iframe{width:100%;height:100%;border:0;background:var(--card);border-radius:6px}
 #pvBody pre{margin:0;width:100%;height:100%;overflow:auto;padding:16px;background:var(--card);color:var(--text);border-radius:6px;font:13px/1.6 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
 .pvmsg{color:var(--muted)}
+#dStrip{display:flex;flex-wrap:wrap;gap:0;background:var(--card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px}
+.ds{display:flex;align-items:center;gap:6px;padding:6px 12px;border-right:1px solid var(--border);font-size:12px;min-height:34px}
+.ds:last-child{border-right:0}
+.ds i{font-style:normal;color:var(--muted)}
+.ds b{font-weight:600;font-size:13px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.ds em{font-style:normal;color:var(--muted);white-space:nowrap}
+.ds #stUrl{font-size:13px;margin:0}
+.dsWide{flex:1 1 220px}.dsWide b{overflow:hidden;text-overflow:ellipsis}
+.dsDisk{flex:1 1 260px}.dsDisk #diskBar{flex:1;min-width:60px;height:6px}
+button.mini{padding:3px 10px;font-size:12px;min-height:0;height:26px}
+#dActs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+#dFilter{margin-left:auto;height:26px;font-size:12px;padding:2px 8px;min-width:220px}
+#dGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:8px}
+.dPanel{background:var(--card);border:1px solid var(--border);border-radius:6px;overflow:auto;max-height:46vh}
+.dPanel h3{margin:0;padding:6px 10px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);display:flex;gap:6px}
+.dPanel h3 span{color:var(--muted);font-weight:400}
+.dt{width:100%;border-collapse:collapse;font-size:12px}
+.dt th,.dt td{padding:3px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.dt thead th{color:var(--muted);font-weight:400}
+.dt tr:hover td{background:var(--hover,rgba(127,127,127,.08))}
+.dt a{cursor:pointer;color:var(--accent);margin-right:8px}
+.dt td.empty{color:var(--muted)}
+.kvt th{color:var(--muted);font-weight:400;width:80px}
+@media(max-width:720px){.ds{flex:1 1 45%;border-right:0;border-bottom:1px solid var(--border)}#dFilter{margin-left:0;flex:1 1 100%;min-width:0}#dGrid{grid-template-columns:1fr}.dPanel{max-height:none}}
 @media(max-width:900px){.cards{grid-template-columns:1fr}#previewpane{display:none}#fwrap{gap:0}}
 /* 手机端适配：底部标签栏、单列卡片、可横向滚动的命令栏与地址行、
    触屏尺寸的点击目标，以及浮层预览的滑动/缩放。桌面样式一律不变。 */
@@ -485,26 +509,33 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
   </header>
   <div id="pages">
    <section id="pg-dash" class="page hidden">
-    <div class="cards">
-     <div class="card">
-      <h2>运行状态</h2>
-      <div id="stRow"><div id="stUrl">—</div><button id="stCopy" class="primary">复制</button></div>
-      <div class="kv"><span id="stPort">端口 —</span><label class="swWrap"><input type="checkbox" id="stSwitch" class="switch">远程访问</label></div>
-     </div>
-     <div class="card">
-      <h2>存储</h2>
-      <div id="diskBar"><div id="diskFill"></div></div>
-      <div id="diskText" class="kv">—</div>
-     </div>
-     <div class="card">
-      <h2>分享概览</h2>
-      <div class="bigNum" id="shareCount">—</div>
-      <button id="goShares" class="primary">去管理</button>
-     </div>
-     <div class="card">
-      <h2>OpenList 客户端接入</h2>
-      <p class="mtext">站点地址：<span id="tipUrl">—</span><br>账号：<span id="tipUser">—</span><br>密码：在桌面端「查看更多 → 复制远程地址」中查看。</p>
-     </div>
+    <div id="dStrip">
+     <div class="ds"><i>远程</i><b><span id="dsDot" class="dot"></span><span id="dsOn">—</span></b><label class="swWrap"><input type="checkbox" id="stSwitch" class="switch"></label></div>
+     <div class="ds dsWide"><i>主机</i><b id="stUrl">—</b><button id="stCopy" class="mini">复制</button></div>
+     <div class="ds"><i>端口 / 版本</i><b><span id="stPort">—</span> · <span id="dsVer">—</span></b></div>
+     <div class="ds dsDisk"><i>磁盘</i><b id="dsDiskPct">—</b><div id="diskBar"><div id="diskFill"></div></div><em id="diskText">—</em></div>
+     <div class="ds"><i>分享</i><b id="shareCount">—</b></div>
+     <div class="ds"><i>挂载</i><b id="dsMounts">—</b></div>
+     <div class="ds"><i>传输任务</i><b id="dsTasks">0</b></div>
+    </div>
+    <div id="dActs">
+     <button class="mini" data-act="files">打开文件</button>
+     <button class="mini" data-act="upload">上传</button>
+     <button class="mini" id="goShares" data-act="shares">管理分享</button>
+     <button class="mini" data-act="storage">挂载存储</button>
+     <button class="mini" data-act="set">端口与令牌</button>
+     <button class="mini" data-act="client">复制客户端信息</button>
+     <input id="dFilter" type="search" placeholder="筛选文件夹、分享、挂载…">
+    </div>
+    <div id="dGrid">
+     <div class="dPanel"><h3>主文件夹<span id="dDirsN"></span></h3><table class="dt"><thead><tr><th>名称</th><th>操作</th></tr></thead><tbody id="dDirs"></tbody></table></div>
+     <div class="dPanel"><h3>分享<span id="dSharesN"></span></h3><table class="dt"><thead><tr><th>链接</th><th>文件</th><th>密码</th><th>操作</th></tr></thead><tbody id="dShares"></tbody></table></div>
+     <div class="dPanel"><h3>挂载点<span id="dMountsN"></span></h3><table class="dt"><thead><tr><th>挂载</th><th>本机路径</th><th>状态</th></tr></thead><tbody id="dMountRows"></tbody></table></div>
+     <div class="dPanel"><h3>OpenList 客户端接入</h3><table class="dt kvt"><tbody>
+      <tr><th>站点地址</th><td id="tipUrl">—</td></tr>
+      <tr><th>账号</th><td id="tipUser">—</td></tr>
+      <tr><th>密码</th><td>桌面端「查看更多 → 复制远程地址」</td></tr>
+     </tbody></table></div>
     </div>
    </section>
    <section id="pg-files" class="page hidden">
@@ -627,7 +658,7 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
 const TOKEN_KEY='sunvale_token';
 const $=id=>document.getElementById(id);
 /*__SHARED_JS__*/
-const PAGES={dash:['仪表盘','服务状态、存储与分享概览'],files:['文件','浏览、上传与整理主文件夹'],shares:['分享','通过链接向外分享文件'],storage:['存储','挂载点与远程首页显示'],set:['设置','账号、令牌、端口与远程开关']};
+const PAGES={dash:['仪表盘',''],files:['文件','浏览、上传与整理主文件夹'],shares:['分享','通过链接向外分享文件'],storage:['存储','挂载点与远程首页显示'],set:['设置','账号、令牌、端口与远程开关']};
 let token='';
 try{token=localStorage.getItem(TOKEN_KEY)||''}catch(e){}
 let page='';
@@ -781,7 +812,8 @@ function go(p){
  $('navtree').classList.add('hidden');
  $('previewpane').classList.add('hidden');
  if(addrEditing())endAddrEdit();
- if(p==='dash'||p==='set')loadStatus();
+ if(p==='dash')loadDash();
+ else if(p==='set')loadStatus();
  else if(p==='storage')loadStorages();
  else loadShares();
 }
@@ -794,7 +826,7 @@ function renderTopbar(){
  if(page==='dash'||page==='shares'){
   const b=btn('刷新');
   b.prepend(icon('refresh'));
-  b.onclick=()=>{if(page==='dash')loadStatus();else loadShares()};
+  b.onclick=()=>{if(page==='dash')loadDash();else loadShares()};
   a.append(b);
  }
 }
@@ -806,7 +838,10 @@ function renderStatus(){
  $('stUrl').textContent=s.url||'—';
  $('tipUrl').textContent=s.url||'—';
  $('tipUser').textContent=s.username||'—';
- $('stPort').textContent='端口 '+(s.port||'—');
+ $('stPort').textContent=String(s.port||'—');
+ $('dsOn').textContent=s.enabled?'在线':'已停用';
+ $('dsDot').className='dot'+(s.enabled?' on':'');
+ $('dsVer').textContent=s.version||'—';
  $('stSwitch').checked=!!s.enabled;
  $('setSwitch').checked=!!s.enabled;
  $('setSwLabel').textContent=s.enabled?'已开启':'已关闭';
@@ -816,7 +851,8 @@ function renderStatus(){
  if(s.port)$('portIn').value=s.port;
  const d=s.disk||{},t=d.total||0,f=d.free||0,used=Math.max(t-f,0);
  $('diskFill').style.width=(t?Math.round(used/t*100):0)+'%';
- $('diskText').textContent=t?('已用 '+fmtSize(used)+' / 共 '+fmtSize(t)+'，可用 '+fmtSize(f)):'容量信息不可用';
+ $('diskText').textContent=t?(fmtSize(used)+' / '+fmtSize(t)+'，余 '+fmtSize(f)):'不可用';
+ $('dsDiskPct').textContent=t?Math.round(used/t*100)+'%':'—';
  $('shareCount').textContent=s.shares!=null?s.shares:'—';
 }
 async function loadStatus(){
@@ -2819,7 +2855,54 @@ function paintThemeBtn(){const d=document.documentElement.getAttribute('data-the
 $('btnTheme').onclick=()=>{svToggleTheme();paintThemeBtn()};
 paintThemeBtn();
 document.querySelectorAll('.nav-item').forEach(b=>{b.onclick=()=>go(b.dataset.p)});
-$('goShares').onclick=()=>go('shares');
+// ---- 仪表盘：一屏看完状态、文件夹、分享与挂载 ----
+let dashData={dirs:[],shares:[],mounts:[]};
+function dashCell(tr,text,cls){const c=el('td',cls||'',text);c.title=text;tr.append(c);return c}
+function dashLink(td,t,f){const a=el('a','',t);a.onclick=f;td.append(a)}
+function renderDash(){
+ const q=($('dFilter').value||'').trim().toLowerCase();
+ const m=t=>!q||String(t).toLowerCase().includes(q);
+ const fill=(id,rows,cols,draw,nId,total)=>{
+  const tb=$(id);tb.textContent='';
+  rows.forEach(r=>{const tr=document.createElement('tr');draw(tr,r);tb.append(tr)});
+  if(!rows.length){const tr=document.createElement('tr');const c=el('td','empty',q?'无匹配项':'暂无');c.colSpan=cols;tr.append(c);tb.append(tr)}
+  $(nId).textContent=q?(rows.length+' / '+total):String(total);
+ };
+ const D=dashData;
+ fill('dDirs',D.dirs.filter(d=>m(d.name)),2,(tr,d)=>{
+  const p=joinPath('/',d.name);
+  dashCell(tr,d.name);
+  const c=dashCell(tr,'');dashLink(c,'打开',()=>{curPath=p;go('files')});dashLink(c,'复制路径',()=>copyText(p));
+ },'dDirsN',D.dirs.length);
+ fill('dShares',D.shares.filter(s=>m('/@s/'+s.id)||(s.files||[]).some(f=>m(f))),4,(tr,s)=>{
+  const link=location.origin+'/@s/'+s.id;
+  dashCell(tr,'/@s/'+s.id);dashCell(tr,String(s.files?s.files.length:0));dashCell(tr,s.pwd?'有':'无');
+  const c=dashCell(tr,'');dashLink(c,'复制链接',()=>copyText(link));dashLink(c,'管理',()=>go('shares'));
+ },'dSharesN',D.shares.length);
+ fill('dMountRows',D.mounts.filter(s=>m(s.mount_path)||m(storageRootOf(s))),3,(tr,s)=>{
+  dashCell(tr,s.mount_path);dashCell(tr,storageRootOf(s));dashCell(tr,s.disabled?'已停用':'启用');
+ },'dMountsN',D.mounts.length);
+ $('dsMounts').textContent=String(D.mounts.length);
+ $('dsTasks').textContent=String($('uplist').querySelectorAll('.uprow:not(.done):not(.fail)').length);
+}
+async function loadDash(){
+ loadStatus();
+ const [d,sh,st]=await Promise.all([
+  api('/api/fs/dirs','POST',{path:'/'}),
+  api('/api/share/list','POST',{page:1,per_page:0}),
+  api('/api/storage/list')]);
+ dashData.dirs=(d&&d.code===200&&d.data)||[];
+ dashData.shares=(sh&&sh.code===200&&sh.data&&sh.data.content)||[];
+ dashData.mounts=(st&&st.code===200&&st.data&&st.data.content)||[];
+ renderDash();
+}
+$('dFilter').oninput=renderDash;
+document.querySelectorAll('#dActs [data-act]').forEach(b=>b.onclick=()=>{
+ const a=b.dataset.act;
+ if(a==='upload'){go('files');$('fileIn').click();return}
+ if(a==='client'){const s=status||{};copyText('站点地址：'+(s.url||'')+'\n账号：'+(s.username||''));return}
+ go(a);
+});
 $('stCopy').onclick=()=>{if(status&&status.url)copyText(status.url)};
 $('stSwitch').onchange=()=>setRemote($('stSwitch').checked);
 $('setSwitch').onchange=()=>setRemote($('setSwitch').checked);

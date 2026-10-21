@@ -111,6 +111,8 @@ func (u *assistantUI) readConfigLocked() {
 	}
 	u.full = disk.Prefs.Full
 	u.autopilot = disk.Prefs.Autopilot
+	u.extraInstruction = disk.Prefs.ExtraInstruction
+	u.disabledSkills = append([]string(nil), disk.Prefs.DisabledSkills...)
 	u.savedFull = u.full
 	u.savedAutopilot = u.autopilot
 	u.snapshotConfig()
@@ -139,7 +141,10 @@ func (u *assistantUI) writeConfigLocked() {
 	disk := assistantDisk{
 		Providers: u.providers, ActiveID: u.activeID, ArchivePasswords: u.passwords,
 		Passwords: append(json.RawMessage(nil), u.legacyPasswords...),
-		Prefs:     assistPrefs{Width: u.width, Full: u.full, Autopilot: u.autopilot},
+		Prefs: assistPrefs{
+			Width: u.width, Full: u.full, Autopilot: u.autopilot,
+			ExtraInstruction: u.extraInstruction, DisabledSkills: append([]string(nil), u.disabledSkills...),
+		},
 	}
 	data, err := json.MarshalIndent(disk, "", "  ")
 	if err != nil {
@@ -174,15 +179,36 @@ func (u *assistantUI) mergeConfigLocked(disk assistantDisk) {
 	if u.autopilot == u.basePrefs.Autopilot {
 		u.autopilot = disk.Prefs.Autopilot
 	}
+	if u.extraInstruction == u.basePrefs.ExtraInstruction {
+		u.extraInstruction = disk.Prefs.ExtraInstruction
+	}
+	if equalStringSlice(u.disabledSkills, u.basePrefs.DisabledSkills) {
+		u.disabledSkills = append([]string(nil), disk.Prefs.DisabledSkills...)
+	}
 	u.savedFull = u.full
 	u.savedAutopilot = u.autopilot
+}
+
+func equalStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (u *assistantUI) snapshotConfig() {
 	u.baseProviders = cloneProviders(u.providers)
 	u.baseActiveID = u.activeID
 	u.basePasswords = clonePasswords(u.passwords)
-	u.basePrefs = assistPrefs{Width: u.width, Full: u.full, Autopilot: u.autopilot}
+	u.basePrefs = assistPrefs{
+		Width: u.width, Full: u.full, Autopilot: u.autopilot,
+		ExtraInstruction: u.extraInstruction, DisabledSkills: append([]string(nil), u.disabledSkills...),
+	}
 	u.baseConfigEpoch = assistantConfigStamp()
 }
 

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	assistant "sunvale/internal/assistant"
 )
 
 // assistant_http.go exposes the assistant to other agents without opening a
@@ -222,6 +223,24 @@ func a2aStateText(state string) string {
 
 func (a *App) assistantA2ACard() map[string]any {
 	base := strings.TrimSuffix(a.remoteLANURL(), "/")
+	disk, _ := loadAssistantConfig()
+	var skills []any
+	if !assistant.SkillDisabled(disk.Prefs, assistant.SkillFiles) {
+		skills = append(skills, map[string]any{
+			"id":          "files",
+			"name":        "文件助手",
+			"description": "读取指定文件，搜索和整理文件夹，生成重命名方案，压缩、解压并调用受控的本地文件工具。",
+			"tags":        []string{"files", "search", "rename", "archive"},
+		})
+	}
+	if !assistant.SkillDisabled(disk.Prefs, assistant.SkillMemory) {
+		skills = append(skills, map[string]any{
+			"id":          "memory",
+			"name":        "会话与记忆",
+			"description": "使用助手的历史会话和跨会话短记忆。",
+			"tags":        []string{"memory", "history"},
+		})
+	}
 	return map[string]any{
 		"protocolVersion": a2aVersion,
 		"name":            "Sunvale 文件助手",
@@ -235,20 +254,7 @@ func (a *App) assistantA2ACard() map[string]any {
 		},
 		"defaultInputModes":  []string{"text/plain", "application/json"},
 		"defaultOutputModes": []string{"text/plain", "application/json"},
-		"skills": []any{
-			map[string]any{
-				"id":          "files",
-				"name":        "文件助手",
-				"description": "读取指定文件，搜索和整理文件夹，生成重命名方案，压缩、解压并调用受控的本地文件工具。",
-				"tags":        []string{"files", "search", "rename", "archive"},
-			},
-			map[string]any{
-				"id":          "memory",
-				"name":        "会话与记忆",
-				"description": "使用助手的历史会话和跨会话短记忆。",
-				"tags":        []string{"memory", "history"},
-			},
-		},
+		"skills":             skills,
 	}
 }
 
@@ -406,7 +412,8 @@ func (a *App) a2aMessageSend(w http.ResponseWriter, req a2aRPCRequest) {
 	run := assistRun{
 		prov: prov, root: root, book: disk.ArchivePasswords,
 		files: files, autopilot: p.Metadata.Autopilot || disk.Prefs.Autopilot,
-		hist: []*schema.Message{schema.UserMessage(text)}, memories: memories,
+		prefs: disk.Prefs,
+		hist:  []*schema.Message{schema.UserMessage(text)}, memories: memories,
 	}
 	if a.store != nil {
 		run.hidden = a.store.remoteShowHidden()
@@ -706,7 +713,7 @@ func (a *App) runAssistantFromMCP(ctx context.Context, in assistantRunArgs) (ass
 	hist = append(hist, schema.UserMessage(text))
 	run := assistRun{
 		prov: prov, root: root, book: disk.ArchivePasswords, files: in.Files,
-		autopilot: in.Autopilot || disk.Prefs.Autopilot, hist: hist,
+		autopilot: in.Autopilot || disk.Prefs.Autopilot, prefs: disk.Prefs, hist: hist,
 		memories: readAssistantMemories(assistantSideRootFor(assistantConfigPath())),
 	}
 	if a.store != nil {

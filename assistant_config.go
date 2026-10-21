@@ -305,3 +305,118 @@ func readAssistantSessions(root string) []aiSessionMeta {
 	idx, _ := readIndexFile(filepath.Join(root, "index.json"))
 	return idx.Sessions
 }
+
+// updateAssistantPrefs mutates prefs on disk and bumps the epoch so an open
+// pane merges the change. Callers must not hold assistantConfigMu.
+func updateAssistantPrefs(fn func(*assistPrefs)) error {
+	path := assistantConfigPath()
+	if path == "" {
+		return fmt.Errorf("没有用户配置目录")
+	}
+	assistantConfigMu.Lock()
+	defer assistantConfigMu.Unlock()
+	assistantDiskMu.Lock()
+	defer assistantDiskMu.Unlock()
+	disk, _, err := readAssistantDisk(path)
+	if err != nil {
+		return fmt.Errorf("配置文件读不出来")
+	}
+	if disk.Prefs.Width < assistantMinW {
+		disk.Prefs.Width = assistantPaneW
+	}
+	fn(&disk.Prefs)
+	if err := writeAssistantDisk(path, disk); err != nil {
+		return err
+	}
+	markAssistantConfigDirty()
+	return nil
+}
+
+// saveAssistantArchivePassword appends one password book entry from settings.
+func saveAssistantArchivePassword(label, secret string) error {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return fmt.Errorf("解压密码不能为空")
+	}
+	label = strings.TrimSpace(label)
+	path := assistantConfigPath()
+	if path == "" {
+		return fmt.Errorf("没有用户配置目录")
+	}
+	assistantConfigMu.Lock()
+	defer assistantConfigMu.Unlock()
+	assistantDiskMu.Lock()
+	defer assistantDiskMu.Unlock()
+	disk, _, err := readAssistantDisk(path)
+	if err != nil {
+		return fmt.Errorf("配置文件读不出来")
+	}
+	if label == "" {
+		label = fmt.Sprintf("解压密码 %d", len(disk.ArchivePasswords)+1)
+	}
+	disk.ArchivePasswords = append(disk.ArchivePasswords, archivePassword{ID: newID(), Label: label, Secret: secret})
+	if len(disk.ArchivePasswords) > assistMaxArchivePasswords {
+		disk.ArchivePasswords = disk.ArchivePasswords[len(disk.ArchivePasswords)-assistMaxArchivePasswords:]
+	}
+	if err := writeAssistantDisk(path, disk); err != nil {
+		return err
+	}
+	markAssistantConfigDirty()
+	return nil
+}
+
+func deleteAssistantArchivePassword(id string) error {
+	path := assistantConfigPath()
+	assistantConfigMu.Lock()
+	defer assistantConfigMu.Unlock()
+	assistantDiskMu.Lock()
+	defer assistantDiskMu.Unlock()
+	disk, _, err := readAssistantDisk(path)
+	if err != nil {
+		return fmt.Errorf("配置文件读不出来")
+	}
+	next := disk.ArchivePasswords[:0]
+	found := false
+	for _, p := range disk.ArchivePasswords {
+		if p.ID == id {
+			found = true
+			continue
+		}
+		next = append(next, p)
+	}
+	if !found {
+		return fmt.Errorf("解压密码不存在")
+	}
+	disk.ArchivePasswords = next
+	if err := writeAssistantDisk(path, disk); err != nil {
+		return err
+	}
+	markAssistantConfigDirty()
+	return nil
+}
+
+// clearAssistantMemories truncates memory.json under the assistant side root.
+func clearAssistantMemories() error {
+	path := assistantConfigPath()
+	root := assistantSideRootFor(path)
+	if root == "" {
+		return fmt.Errorf("没有用户配置目录")
+	}
+	assistantDiskMu.Lock()
+	defer assistantDiskMu.Unlock()
+	return assistant.WriteMemories(filepath.Join(root, "memory.json"), nil)
+}
+
+// sunvaleBuiltinToolNames matches the in-process MCP registry in assistant_mcp.go.
+// Settings lists them without starting a session on every paint.
+func sunvaleBuiltinToolNames() []string {
+	return []string{
+		"list_dir", "read_file", "read_files", "list_outside", "read_outside",
+		"properties", "mkdir", "new_text_file", "copy_items", "move_items",
+		"trash_items", "rename_item", "open_item", "open_terminal", "copy_as_path",
+		"rename_plan", "zip_files", "unzip", "password_list", "password_save",
+		"search_names", "grep_text", "write_text", "folder_summary", "disk_space",
+		"current_selection", "navigate_to", "offer_choices",
+		"remember", "forget", "memory_list",
+	}
+}

@@ -266,7 +266,7 @@ func (u *assistantUI) historyWhere() string {
 	if root == "" {
 		return "没有用户配置目录，这段对话只会留在本次运行里。"
 	}
-	return "会话和记忆在 " + homeish(root) + "，和密钥分开。密码请放密码本。"
+	return "会话和记忆在 " + homeish(root) + "，和密钥分开。解压密码请到设置 → 助手管理。"
 }
 
 func (u *assistantUI) addMemory(text string) (string, error) {

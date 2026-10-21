@@ -43,6 +43,7 @@ type assistRun struct {
 	selected  []string
 	files     []string
 	autopilot bool
+	prefs     assistPrefs
 	hist      []*schema.Message
 	memories  []aiMemory
 	// onLive paints one transcript line as it grows. onStatus is the working
@@ -94,7 +95,7 @@ func (a *App) assistantSubmit() {
 	}
 	prov, ok := a.assist.activeProvider()
 	if !ok || prov.APIKey == "" {
-		a.statusMsg = "请先在助手里添加供应商"
+		a.statusMsg = "请先在设置 → 助手中添加供应商"
 		return
 	}
 	a.assist.draft = ""
@@ -126,7 +127,13 @@ func (a *App) assistantSubmit() {
 	run := assistRun{
 		prov: prov, root: root, hidden: a.store.settings().ShowHidden,
 		book: append([]archivePassword(nil), a.assist.passwords...), selected: selected,
-		files: paths, autopilot: a.assist.autopilot, hist: a.assistHistory(),
+		files: paths, autopilot: a.assist.autopilot,
+		prefs: assistPrefs{
+			Width: a.assist.width, Full: a.assist.full, Autopilot: a.assist.autopilot,
+			ExtraInstruction: a.assist.extraInstruction,
+			DisabledSkills:   append([]string(nil), a.assist.disabledSkills...),
+		},
+		hist:     a.assistHistory(),
 		memories: append([]aiMemory(nil), a.assist.memories...),
 	}
 	run.onSwitched = func(model string) {
@@ -262,10 +269,14 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		mode = "全托管"
 		iters = 24
 	}
+	memories := run.memories
+	if assistant.SkillDisabled(run.prefs, assistant.SkillMemory) {
+		memories = nil
+	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "sunvale",
 		Description: "晴谷文件管理器助手",
-		Instruction: assistantInstruction,
+		Instruction: assistant.EffectiveInstruction(run.prefs.ExtraInstruction),
 		Model:       chatModel,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: tools},
@@ -280,7 +291,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		"folder":    sessionPlain(run.root),
 		"mode":      mode,
 		"selection": sessionPlain(selectionText(run.selected)),
-		"memory":    memoryPrompt(run.memories),
+		"memory":    memoryPrompt(memories),
 	}))
 	var result assistRunResult
 	nextID := 0

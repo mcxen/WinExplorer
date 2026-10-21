@@ -422,7 +422,7 @@ func newSunvaleServer() *mcp.Server {
 	addSunvaleTool(s, server, &mcp.Tool{Name: "copy_as_path", Description: "把项目的绝对路径复制到剪贴板，并在结果里返回路径。"}, s.copyAsPath)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "rename_plan", Description: "为当前文件夹生成批量重命名方案，不会真正改名。所有批量改名都调用本工具，模板令牌见参数说明。"}, s.renamePlan)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "zip_files", Description: "把当前文件夹里的若干项目打成一个 zip。"}, s.zipFiles)
-	addSunvaleTool(s, server, &mcp.Tool{Name: "unzip", Description: "把归档解压到新文件夹，自动按顺序尝试解压密码库。需要密码却没命中时，请用户到助手「密码本」添加。"}, s.unzip)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "unzip", Description: "把归档解压到新文件夹，自动按顺序尝试解压密码库。需要密码却没命中时，请用户到设置 → 助手添加。"}, s.unzip)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "password_list", Description: "列出解压密码库的名称，不含密码正文。仅用于排查加密归档。"}, s.passwordList)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "password_save", Description: "把用户刚提供的解压密码记入密码库，回复里不要复述密码。"}, s.passwordSave)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "search_names", Description: "按文件名在文件夹里搜索。query 用搜索框的语法。"}, s.searchNames)

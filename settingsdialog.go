@@ -128,6 +128,7 @@ func (a *App) settingsCategories() []components.SettingsCategory {
 		{ID: "extensions", Title: "扩展", Icon: lucide.Puzzle(), Groups: a.settingsExtensionGroups()},
 		{ID: "plugins", Title: "插件", Icon: lucide.Blocks(), Groups: a.settingsPluginGroups()},
 		{ID: "assistant", Title: "助手", Icon: lucide.Bot(), Groups: a.settingsAssistantGroups()},
+		{ID: "schedule", Title: "定时任务", Icon: lucide.AlarmClock(), Groups: a.settingsScheduleGroups()},
 		{ID: "updates", Title: "更新", Icon: lucide.RefreshCw(), Groups: a.settingsUpdateGroups()},
 	}
 }

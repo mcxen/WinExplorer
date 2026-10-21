@@ -33,8 +33,9 @@ type scheduleCreateArgs struct {
 	DateStamp    bool   `json:"date_stamp,omitempty" jsonschema:"复制到目标下按日期建子文件夹，适合备份"`
 	ScriptPath   string `json:"script_path,omitempty" jsonschema:"脚本路径 .py/.sh/.bat"`
 	InlineScript string `json:"inline_script,omitempty" jsonschema:"内联脚本，保存到 sunvale/scripts/"`
-	Prompt       string `json:"prompt,omitempty" jsonschema:"助手执行：自然语言提示词"`
+	Prompt       string `json:"prompt,omitempty" jsonschema:"助手执行：自然语言提示词；与 preset 联用时可空（用预设模板）"`
 	Folder       string `json:"folder,omitempty" jsonschema:"助手执行：工作目录"`
+	Preset       string `json:"preset,omitempty" jsonschema:"助手预设：classify_downloads、inbox_triage、rename_by_content 或中文名"`
 	Timeout      int    `json:"timeout_sec,omitempty" jsonschema:"脚本或助手超时秒数"`
 }
 
@@ -75,6 +76,9 @@ func (s *sunvaleTools) scheduleList(_ context.Context, _ *mcp.CallToolRequest, _
 			}
 			fmt.Fprintf(&b, " script=%s", target)
 		case schedule.ActionAssistant:
+			if j.Preset != "" {
+				fmt.Fprintf(&b, " preset=%s", j.Preset)
+			}
 			fmt.Fprintf(&b, " prompt=%q folder=%s", truncateRunes(j.Prompt, 60), j.Folder)
 		}
 		if !j.NextRunAt.IsZero() {
@@ -198,10 +202,23 @@ func scheduleJobFromArgs(id string, args scheduleCreateArgs) (schedule.Job, erro
 		}
 	case "assistant", "助手执行":
 		j.Action = schedule.ActionAssistant
-		j.Prompt = strings.TrimSpace(args.Prompt)
+		preset := schedule.ResolvePresetID(args.Preset)
 		j.Folder = expandUserPath(args.Folder)
-		if j.Prompt == "" {
-			return schedule.Job{}, fmt.Errorf("助手任务需要 prompt")
+		j.DestDir = expandUserPath(args.Dest)
+		j.Prompt = strings.TrimSpace(args.Prompt)
+		if preset != "" {
+			if err := schedule.ApplyPreset(&j, preset, j.Folder, j.DestDir); err != nil {
+				return schedule.Job{}, err
+			}
+			// Keep caller name if provided; ApplyPreset only fills when empty.
+			if name != "" {
+				j.Name = name
+			}
+			if p := strings.TrimSpace(args.Prompt); p != "" {
+				j.Prompt = p
+			}
+		} else if j.Prompt == "" {
+			return schedule.Job{}, fmt.Errorf("助手任务需要 prompt 或 preset")
 		}
 	default:
 		return schedule.Job{}, fmt.Errorf("未知 action：%s", args.Action)
@@ -271,6 +288,22 @@ func scheduleMergeUpdate(old schedule.Job, args scheduleCreateArgs) schedule.Job
 	if f := expandUserPath(args.Folder); f != "" {
 		j.Folder = f
 	}
+	if preset := schedule.ResolvePresetID(args.Preset); preset != "" {
+		folder, dest := j.Folder, j.DestDir
+		if f := expandUserPath(args.Folder); f != "" {
+			folder = f
+		}
+		if d := expandUserPath(args.Dest); d != "" {
+			dest = d
+		}
+		_ = schedule.ApplyPreset(&j, preset, folder, dest)
+		if name := strings.TrimSpace(args.Name); name != "" {
+			j.Name = name
+		}
+		if p := strings.TrimSpace(args.Prompt); p != "" {
+			j.Prompt = p
+		}
+	}
 	return j
 }
 
@@ -300,7 +333,7 @@ func registerScheduleTools(s *sunvaleTools, server *mcp.Server) {
 		Name: "schedule_list", Description: "列出本机定时任务（设置 → 定时任务 / schedules.json）。",
 	}, s.scheduleList)
 	addSunvaleTool(s, server, &mcp.Tool{
-		Name: "schedule_create", Description: "新建定时任务。常用：每天 19:00 把下载里的文档移走——action=file_rule、time=19:00、source_dir=~/Downloads、dest_dir=~/Documents、match=.pdf,.docx、op=move。备份用 op=copy 且 date_stamp=true。",
+		Name: "schedule_create", Description: "新建定时任务。按扩展名整理用 action=file_rule；按内容分类用 action=assistant 且 preset=classify_downloads（或 inbox_triage / rename_by_content）。立刻跑已有任务用 schedule_run；不保存的一次性助手任务用 assistant_task_run。",
 	}, s.scheduleCreate)
 	addSunvaleTool(s, server, &mcp.Tool{
 		Name: "schedule_update", Description: "按 id 更新定时任务；只传要改的字段。",
@@ -309,6 +342,6 @@ func registerScheduleTools(s *sunvaleTools, server *mcp.Server) {
 		Name: "schedule_delete", Description: "按 id 删除定时任务。",
 	}, s.scheduleDelete)
 	addSunvaleTool(s, server, &mcp.Tool{
-		Name: "schedule_run", Description: "立即运行一个定时任务，不改下次调度时间的定义（仍会写入上次运行状态）。",
+		Name: "schedule_run", Description: "立即运行一个已保存的定时任务（用户说「现在跑」「立刻整理」且已有任务时）。不改调度定义，会写入上次运行状态。一次性按内容分类请用 assistant_task_run。",
 	}, s.scheduleRun)
 }

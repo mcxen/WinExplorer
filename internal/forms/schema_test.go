@@ -57,3 +57,16 @@ func TestKnownKinds(t *testing.T) {
 		t.Fatal(KnownKinds())
 	}
 }
+
+func TestVisibleForActionAssistantPreset(t *testing.T) {
+	vis := VisibleForAction("助手执行")
+	if !vis["preset"] || !vis["prompt"] || !vis["dest_root"] || vis["source"] {
+		t.Fatalf("%+v", vis)
+	}
+	if PresetIDFromLabel("分类下载") != "classify_downloads" {
+		t.Fatal(PresetIDFromLabel("分类下载"))
+	}
+	if PresetLabelFromID("inbox_triage") != "收件箱整理" {
+		t.Fatal(PresetLabelFromID("inbox_triage"))
+	}
+}

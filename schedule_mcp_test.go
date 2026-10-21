@@ -123,6 +123,7 @@ func TestScheduleJobFromArgsBackup(t *testing.T) {
 func TestPromptListsScheduleTools(t *testing.T) {
 	for _, name := range []string{
 		"schedule_list", "schedule_create", "schedule_update", "schedule_delete", "schedule_run",
+		"assistant_task_run",
 	} {
 		if !strings.Contains(assistantInstruction, name) {
 			t.Errorf("Instruction missing %s", name)

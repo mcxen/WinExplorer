@@ -32,7 +32,8 @@ type settingsScheduleForm struct {
 	scriptPath, inline string
 	timeout            string
 
-	prompt, folder string
+	prompt, folder, preset, destRoot string
+	lastPresetApplied                string // tracks select changes for autofill
 }
 
 func (a *App) openScheduleSettings() {
@@ -121,7 +122,11 @@ func scheduleJobSummary(j schedule.Job) string {
 		}
 		return fmt.Sprintf("%s %s · 运行脚本 · %s", days, clock, shrinkPath(target))
 	case schedule.ActionAssistant:
-		return fmt.Sprintf("%s %s · 助手执行 · %s", days, clock, truncateRunes(j.Prompt, 40))
+		label := "助手执行"
+		if j.Preset != "" {
+			label = "助手 · " + schedule.PresetLabel(j.Preset)
+		}
+		return fmt.Sprintf("%s %s · %s · %s", days, clock, label, truncateRunes(j.Prompt, 40))
 	default:
 		return days + " " + clock
 	}
@@ -173,6 +178,7 @@ func (a *App) settingsScheduleLoad(j schedule.Job) {
 		dateStamp:  j.DateStamp,
 		scriptPath: j.ScriptPath, inline: j.InlineScript,
 		prompt: j.Prompt, folder: j.Folder,
+		preset: forms.PresetLabelFromID(j.Preset), destRoot: j.DestDir,
 	}
 	switch {
 	case len(j.Weekdays) == 5:
@@ -230,6 +236,9 @@ func (a *App) settingsScheduleDefaults() {
 	if f.timeout == "" {
 		f.timeout = "300"
 	}
+	if f.preset == "" {
+		f.preset = "自定义"
+	}
 	if f.source == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			f.source = filepath.Join(home, "Downloads")
@@ -279,6 +288,7 @@ func (a *App) settingsScheduleFormGroup() components.SettingsGroup {
 					})
 				}
 				a.settingsScheduleSyncDateStamp()
+				a.settingsScheduleApplyPresetIfNeeded()
 				ui.Row(c).FillWidth().Gap(6).Children(func() {
 					label := "保存"
 					if f.editID == "" {
@@ -297,6 +307,11 @@ func (a *App) settingsScheduleFormGroup() components.SettingsGroup {
 							a.settingsScheduleFillExample()
 						}
 					}
+					if f.action == "助手执行" {
+						if components.Button(c, "填入「分类下载」预设", components.ButtonGhost).Clicked() {
+							a.settingsScheduleFillClassifyPreset()
+						}
+					}
 				})
 			},
 		}},
@@ -311,6 +326,7 @@ func (a *App) settingsSchedulePrefill() map[string]string {
 		"op": f.op, "date_stamp": boolString(f.dateStamp),
 		"script_path": f.scriptPath, "inline": f.inline,
 		"prompt": f.prompt, "folder": f.folder, "timeout": f.timeout,
+		"preset": f.preset, "dest_root": f.destRoot,
 	}
 }
 
@@ -325,6 +341,7 @@ func (a *App) settingsSchedulePtrs() map[string]*string {
 		"source": &f.source, "dest": &f.dest, "match": &f.match, "op": &f.op,
 		"script_path": &f.scriptPath, "inline": &f.inline,
 		"prompt": &f.prompt, "folder": &f.folder, "timeout": &f.timeout,
+		"preset": &f.preset, "dest_root": &f.destRoot,
 		"date_stamp": a.settingsScheduleDateStampPtr(),
 	}
 }
@@ -388,11 +405,27 @@ func (a *App) settingsScheduleSave() {
 		j.TimeoutSec, _ = strconv.Atoi(strings.TrimSpace(f.timeout))
 	case "助手执行":
 		j.Action = schedule.ActionAssistant
-		j.Prompt = strings.TrimSpace(f.prompt)
-		j.Folder = strings.TrimSpace(f.folder)
 		j.TimeoutSec, _ = strconv.Atoi(strings.TrimSpace(f.timeout))
+		presetID := forms.PresetIDFromLabel(f.preset)
+		folder := strings.TrimSpace(f.folder)
+		dest := strings.TrimSpace(f.destRoot)
+		if presetID != "" {
+			if err := schedule.ApplyPreset(&j, presetID, folder, dest); err != nil {
+				a.statusMsg = err.Error()
+				return
+			}
+			j.Name = name
+			if p := strings.TrimSpace(f.prompt); p != "" {
+				j.Prompt = p
+			}
+		} else {
+			j.Preset = ""
+			j.Prompt = strings.TrimSpace(f.prompt)
+			j.Folder = folder
+			j.DestDir = dest
+		}
 		if j.Prompt == "" {
-			a.statusMsg = "请填写助手提示词"
+			a.statusMsg = "请填写助手提示词或选择预设"
 			return
 		}
 	default:
@@ -445,5 +478,45 @@ func weekdaysFromLabel(label string) []int {
 		return []int{int(time.Sunday), int(time.Saturday)}
 	default:
 		return nil
+	}
+}
+
+// settingsScheduleApplyPresetIfNeeded fills prompt/folder when the preset
+// select changes to a built-in template. Switching back to 自定义 does not
+// clear an edited prompt.
+func (a *App) settingsScheduleApplyPresetIfNeeded() {
+	f := &a.settingsSchedule
+	if f.action != "助手执行" {
+		f.lastPresetApplied = f.preset
+		return
+	}
+	if f.preset == f.lastPresetApplied {
+		return
+	}
+	f.lastPresetApplied = f.preset
+	id := forms.PresetIDFromLabel(f.preset)
+	if id == "" {
+		return
+	}
+	var j schedule.Job
+	if err := schedule.ApplyPreset(&j, id, strings.TrimSpace(f.folder), strings.TrimSpace(f.destRoot)); err != nil {
+		return
+	}
+	f.prompt = j.Prompt
+	f.folder = j.Folder
+	f.destRoot = j.DestDir
+	if strings.TrimSpace(f.name) == "" {
+		f.name = j.Name
+	}
+}
+
+func (a *App) settingsScheduleFillClassifyPreset() {
+	var j schedule.Job
+	_ = schedule.ApplyPreset(&j, schedule.PresetClassifyDownloads, "", "")
+	a.settingsSchedule = settingsScheduleForm{
+		name: j.Name, time: "19:00", days: "每天", action: "助手执行",
+		preset: forms.PresetLabelFromID(j.Preset),
+		prompt: j.Prompt, folder: j.Folder, destRoot: j.DestDir,
+		timeout: "600",
 	}
 }

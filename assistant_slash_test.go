@@ -214,3 +214,37 @@ func TestAssistantSlashStopWhileRunningDraft(t *testing.T) {
 		t.Fatalf("stop: stopped=%v status=%q", stopped, a.assist.status)
 	}
 }
+
+func TestAssistSlashClassifyAndRunNow(t *testing.T) {
+	a := &App{}
+	all := a.assistSlashCatalog()
+	var classify, runNow *assistSlashItem
+	for i := range all {
+		switch all[i].ID {
+		case "classify":
+			classify = &all[i]
+		case "run-now":
+			runNow = &all[i]
+		}
+	}
+	if classify == nil || classify.Kind != slashFill || !strings.Contains(classify.Fill, "按内容分类") {
+		t.Fatalf("classify %+v", classify)
+	}
+	got := assistSlashFilter(all, "分类")
+	if len(got) != 1 || got[0].ID != "classify" {
+		t.Fatalf("filter 分类: %+v", got)
+	}
+	got = assistSlashFilter(all, "立即")
+	if len(got) != 1 || got[0].ID != "run-now" {
+		t.Fatalf("filter 立即: %+v", got)
+	}
+	if runNow == nil || runNow.Kind != slashAction || runNow.Run == nil {
+		t.Fatalf("run-now %+v", runNow)
+	}
+	// No jobs → opens schedule settings.
+	useTempScheduleStore(t)
+	a.assistSlashApply(*runNow)
+	if !a.settingsOpen || a.settingsUI.Category != "schedule" {
+		t.Fatalf("open schedule: open=%v cat=%q", a.settingsOpen, a.settingsUI.Category)
+	}
+}

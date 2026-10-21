@@ -45,6 +45,8 @@ type Job struct {
 	TimeoutSec   int    `json:"timeout_sec,omitempty"`
 
 	// Assistant: natural-language prompt + optional folder.
+	// Preset is a built-in template id (classify_downloads, …); empty = custom prompt.
+	Preset string `json:"preset,omitempty"`
 	Prompt string `json:"prompt,omitempty"`
 	Folder string `json:"folder,omitempty"`
 

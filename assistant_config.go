@@ -419,5 +419,6 @@ func sunvaleBuiltinToolNames() []string {
 		"current_selection", "navigate_to", "offer_choices", "present_form",
 		"remember", "forget", "memory_list",
 		"schedule_list", "schedule_create", "schedule_update", "schedule_delete", "schedule_run",
+		"assistant_task_run",
 	}
 }

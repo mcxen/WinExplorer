@@ -64,6 +64,7 @@
 | A2 | OpenUI/Markdown 遗留修复 | 中 | 已完成 | 05 C1–C5 | — | `fix/assistant-render` |
 | A3 | 回复中的目录树组件 | 低 | 已完成 | 05 B | A2 | `feat/assistant-tree` |
 | A4 | 助手配置迁入系统设置 | 高 | 已完成 | [06](docs/specs/06-assistant-settings.md) | A1–A3、R6 | `feat/assistant-settings` |
+| FX1 | AI 处理动效可见（助手旁呼吸光/滑出） | 高 | 已完成 | 本文 / `docs/UI.md` §6 | — | `feat/ai-fx-visible` |
 | R2 | Entry 移出 state.go | 中 | 已完成 | 03 §1 | — | `refactor/entry` |
 | R3 | fsops 剩余：freeName/placeItem/absPath/undo 类型 | 中 | 已完成 | 03 §2 | — | `refactor/fsops-rest` |
 | R4 | 拆分 diskhealth.go | 低 | 已完成 | 03 §5 | F1 | `refactor/diskhealth-split` |
@@ -218,3 +219,8 @@
 | 助手去掉访问路径限制 | `bf9ae80` |
 | 地址栏：输入解析与补全、修复无法输入、面包屑菜单、行内错误 | `affef9a`、`d4bd849`、`e53b077` |
 | 技术方案文档 `docs/specs/` | `6c23c7c` |
+
+### FX1 AI 处理动效可见（助手旁呼吸光/滑出）
+- **目标**：助手打开时，文件行右侧呼吸光与移出滑出仍清晰可见，不被右侧助手窗格遮挡；快操作也至少亮满 `aiFxMinGlow`。
+- **范围**：`aifx.go`（右缘内缩渐变带、`endRun` 冷却）、`files.go`（文件窗格 `Clip`）、`aifx_*_test.go`；截图 `docs/assets/shots/FX1/`；更新 `docs/UI.md` §6。
+- **验收**：助手打开时 UI 测试在行右缘采到强调色、助手区内无溢色；滑出后行从列表消失；`go test -count=1 -run TestAIFx ./...` 通过。

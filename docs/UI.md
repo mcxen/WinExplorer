@@ -134,7 +134,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 | 动效 | 触发 | 时长 | 曲线 | 数值 | 实现 |
 | --- | --- | --- | --- | --- | --- |
-| AI 处理呼吸光 | 助手工具正在处理某路径（`aiFx.markBusy`） | 淡入 200ms，周期 1.6s（`aiFxPulse`），至少亮 900ms（`aiFxMinGlow`） | 余弦呼吸 | 强度 0.35–1；行左 30% 透明，右侧渐变到 `#4CC2FF`（深色为强调色）α 0.42×强度，**右锚定** | `aifx.go:breath`、`aiFxRow`、`paintAIGlow` |
+| AI 处理呼吸光 | 助手工具正在处理某路径（`aiFx.markBusy`）；`endRun` 后仍亮满 `aiFxMinGlow` | 淡入 200ms，周期 1.6s（`aiFxPulse`），至少亮 900ms（`aiFxMinGlow`） | 余弦呼吸 | 强度 0.35–1；贴文件行**右侧内缘**（列表区内、助手窗格左侧）宽 64 DIP 的渐变带，距行右缘内缩 10 DIP（`aiFxGlowBand`/`aiFxGlowInset`），浅色端点 `#4CC2FF` α 0.55×强度（深色为强调色）；文件窗格 `Clip` 防止行溢出盖住助手 | `aifx.go:breath`、`aiFxRow`、`paintAIGlow`；截图 `docs/assets/shots/FX1/` |
 | 重命名高亮 | 助手改名完成（`markRenamed`） | 1.2s（`aiFxFlash`） | 线性衰减 | 名称颜色由强调色线性回到原色 | `aifx.go:look`、`flashColor` |
 | 移出（删除/移动） | 项目被移走（`markLeaving`） | 滑出 340ms（`aiFxSlide`）+ 折叠 320ms（`aiFxFold`） | 滑出 easeIn（t²），折叠 easeOut | 左移 1.05×行宽、透明度 1→0；行高 → 0（磁贴保留格位） | `aifx.go:look`、`aiFxRow`；`pendingLeave` 让刷新等动画结束 |
 | 减少动画 | `ReduceMotion` 开 | — | — | 呼吸光静止为 0.8；无滑出/折叠，到时直接消失 | `aifx.go:aiFxRow` |
@@ -149,6 +149,8 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 拖动文件悬停标签自动切换 | 文件拖动在非当前标签上持续悬停 | 600ms | 到时切换 | 离开或放下清零；等待期间用 `colorHover()`，用 `c.After` 只请求到时帧 | `chrome_tab.go:tabDropHoverFrame` |
 
 ![呼吸光](assets/ui/motion-glow.png) ![移出](assets/ui/motion-slideout.png) ![改名高亮](assets/ui/motion-rename-flash.png)
+
+助手打开时的验证截图：![助手旁呼吸光](assets/shots/FX1/01-glow-assist-open.png) ![移出中](assets/shots/FX1/02-slideout-mid.png) ![改名高亮](assets/shots/FX1/03-rename-flash.png)
 
 ![流式回复](assets/ui/assistant-streaming.png) ![内联卡片](assets/ui/assistant-card.png) ![地址补全](assets/ui/address-autocomplete.png)
 

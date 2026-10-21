@@ -224,6 +224,8 @@ type App struct {
 	settingsAssist settingsAssistForm
 	// settingsSchedule holds transient form fields for the 定时任务 page.
 	settingsSchedule settingsScheduleForm
+	// settingsScheduleDateStampStr mirrors dateStamp for the shared switch painter.
+	settingsScheduleDateStampStr *string
 	// bootLogged reports the first-frame timing log has fired.
 	bootLogged bool
 	// diskWatch stops the 磁盘健康 page's background probe, while that page

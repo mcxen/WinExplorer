@@ -45,7 +45,7 @@ func TestOpenUIStreamAndHistory(t *testing.T) {
 }
 
 func TestAssistantInstructionMentionsOpenUI(t *testing.T) {
-	for _, want := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "```openui", "ToAssistant", "offer_choices", "CardHeader", "TreeItem"} {
+	for _, want := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "```openui", "ToAssistant", "offer_choices", "present_form", "CardHeader", "TreeItem", "TimeField", "PathField", "DayChips"} {
 		if !strings.Contains(assistantInstruction, want) {
 			t.Fatalf("instruction missing %s", want)
 		}

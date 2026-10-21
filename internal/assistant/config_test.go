@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -51,5 +52,34 @@ func TestFetchProviderModels(t *testing.T) {
 	}
 	if want := []string{"m1", "m2"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("models %v, want %v", got, want)
+	}
+}
+
+func TestPrefsSkillsAndJSON(t *testing.T) {
+	prefs := Prefs{
+		Autopilot: true, ExtraInstruction: "附加",
+		DisabledSkills: []string{SkillMemory},
+	}
+	if !SkillDisabled(prefs, SkillMemory) || SkillDisabled(prefs, SkillFiles) {
+		t.Fatalf("skill flags: %+v", prefs)
+	}
+	prefs.DisabledSkills = SetSkillDisabled(prefs.DisabledSkills, SkillFiles, true)
+	prefs.DisabledSkills = SetSkillDisabled(prefs.DisabledSkills, SkillMemory, false)
+	if SkillDisabled(prefs, SkillMemory) || !SkillDisabled(prefs, SkillFiles) {
+		t.Fatalf("after toggle: %v", prefs.DisabledSkills)
+	}
+	data, err := json.Marshal(Config[struct{}]{Prefs: prefs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var round Config[struct{}]
+	if err := json.Unmarshal(data, &round); err != nil {
+		t.Fatal(err)
+	}
+	if round.Prefs.ExtraInstruction != "附加" || !round.Prefs.Autopilot {
+		t.Fatalf("round-trip prefs: %+v", round.Prefs)
+	}
+	if len(round.Prefs.DisabledSkills) != 1 || round.Prefs.DisabledSkills[0] != SkillFiles {
+		t.Fatalf("round-trip skills: %v", round.Prefs.DisabledSkills)
 	}
 }

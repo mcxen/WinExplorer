@@ -21,10 +21,49 @@ type Provider struct {
 }
 
 // Prefs contains the assistant pane's model-independent settings.
+// ExtraInstruction is appended to the built-in Instruction at run time.
+// DisabledSkills lists capability ids (files, memory, archive) the user turned off.
 type Prefs struct {
-	Width     float32 `json:"width,omitempty"`
-	Full      bool    `json:"full,omitempty"`
-	Autopilot bool    `json:"autopilot,omitempty"`
+	Width            float32  `json:"width,omitempty"`
+	Full             bool     `json:"full,omitempty"`
+	Autopilot        bool     `json:"autopilot,omitempty"`
+	ExtraInstruction string   `json:"extraInstruction,omitempty"`
+	DisabledSkills   []string `json:"disabledSkills,omitempty"`
+}
+
+// SkillFiles, SkillMemory and SkillArchive are Prefs.DisabledSkills ids.
+const (
+	SkillFiles   = "files"
+	SkillMemory  = "memory"
+	SkillArchive = "archive"
+)
+
+// SkillDisabled reports whether id is listed in prefs.DisabledSkills.
+func SkillDisabled(prefs Prefs, id string) bool {
+	for _, s := range prefs.DisabledSkills {
+		if s == id {
+			return true
+		}
+	}
+	return false
+}
+
+// SetSkillDisabled returns a copy of skills with id added or removed.
+func SetSkillDisabled(skills []string, id string, disabled bool) []string {
+	out := make([]string, 0, len(skills)+1)
+	for _, s := range skills {
+		if s == id {
+			continue
+		}
+		out = append(out, s)
+	}
+	if disabled {
+		out = append(out, id)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // Config is assistant.json. The generic secret rows belong to the file but

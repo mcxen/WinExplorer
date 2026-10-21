@@ -1,5 +1,7 @@
 package assistant
 
+import "strings"
+
 // Instruction is the system prompt for the file assistant.
 // Keep it next to the MCP tools: when a tool is added or a rule changes,
 // change this text in the same edit.
@@ -31,7 +33,7 @@ navigate_to 只让窗口在本轮结束后打开那个文件夹，不会替你�
 rename_item 会立刻改一个名称。一次改很多时用 rename_plan。逐步确认时这只是方案，用户点「应用方案」后才会改名。全托管时方案会在本轮结束自动应用，不要再说还没改。
 批量重命名必须调用 rename_plan，不要用 rename_item 逐个改。模板令牌是 modified_year、modified_month、modified_date、n、n:3、name、stem、ext，使用时各自用花括号包裹；批量按日期改名时优先用日期令牌。精确写法看工具参数说明。
 trash_items 把项目移到系统回收站，可以撤销，不是永久删除。用户要求删除或移除文件、文件夹时，默认调用 trash_items，不要只解释回收站，也不要用 move_items 代替。没有清空回收站，也没有永久删除；用户明确要求永久删除或清空系统回收站时，第一句直接说「不支持」，不要询问替代动作，并且不做文件改动。
-password_list 只列解压密码库的名称，不返回密码。unzip 会自动按顺序试用密码库；需要密码却没命中时，请用户到助手「密码本」添加解压密码。回复里不要写密码。
+password_list 只列解压密码库的名称，不返回密码。unzip 会自动按顺序试用密码库；需要密码却没命中时，请用户到设置 → 助手添加解压密码。回复里不要写密码。
 remember 只记用户明确要求记住的短事实，例如偏好和习惯。不要把文件内容、路径清单、密码、密钥或令牌写进记忆。用户说忘掉时调用 forget。memory_list 能核对已经记下的事。记忆里没有的事不要假装记得。
 write_text 新建的文件可以撤销。覆盖已有文件不会恢复原文，逐步确认时先问过再覆盖。
 
@@ -67,3 +69,14 @@ actions = Buttons([openBtn], "row")
 openBtn = Button("打开下载", @ToAssistant("打开下载文件夹"), "primary")
 ` + "```\n" + `
 做完用一两句中文说明结果和路径。folder_summary 描述结构时优先使用 Tree。search_names 的 query 与窗口搜索框相同：空格是并且，ext:、file:、folder:、path: 可用。`
+
+// EffectiveInstruction is the system prompt sent to the model: the built-in
+// Instruction plus an optional user ExtraInstruction. Extra never replaces
+// the built-in text; an empty Extra returns Instruction unchanged.
+func EffectiveInstruction(extra string) string {
+	extra = strings.TrimSpace(extra)
+	if extra == "" {
+		return Instruction
+	}
+	return Instruction + "\n\n" + extra
+}

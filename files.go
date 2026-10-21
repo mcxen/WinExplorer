@@ -43,8 +43,11 @@ func (a *App) listRowH() float32 {
 // folder in the active view: details, a compact list, or one of the four
 // icon sizes. Only visibleEntries() is rendered.
 func (a *App) filePane(c *ui.Context) {
+	// Clip so a details row wider than the pane cannot paint under the
+	// assistant beside it; the AI glow lives on the row's right edge
+	// inside this box (aifx.go), left of that pane.
 	pane := ui.Column(c).Grow(1).FillHeight().MinWidth(0).
-		Background(colorContent())
+		Background(colorContent()).Clip()
 	// macOS routes Cmd+C/X/V through the Edit menu, which reaches the view
 	// as an edit command rather than a key press; every row and tile takes
 	// those (bindItemInput), so they work while the listing has the focus.

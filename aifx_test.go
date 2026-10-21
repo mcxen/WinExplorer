@@ -77,13 +77,28 @@ func TestAIFxRenameFlashAndRunEnd(t *testing.T) {
 	if s.look("/d/other.jpg").glow != 0 {
 		t.Fatal("cleared row still glows")
 	}
+	// old.jpg has already glowed past the minimum; endRun puts it out.
 	s.endRun()
 	if s.look("/d/old.jpg").glow != 0 {
-		t.Fatal("run end should put the lights out")
+		t.Fatal("run end should put a fully glowed light out")
 	}
 	clk.add(aiFxFlash)
 	if l := s.look("/d/new.jpg"); l.any() {
 		t.Fatalf("flash should be over: %+v", l)
+	}
+}
+
+func TestAIFxEndRunKeepsMinimumGlow(t *testing.T) {
+	s, clk := newTestFx()
+	s.markBusy("/d/fast.txt")
+	clk.add(100 * time.Millisecond)
+	s.endRun()
+	if l := s.look("/d/fast.txt"); l.glow <= 0 || !l.live {
+		t.Fatalf("fast run should keep glowing through the minimum: %+v", l)
+	}
+	clk.add(aiFxMinGlow - 100*time.Millisecond)
+	if l := s.look("/d/fast.txt"); l.glow != 0 {
+		t.Fatalf("glow should end once the minimum is reached: %+v", l)
 	}
 }
 
@@ -95,6 +110,18 @@ func TestAIFxBreathRange(t *testing.T) {
 	}
 	if breath(0) != 0 {
 		t.Fatal("glow should fade in from nothing")
+	}
+}
+
+func TestAIFxGlowBandFitsRow(t *testing.T) {
+	// A narrow tile still gets a band that stays inside its box.
+	band := aiFxGlowBand
+	inset := aiFxGlowInset
+	if band+inset > 80 {
+		t.Fatalf("glow band+inset %v too wide for a small icon tile", band+inset)
+	}
+	if aiFxGlowAlpha <= 0.42 || aiFxGlowAlpha > 1 {
+		t.Fatalf("glow tip alpha %v out of the intended range", aiFxGlowAlpha)
 	}
 }
 

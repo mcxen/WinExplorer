@@ -17,22 +17,38 @@ import (
 // trashed out of the folder slides out to the left and folds its row shut
 // before the reload drops it. The store is keyed by clean absolute path and
 // guarded by its own lock: the tools write it, the frame reads it.
+//
+// The glow is drawn on the row's own right edge inside the listing (left of
+// the assistant pane), inset a few DIPs so the pane's divider never covers
+// the tip. endRun keeps a path lit through aiFxMinGlow so a fast tool call
+// is still seen before the lights go out.
 
 const (
 	// aiFxMinGlow is how long a row glows before it may slide away: the
 	// file calls finish in microseconds, and a row that vanishes the frame
-	// it lit up says nothing.
+	// it lit up says nothing. endRun also keeps busy rows lit this long.
 	aiFxMinGlow = 900 * time.Millisecond
 	aiFxSlide   = 340 * time.Millisecond
 	aiFxFold    = 320 * time.Millisecond
 	aiFxFlash   = 1200 * time.Millisecond
 	// aiFxPulse is one breath of the glow.
 	aiFxPulse = 1600 * time.Millisecond
+	// aiFxGlowBand is the glow's footprint on the row's right edge; wider
+	// rows still keep the light there rather than washing the whole line.
+	aiFxGlowBand float32 = 64
+	// aiFxGlowInset pulls the tip left of the row's right edge so the
+	// assistant's divider does not sit on top of it.
+	aiFxGlowInset float32 = 10
+	// aiFxGlowAlpha is the tip's opacity at full breath.
+	aiFxGlowAlpha float32 = 0.55
 )
 
 type aiFxStore struct {
-	mu      sync.Mutex
-	busy    map[string]time.Time
+	mu   sync.Mutex
+	busy map[string]time.Time
+	// cooling holds paths endRun kept lit until aiFxMinGlow after they
+	// first glowed; busy is cleared so a new run can mark them again.
+	cooling map[string]time.Time
 	leaving map[string]time.Time
 	// renamed holds the time the new name was first drawn; zero until then,
 	// as the listing may reload long after the rename itself.
@@ -45,6 +61,7 @@ var aiFx = newAIFx()
 func newAIFx() *aiFxStore {
 	return &aiFxStore{
 		busy:    map[string]time.Time{},
+		cooling: map[string]time.Time{},
 		leaving: map[string]time.Time{},
 		renamed: map[string]time.Time{},
 		now:     time.Now,
@@ -63,6 +80,7 @@ func (s *aiFxStore) markBusy(paths ...string) {
 			continue
 		}
 		k := aiFxKey(p)
+		delete(s.cooling, k)
 		if _, ok := s.busy[k]; !ok {
 			s.busy[k] = now
 		}
@@ -75,7 +93,9 @@ func (s *aiFxStore) markBusy(paths ...string) {
 func (s *aiFxStore) clearBusy(paths ...string) {
 	s.mu.Lock()
 	for _, p := range paths {
-		delete(s.busy, aiFxKey(p))
+		k := aiFxKey(p)
+		delete(s.busy, k)
+		delete(s.cooling, k)
 	}
 	s.mu.Unlock()
 	repaint()
@@ -87,9 +107,15 @@ func (s *aiFxStore) markLeaving(path string) {
 	s.mu.Lock()
 	k := aiFxKey(path)
 	at := s.now()
-	if lit, ok := s.busy[k]; ok && lit.Add(aiFxMinGlow).After(at) {
+	lit, ok := s.busy[k]
+	if !ok {
+		lit, ok = s.cooling[k]
+	}
+	if ok && lit.Add(aiFxMinGlow).After(at) {
 		at = lit.Add(aiFxMinGlow)
 	}
+	delete(s.busy, k)
+	delete(s.cooling, k)
 	s.leaving[k] = at
 	s.mu.Unlock()
 	repaint()
@@ -107,10 +133,17 @@ func (s *aiFxStore) markRenamed(from, to string) {
 	repaint()
 }
 
-// endRun puts every light out when the assistant's run ends; the slides and
-// flashes play on.
+// endRun puts every light out when the assistant's run ends, but keeps a
+// path that has not yet reached aiFxMinGlow breathing until it has, so a
+// fast rename or trash is still seen. The slides and flashes play on.
 func (s *aiFxStore) endRun() {
 	s.mu.Lock()
+	now := s.now()
+	for k, lit := range s.busy {
+		if lit.Add(aiFxMinGlow).After(now) {
+			s.cooling[k] = lit
+		}
+	}
 	s.busy = map[string]time.Time{}
 	s.mu.Unlock()
 	repaint()
@@ -138,7 +171,7 @@ func (l aiFxLook) any() bool { return l.live || l.gone }
 func (s *aiFxStore) look(path string) aiFxLook {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.busy)+len(s.leaving)+len(s.renamed) == 0 {
+	if len(s.busy)+len(s.cooling)+len(s.leaving)+len(s.renamed) == 0 {
 		return aiFxLook{}
 	}
 	now := s.now()
@@ -159,9 +192,25 @@ func (s *aiFxStore) look(path string) aiFxLook {
 		}
 		l.live, l.moving = true, true
 	}
-	if lit, ok := s.busy[k]; ok && l.slide == 0 {
-		l.glow = breath(now.Sub(lit))
-		l.live = true
+	if l.slide == 0 {
+		if lit, ok := s.busy[k]; ok {
+			l.glow = breath(now.Sub(lit))
+			l.live = true
+		} else if lit, ok := s.cooling[k]; ok {
+			if now.Sub(lit) < aiFxMinGlow {
+				l.glow = breath(now.Sub(lit))
+				l.live = true
+			} else {
+				delete(s.cooling, k)
+			}
+		}
+	}
+	// A path waiting out its minimum glow before the slide still breathes.
+	if at, ok := s.leaving[k]; ok && l.slide == 0 && now.Before(at) {
+		if lit := at.Add(-aiFxMinGlow); now.After(lit) || now.Equal(lit) {
+			l.glow = breath(now.Sub(lit))
+			l.live = true
+		}
 	}
 	if at, ok := s.renamed[k]; ok {
 		if at.IsZero() {
@@ -264,20 +313,31 @@ func aiFxRow(c *ui.Context, el ui.Element, path string, full, radius float32) ai
 	return l
 }
 
-// paintAIGlow is the breathing light: clear on the left, gathering into
-// the accent toward the row's right edge.
+// paintAIGlow is the breathing light on the row's right edge inside the
+// listing: a fixed-width band ending aiFxGlowInset before the edge, so the
+// assistant pane beside the list never covers the tip.
 func paintAIGlow(p *ui.Painter, r ui.Rect, strength, radius float32) {
 	acc := colorAccent()
 	tip := ui.Hex("#4CC2FF")
 	if darkMode() {
 		tip = acc
 	}
-	// The left 30 % stays clear; the gradient builds over the rest.
-	start := r.W * 0.3
-	band := ui.Rect{X: r.X + start, Y: r.Y, W: r.W - start, H: r.H}
+	bandW := aiFxGlowBand
+	if max := r.W - aiFxGlowInset; max < bandW {
+		bandW = max
+	}
+	if bandW <= 0 {
+		return
+	}
+	band := ui.Rect{
+		X: r.X + r.W - aiFxGlowInset - bandW,
+		Y: r.Y,
+		W: bandW,
+		H: r.H,
+	}
 	p.FillGradient(band, ui.LinearGradient{
 		From:  acc.Alpha(0),
-		To:    tip.Alpha(0.42 * strength),
+		To:    tip.Alpha(aiFxGlowAlpha * strength),
 		Angle: 90,
 	}, radius)
 }

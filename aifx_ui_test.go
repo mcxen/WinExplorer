@@ -6,15 +6,22 @@ import (
 	"time"
 )
 
-// TestAIFxRowsInWindow runs the feedback in a laid-out window: a row the
-// assistant works on lights up toward its right edge, and once moved away
-// it slides out and leaves the listing before any reload.
+// TestAIFxRowsInWindow runs the feedback in a laid-out window with the
+// assistant open: a row the assistant works on lights up on its own right
+// edge (left of the pane), and once moved away it slides out and leaves
+// the listing before any reload.
 func TestAIFxRowsInWindow(t *testing.T) {
 	a, tt, dir := keynavWindow(t, 3)
 	saved := aiFx
 	aiFx = newAIFx()
 	aiFx.now = tt.Now
 	t.Cleanup(func() { aiFx = saved })
+
+	a.assistantOpen = true
+	a.assist.ensure()
+	a.assist.width = 380
+	tt.Frame()
+	tt.Frame()
 
 	target := filepath.Join(dir, "f001.txt")
 	r, ok := tt.Find("f001.txt")
@@ -23,20 +30,33 @@ func TestAIFxRowsInWindow(t *testing.T) {
 	}
 	y := int(r.Y + r.H/2)
 	img := tt.Image()
-	right := img.Bounds().Dx() - 40
-	_, _, b0, _ := img.At(right, y).RGBA()
+	// Sample inside the listing, on the glow band tip — left of the
+	// assistant, not at the window's absolute right.
+	tipX := int(r.X + r.W - aiFxGlowInset - 4)
+	if tipX >= img.Bounds().Dx() {
+		t.Fatalf("row right edge %d is past the window", tipX)
+	}
+	_, _, b0, _ := img.At(tipX, y).RGBA()
 
 	aiFx.markBusy(target)
 	tt.Frame()                // the app's repaint() is a no-op under the tester
 	tt.Advance(aiFxPulse / 2) // the breath at its fullest
 	img = tt.Image()
-	rr, gg, bb, _ := img.At(right, y).RGBA()
+	rr, gg, bb, _ := img.At(tipX, y).RGBA()
 	if !(bb < b0 || rr < bb) || rr>>8 > 0xE0 {
 		t.Fatalf("no accent glow at the row's right edge: rgb %d %d %d", rr>>8, gg>>8, bb>>8)
 	}
 	lr, _, lb, _ := img.At(int(r.X)+4, y).RGBA()
 	if lr>>8 < 0xF0 || lb>>8 < 0xF0 {
 		t.Fatalf("the glow should leave the row's left side clear: %d %d", lr>>8, lb>>8)
+	}
+	// The assistant chrome to the right of the row must stay undyed.
+	assistX := int(r.X+r.W) + 20
+	if assistX < img.Bounds().Dx() {
+		ar, ag, ab, _ := img.At(assistX, y).RGBA()
+		if ab>>8 > ar>>8+10 && ab>>8 > ag>>8+10 {
+			t.Fatalf("glow spilled into the assistant pane: rgb %d %d %d", ar>>8, ag>>8, ab>>8)
+		}
 	}
 
 	aiFx.markLeaving(target)

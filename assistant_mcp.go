@@ -438,6 +438,7 @@ func newSunvaleServer() *mcp.Server {
 	addSunvaleTool(s, server, &mcp.Tool{Name: "forget", Description: "按原文忘掉一条记忆。有多条相似时先让用户说完整的一句。"}, s.forget)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "memory_list", Description: "列出已经记住的短事实。"}, s.memoryList)
 	registerScheduleTools(s, server)
+	registerAssistantTaskTools(s, server)
 	return server
 }
 

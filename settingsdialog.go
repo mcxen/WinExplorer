@@ -127,6 +127,7 @@ func (a *App) settingsCategories() []components.SettingsCategory {
 		{ID: "tray", Title: "托盘", Icon: lucide.HardDrive(), Groups: a.settingsTrayGroups()},
 		{ID: "extensions", Title: "扩展", Icon: lucide.Puzzle(), Groups: a.settingsExtensionGroups()},
 		{ID: "plugins", Title: "插件", Icon: lucide.Blocks(), Groups: a.settingsPluginGroups()},
+		{ID: "assistant", Title: "助手", Icon: lucide.Bot(), Groups: a.settingsAssistantGroups()},
 		{ID: "updates", Title: "更新", Icon: lucide.RefreshCw(), Groups: a.settingsUpdateGroups()},
 	}
 }

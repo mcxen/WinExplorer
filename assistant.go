@@ -109,15 +109,17 @@ type assistantUI struct {
 	// width is the pane in DIPs. full hides the file list so the chat uses
 	// the whole area right of the sidebar. autopilot lets the model finish
 	// ordinary file work without a confirmation on each step.
-	width          float32
-	full           bool
-	autopilot      bool
-	savedFull      bool
-	savedAutopilot bool
-	widthDirty     bool
-	widthDragging  bool
-	files          []aiAttach
-	picking        bool
+	width            float32
+	full             bool
+	autopilot        bool
+	extraInstruction string
+	disabledSkills   []string
+	savedFull        bool
+	savedAutopilot   bool
+	widthDirty       bool
+	widthDragging    bool
+	files            []aiAttach
+	picking          bool
 }
 
 func (a *App) toggleAssistant() { a.assistantOpen = !a.assistantOpen }
@@ -144,17 +146,9 @@ func (a *App) assistantPane(c *ui.Context) {
 		body := ui.Column(c).Grow(1).FillHeight().MinWidth(0).MinHeight(0)
 		body.Children(func() {
 			a.assistantHeader(c)
-			if a.assist.showProv || a.assist.showBook || a.assist.showHist {
+			if a.assist.showHist {
 				ui.Scroll(c).FillWidth().Shrink(0).MaxHeight(280).Background(c.Theme().Surface).Children(func() {
-					if a.assist.showProv {
-						a.assistantProviders(c)
-					}
-					if a.assist.showBook {
-						a.assistantPasswords(c)
-					}
-					if a.assist.showHist {
-						a.assistantRecords(c)
-					}
+					a.assistantRecords(c)
 				})
 				ui.Box(c).Height(1).FillWidth().Shrink(0).Background(colorDivider())
 			}
@@ -238,8 +232,9 @@ func (a *App) assistantHeader(c *ui.Context) {
 		ui.Text(c, a.assist.sessionLabel()).FontSize(13).FontWeight(600).TextColor(colorText()).
 			SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Margin(0, 0, 0, 6)
 		a.assistantHeaderIcon(c, lucide.MessagesSquare(), "会话", a.assist.showHist, func() { a.assist.togglePanel("hist") })
-		a.assistantHeaderIcon(c, lucide.KeyRound(), "供应商", a.assist.showProv, func() { a.assist.togglePanel("prov") })
-		a.assistantHeaderIcon(c, lucide.Lock(), "解压密码", a.assist.showBook, func() { a.assist.togglePanel("book") })
+		if components.IconButton(c, lucide.Settings2(), "助手设置", components.IconButtonPlain).Clicked() {
+			a.openAssistantSettings()
+		}
 		fullIcon, fullLabel := lucide.Maximize2(), "全屏"
 		if a.assist.full {
 			fullIcon, fullLabel = lucide.Minimize2(), "还原"
@@ -843,85 +838,29 @@ func (u *assistantUI) addFiles(paths []string) int {
 }
 
 func (a *App) assistantProviders(c *ui.Context) {
-	a.assist.refreshConfig()
 	ui.Column(c).FillWidth().Padding(4, 8).Gap(4).Children(func() {
-		for _, p := range a.assist.providers {
-			id := p.ID
-			row := ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center)
-			row.Children(func() {
-				label := p.Name
-				if p.ID == a.assist.activeID {
-					label = "● " + label
-				}
-				if components.Button(c, label, components.ButtonGhost).Clicked() {
-					a.assist.refreshConfig()
-					a.assist.activeID = id
-					a.assist.save()
-				}
-				if components.Button(c, "删除", components.ButtonGhost).Clicked() {
-					a.assist.deleteProvider(id)
-				}
-			})
+		ui.Text(c, "供应商已迁到系统设置。").FontSize(12).TextColor(colorText()).Wrap()
+		if components.Button(c, "打开助手设置", components.ButtonSecondary).Clicked() {
+			a.openAssistantSettings()
 		}
-		a.assistantField(c, "名称", &a.assist.pName, "OpenAI")
-		a.assistantField(c, "接口", &a.assist.pURL, "https://api.openai.com/v1")
-		a.assistantField(c, "模型", &a.assist.pModel, "gpt-4o-mini")
-		a.assistantField(c, "密钥", &a.assist.pKey, "sk-…")
-		if components.Button(c, "添加供应商", components.ButtonSecondary).Clicked() {
-			a.assist.addProvider()
-		}
-		ui.Text(c, "密钥只写在本机配置里，不会出现在回复中。").FontSize(11).TextColor(colorMuted()).Wrap()
 	})
 }
 
 func (a *App) assistantPasswords(c *ui.Context) {
 	ui.Column(c).FillWidth().Padding(4, 8).Gap(4).Children(func() {
-		ui.Text(c, "解压密码").FontSize(12).FontWeight(600).TextColor(colorText())
-		ui.Text(c, "选中归档执行「全部解压」时，按这里从上到下试；密码不会发给模型。").
-			FontSize(11).TextColor(colorMuted()).Wrap()
-		if len(a.assist.passwords) == 0 {
-			ui.Text(c, "还没有解压密码。").FontSize(11).TextColor(colorMuted()).Wrap()
-		}
-		for i := range a.assist.passwords {
-			pw := a.assist.passwords[i]
-			row := ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center)
-			row.Children(func() {
-				label := pw.Label
-				if label == "" {
-					label = "解压密码 " + itoa(i+1)
-				}
-				ui.Text(c, label).FontSize(12).TextColor(colorText()).
-					SingleLine().Grow(1).MinWidth(0)
-				if components.Button(c, "删除", components.ButtonGhost).Clicked() {
-					a.assist.deleteArchivePassword(pw.ID)
-				}
-			})
-		}
-		a.assistantField(c, "名称", &a.assist.pwName, "工作压缩包")
-		secret := components.TextBox(c, &a.assist.pwSecret, components.TextBoxOptions{}).
-			Grow(1).MinWidth(0).Height(28).FontSize(12).Placeholder("解压密码").
-			Label("解压密码").Password()
-		_ = secret
-		if components.Button(c, "保存解压密码", components.ButtonSecondary).Clicked() {
-			a.assist.addArchivePassword()
-			a.statusMsg = "已保存解压密码"
+		ui.Text(c, "解压密码本请在设置中管理。").FontSize(12).TextColor(colorText()).Wrap()
+		if components.Button(c, "打开助手设置", components.ButtonSecondary).Clicked() {
+			a.openAssistantSettings()
 		}
 	})
 }
 
 func (u *assistantUI) togglePanel(which string) {
-	on := false
-	switch which {
-	case "prov":
-		on = !u.showProv
-	case "book":
-		on = !u.showBook
-	case "hist":
-		on = !u.showHist
+	if which == "hist" {
+		u.showHist = !u.showHist
+		return
 	}
-	u.showProv = which == "prov" && on
-	u.showBook = which == "book" && on
-	u.showHist = which == "hist" && on
+	u.showHist = false
 }
 
 // noteChrome writes width, fullscreen and autopilot once they settle.
@@ -1025,28 +964,33 @@ func (a *App) assistantRecords(c *ui.Context) {
 				}
 			})
 		}
-		ui.Text(c, "记住的事").FontSize(12).FontWeight(600).TextColor(colorText())
-		a.assistantField(c, "记忆", &a.assist.memDraft, "下载按月份归档")
-		if components.Button(c, "记住", components.ButtonSecondary).Clicked() {
-			msg, err := a.assist.addMemory(a.assist.memDraft)
-			if err != nil {
-				a.statusMsg = err.Error()
-			} else {
-				a.assist.memDraft = ""
-				a.statusMsg = msg
-			}
-		}
-		if len(a.assist.memories) == 0 {
-			ui.Text(c, "说「记住……」，以后的会话也会知道。").FontSize(11).TextColor(colorMuted()).Wrap()
-		} else {
-			items := append([]aiMemory(nil), a.assist.memories...)
-			mem := ui.Scroll(c).FillWidth().MaxHeight(140).Gap(2)
-			mem.Children(func() {
-				for _, m := range items {
-					a.assistantMemoryRow(c, m)
+		if !assistant.SkillDisabled(assistPrefs{DisabledSkills: a.assist.disabledSkills}, assistant.SkillMemory) {
+			ui.Text(c, "记住的事").FontSize(12).FontWeight(600).TextColor(colorText())
+			a.assistantField(c, "记忆", &a.assist.memDraft, "下载按月份归档")
+			if components.Button(c, "记住", components.ButtonSecondary).Clicked() {
+				msg, err := a.assist.addMemory(a.assist.memDraft)
+				if err != nil {
+					a.statusMsg = err.Error()
+				} else {
+					a.assist.memDraft = ""
+					a.statusMsg = msg
 				}
-			})
+			}
+			if len(a.assist.memories) == 0 {
+				ui.Text(c, "说「记住……」，以后的会话也会知道。").FontSize(11).TextColor(colorMuted()).Wrap()
+			} else {
+				items := append([]aiMemory(nil), a.assist.memories...)
+				mem := ui.Scroll(c).FillWidth().MaxHeight(140).Gap(2)
+				mem.Children(func() {
+					for _, m := range items {
+						a.assistantMemoryRow(c, m)
+					}
+				})
+			}
+		} else {
+			ui.Text(c, "记忆能力已在设置中关闭。").FontSize(11).TextColor(colorMuted()).Wrap()
 		}
+		ui.Text(c, "解压密码本请到设置 → 助手中管理。").FontSize(11).TextColor(colorMuted()).Wrap()
 		ui.Text(c, a.assist.historyWhere()).FontSize(11).TextColor(colorMuted()).Wrap()
 	})
 }

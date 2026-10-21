@@ -220,6 +220,8 @@ type App struct {
 	// settingsUI is the dialog's category and search box. components.Settings
 	// owns the navigation; each window remembers its own.
 	settingsUI components.SettingsState
+	// settingsAssist holds transient form fields for the 助手 settings page.
+	settingsAssist settingsAssistForm
 	// bootLogged reports the first-frame timing log has fired.
 	bootLogged bool
 	// diskWatch stops the 磁盘健康 page's background probe, while that page

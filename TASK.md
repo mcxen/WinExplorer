@@ -71,6 +71,7 @@
 | R4 | 拆分 diskhealth.go | 低 | 已完成 | 03 §5 | F1 | `refactor/diskhealth-split` |
 | R5 | internal/search | 低 | 已完成 | 03 §4 | R2、S1–S8 全部 | `refactor/internal-search` |
 | R6 | internal/assistant（6a–6d） | 低 | 已完成 | 03 §6 | R3、A1–A3 | `refactor/internal-assistant` |
+| SCH1 | 定时任务：每日钟点 + 文件规则/脚本/助手 + 设置页 + MCP | 高 | 进行中 | [07](docs/specs/07-scheduled-tasks.md) | A4 | `feat/scheduled-tasks` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
@@ -231,3 +232,9 @@
 - **范围**：`assistant_slash.go`（目录/过滤/选用/Esc）、`assistant.go:assistantComposer`（菜单叠在输入框上方、`SendDisabled`、Trailing 停止）、`assistant_slash_test.go`；截图 `docs/assets/shots/A5/`；更新 `README.md`、`docs/UI.md`、本表。
 - **命令**：`/记忆` 打开会话并填「记住：」；`/整理` `/重命名` 填入提示不发送；`/清空会话` `/新会话` 在空闲时新开会话；`/设置` 打开助手设置。已启用 Skills（files/memory/archive）各一条填能力提示。
 - **验收**：`go test -count=1 -run 'TestAssistSlash|TestAssistantComposerEnter|TestAssistantSlash' .` 通过；菜单 ↑↓ Enter Esc 行为符合规格。
+
+### SCH1 定时任务
+- **目标**：设置 → 定时任务；进程内分钟调度；文件规则/脚本/助手三种动作；助手可通过 MCP 创建任务。
+- **范围**：见 `docs/specs/07-scheduled-tasks.md`。持久化 `sunvale/schedules.json`。
+- **验收**：`go test ./internal/schedule ./...`；`TestPromptListsAllTools` 含 schedule_*；手动或 MCP 可建「每晚 19:00 移动下载文档」。
+

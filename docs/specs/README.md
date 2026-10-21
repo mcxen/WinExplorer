@@ -14,6 +14,7 @@
 | 04 | [标签页后续](04-tabs-followups.md) |
 | 05 | [助手后续](05-assistant-followups.md) |
 | 06 | [助手配置迁入系统设置](06-assistant-settings.md) |
+| 07 | [定时任务](07-scheduled-tasks.md) |
 
 **任务状态、分支、依赖与验收统一维护在仓库根目录 [`TASK.md`](../../TASK.md)**，本目录不再记录状态，避免两处不一致。界面与动效规范见 [`docs/UI.md`](../UI.md)。
 

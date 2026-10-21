@@ -178,6 +178,11 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 12. 点击后列表或侧栏发生非用户触发的滚动跳动（见 `f69b01d` 修复）。
 
 
+
+## 规范表单（FORM1）
+
+设置「定时任务」添加/编辑与助手 OpenUI Form / `present_form` 共用 `internal/forms` 字段种类与 `forms_paint.go` 绘制：TextBox、Select、Switch、Segmented、路径浏览。新表单优先声明 schema，不要再手写一排无标签 TextBox。规格见 `docs/specs/08-forms.md`；截图 `docs/assets/shots/FORM1/`。
+
 ## 设置 · 助手（A4）
 
 设置对话框在「插件」与「更新」之间增加 **助手** 分类（`settingsdialog.go:settingsCategories`，实现见 `settings_assistant.go`）：

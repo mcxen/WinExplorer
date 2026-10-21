@@ -108,6 +108,9 @@ func main() {
 		// Ctrl+K palette answers from the last walk's cache at once, while the
 		// volumes are walked again behind it.
 		go startSearchIndex()
+		// Timed jobs (schedule.go): minute ticker inside the process,
+		// no OS cron. Must start after the store exists.
+		startScheduleRunner()
 		// The remote access plugin gates the server: the account may have
 		// it enabled, but a switched-off plugin keeps the LAN closed for
 		// the run — the settings dialog's switch brings it back.

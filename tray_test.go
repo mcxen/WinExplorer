@@ -77,7 +77,7 @@ func TestTrayMenuShape(t *testing.T) {
 		"disk1 — 可用 1.3 TB / 共 1.8 TB（30%）",
 		"磁盘读写：读 11.9 MB/s · 写 3.1 MB/s",
 		"刷新磁盘信息",
-		"显示磁盘容量", "显示读写速度", "退出晴谷"}
+		"显示磁盘容量", "显示读写速度", "定时任务…", "退出晴谷"}
 	for _, want := range mustHave {
 		found := false
 		for _, l := range labels {

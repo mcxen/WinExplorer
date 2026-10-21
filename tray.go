@@ -142,6 +142,16 @@ func trayMenuItems(rep diskhealth.Report, s appSettings) []*mygo.MenuItem {
 			Checked: speedOn,
 			Click:   func(*mygo.MenuItem, *mygo.Window) { traySetDiskShown("speed", !speedOn) },
 		},
+		&mygo.MenuItem{
+			Label: "定时任务…",
+			Click: func(*mygo.MenuItem, *mygo.Window) {
+				a := searchHostApp()
+				if a != nil {
+					a.openScheduleSettings()
+					trayShowMainWindow()
+				}
+			},
+		},
 		mygo.Separator(),
 		&mygo.MenuItem{
 			Label: "退出晴谷",

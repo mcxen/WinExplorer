@@ -61,6 +61,9 @@ type OUIView struct {
 	Options     []string
 	Required    bool
 	Multiline   bool
+	// PathMode is folder|file for path fields. Password marks a secret input.
+	PathMode string
+	Password bool
 }
 
 // OUICol is one Table column. Cells line up by index with the other columns.
@@ -616,42 +619,23 @@ func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 		field.Label = strings.TrimSpace(label)
 		return field
 	case "Input", "TextArea":
-		name, _ := openText(env, openArg(e.args, 0), stack)
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return nil
-		}
-		ph, _ := openText(env, openArg(e.args, 1), stack)
-		v := &OUIView{Kind: "input", Name: name, Placeholder: ph, Multiline: e.name == "TextArea"}
-		for _, arg := range e.args[min(2, len(e.args)):] {
-			if (arg.kind == "object" || arg.kind == "string") && openRequired(arg) {
-				v.Required = true
-			}
-		}
-		return v
+		return openInputField(env, e, stack)
+	case "Number":
+		return openNamedField(env, e, stack, "number")
+	case "TimeField":
+		return openNamedField(env, e, stack, "time")
+	case "PathField":
+		return openPathField(env, e, stack)
+	case "DayChips":
+		return openDayChips(env, e, stack)
+	case "SwitchField", "Toggle":
+		return openSwitchField(env, e, stack)
+	case "Segmented":
+		return openSegmentedField(env, e, stack)
+	case "MultiSelect":
+		return openMultiSelectField(env, e, stack)
 	case "Select":
-		name, _ := openText(env, openArg(e.args, 0), stack)
-		name = strings.TrimSpace(name)
-		var opts []string
-		for _, item := range openList(env, openArg(e.args, 1), stack) {
-			if text, ok := openOption(env, item, stack); ok && text != "" {
-				opts = append(opts, text)
-			}
-			if len(opts) >= openUIMaxCells {
-				break
-			}
-		}
-		if name == "" || len(opts) == 0 {
-			return nil
-		}
-		ph, _ := openText(env, openArg(e.args, 2), stack)
-		v := &OUIView{Kind: "select", Name: name, Options: opts, Placeholder: ph}
-		for _, arg := range e.args[min(2, len(e.args)):] {
-			if (arg.kind == "object" || arg.kind == "string") && openRequired(arg) {
-				v.Required = true
-			}
-		}
-		return v
+		return openSelectField(env, e, stack)
 	default:
 		return nil
 	}
@@ -707,7 +691,14 @@ func openTreeSize(v *OUIView) int {
 	return n
 }
 
-func OpenIsField(kind string) bool { return kind == "input" || kind == "select" }
+func OpenIsField(kind string) bool {
+	switch kind {
+	case "input", "select", "number", "path", "time", "days", "switch", "segmented", "multi_select":
+		return true
+	default:
+		return false
+	}
+}
 
 func openAllButtons(v *OUIView) bool {
 	for _, ch := range v.Children {

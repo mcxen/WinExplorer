@@ -228,7 +228,7 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 			}
 		})
 		p.form = outer
-	case "input", "select":
+	case "input", "select", "number", "path", "time", "days", "switch", "segmented", "multi_select":
 		a.paintOpenField(c, v, p)
 	case "button":
 		a.paintOpenButton(c, v, p)
@@ -333,28 +333,28 @@ func (a *App) paintOpenField(c *ui.Context, v *ouiView, p *openPaint) {
 	if label == "" {
 		label = v.Name
 	}
+	if v.Required && !strings.HasSuffix(label, " *") {
+		label += " *"
+	}
 	val := a.openValue(p.key, v.Name)
-	ui.Column(c.Key("field-" + v.Name)).FillWidth().MinWidth(0).Gap(4).Children(func() {
-		title := label
-		if v.Required {
-			title += " *"
+	kind := v.Kind
+	if kind == "input" {
+		if v.Multiline {
+			kind = "textarea"
+		} else if v.Password {
+			kind = "password"
+		} else {
+			kind = "text"
 		}
-		ui.Text(c, title).FontSize(12).TextColor(colorText())
-		if v.Kind == "select" {
-			if *val == "" {
-				*val = v.Options[0]
-			}
-			sel := ui.Select(c, val, v.Options).FillWidth()
-			if p.locked {
-				sel.Disabled(true)
-			}
-			return
-		}
-		box := components.TextBox(c, val, components.TextBoxOptions{Multiline: v.Multiline, ReadOnly: p.locked}).
-			FillWidth().Label(label)
-		if v.Placeholder != "" {
-			box.Placeholder(v.Placeholder)
-		}
+	}
+	ui.Box(c.Key("field-" + v.Name)).FillWidth().MinWidth(0).Children(func() {
+		a.paintFormField(c, kind, label, val, formFieldOpts{
+			Locked:   p.locked,
+			PathMode: v.PathMode,
+			Options:  v.Options,
+			Password: v.Password,
+			Hint:     v.Placeholder,
+		})
 	})
 }
 

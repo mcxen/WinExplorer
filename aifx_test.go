@@ -6,6 +6,24 @@ import (
 	"time"
 )
 
+// defaultAIFx is the store the process starts with: the one the file tools
+// light rows in and never put out on their own.
+var defaultAIFx = aiFx
+
+// isolateAIFx gives one test its own AI fx store and puts the old one back.
+// The store is process-wide and the file tools leave rows lit until a run's
+// endRun; without this, one test's "AI 处理中" dot is still breathing in the
+// next test's pixels. A test that already installed its own store keeps it.
+func isolateAIFx(t *testing.T) {
+	t.Helper()
+	if aiFx != defaultAIFx {
+		return
+	}
+	saved := aiFx
+	aiFx = newAIFx()
+	t.Cleanup(func() { aiFx = saved })
+}
+
 // fakeClock drives an aiFxStore through its timeline.
 type fakeClock struct{ t time.Time }
 

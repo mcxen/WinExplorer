@@ -13,6 +13,9 @@ import (
 
 func newTestApp(t *testing.T, dir string) *App {
 	t.Helper()
+	// Every UI test gets its own lights: the AI fx store is shared with
+	// tool tests that leave rows glowing.
+	isolateAIFx(t)
 	a := &App{
 		tabs:        []*tabState{newTab(dir)},
 		activeTab:   0,

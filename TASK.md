@@ -41,6 +41,7 @@
 | ID | 标题 | 优先级 | 状态 | 规格 | 依赖 | 分支 |
 | --- | --- | --- | --- | --- | --- | --- |
 | F6 | gofmt gifplay.go | 高 | 已完成 | 本文 | — | `chore/gofmt-gifplay` |
+| F7 | 修复 CI 圈选测试偶发失败（全局 AI 动效隔离） | 高 | 已完成 | 本文 | — | `fix/marquee-flake` |
 | F1 | 修复 TestDiskPageRenders | 高 | 已完成 | 本文 | — | `fix/test-diskpage` |
 | F2 | 修复 TestAppDeclaredExtsBundle | 高 | 已完成 | 本文 | — | `fix/test-extsbundle` |
 | F3 | 修复 TestBatchRenameDialogRowsAndDrag | 高 | 已完成 | 本文 | — | `fix/test-batchrename` |
@@ -90,6 +91,12 @@
 - **目标**：`gofmt -l .` 无输出。
 - **范围**：仅 `gofmt -w gifplay.go`，不改逻辑。
 - **验收**：`gofmt -l .` 为空；`git diff --stat` 只有 `gifplay.go`。
+
+### F7 修复 CI TestMarqueeBand 偶发失败
+- **目标**：`go test ./...` 在 CI（全量、macOS runner）稳定通过。
+- **根因**：`aiFx` 是进程级全局，文件工具给行点灯、靠一轮结束的 `endRun` 熄灯；工具用例直接调 `copy_items` 只 `markBusy` 不清，状态栏的强调色呼吸点“AI 处理中”被 `TestMarqueeBand*` 的整块像素扫描区（含状态栏）收进包围盒，右边界从 685 漂到 1131。单跑该用例永远过，全量才挂。
+- **修法**：`newTestApp` 给每个 UI 用例一份自己的 fx 店并在结束时还回去；用例自带 fx 店的（`swapTestFx`）不动。只改测试，不改产品代码。
+- **验收**：`go test -run 'TestSunvaleMCPReachesAnyPath|TestMarqueeBand' .` 10/10；`go test ./...` 三轮全绿。
 
 ### F1 修复 TestDiskPageRenders
 - **目标**：该用例在 Linux CI（无 SMART、虚拟机）下稳定通过。

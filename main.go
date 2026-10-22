@@ -301,7 +301,15 @@ func (a *App) view(c *ui.Context) {
 	// backdrop dismissal needs, so it is not hosted here.
 	if a.statusMsg != "" && a.statusMsg != a.statusToasted {
 		a.statusToasted = a.statusMsg
-		if a.undoSeq != a.undoSeqToasted {
+		if len(a.extractSources) > 0 {
+			// A finished unpack offers its next step on the toast: keep only
+			// what the archives became.
+			srcs := a.extractSources
+			a.extractSources = nil
+			c.ToastAction(a.statusMsg, "删除原归档", func() {
+				a.trashPaths(srcs)
+			})
+		} else if a.undoSeq != a.undoSeqToasted {
 			a.undoSeqToasted = a.undoSeq
 			c.ToastAction(a.statusMsg, "撤销", a.doUndo)
 		} else {

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"sunvale/internal/fsops"
@@ -77,19 +78,28 @@ func (a *App) doCompress() {
 }
 
 // doExtract 解压选中的每个归档到以其基础名命名的子文件夹。加密归档
-// 会按密码本顺序重试；最后一个候选密码留在内存里给下一次解压优先试。
-// 归档套归档时自动连解（嵌套深度与个数有上限），解不开的内层归档在
-// 状态栏点名，不拖累其它内容落地。
+// 会按密码本顺序重试；归档套归档时自动连解（嵌套深度与个数有上限）。
+// 解压是后台活：选中的行立刻亮起呼吸灯，解开一个它的呼吸就换成新
+// 文件夹行的一次闪烁；全部结束时列表刷新、选中新文件夹，并给出是否
+// 把原归档移入回收站的下一步推荐。解不开的内层归档在状态栏点名，不
+// 拖累其它内容落地。
 func (a *App) doExtract() {
 	sel := a.selectedEntries()
 	if len(sel) == 0 || specialPath(a.cur().path) {
 		return
 	}
 	a.assist.ensure()
-	var failed []string
-	var extracted []string
-	var inner int
-	var locked []string
+	var archives []Entry
+	for _, e := range sel {
+		if e.IsDir || !isArchive(e.Name) {
+			continue
+		}
+		archives = append(archives, e)
+	}
+	if len(archives) == 0 {
+		return
+	}
+	dir := a.cur().path
 	candidates := archivePasswordCandidates(a.assist.passwords)
 	if a.lastArchivePassword != "" {
 		ordered := []string{a.lastArchivePassword}
@@ -100,49 +110,82 @@ func (a *App) doExtract() {
 		}
 		candidates = ordered
 	}
-	for _, e := range sel {
-		if e.IsDir || !isArchive(e.Name) {
-			continue
-		}
-		base, err := uniqueFreeName(a.cur().path, archiveExtName(e.Name), true)
+	paths := make([]string, len(archives))
+	for i, e := range archives {
+		paths[i] = e.Path
+	}
+	aiFx.markBusy(paths...)
+	a.statusMsg = fmt.Sprintf("正在解压 %d 个归档…", len(archives))
+	go a.extractArchives(dir, archives, candidates)
+}
+
+// extractArchives runs the unpacks off the UI thread. Each archive's
+// breath comes down as it lands, and the folder it produced flashes once
+// the reload shows it. The window is updated in one posting at the end.
+func (a *App) extractArchives(dir string, archives []Entry, candidates []string) {
+	var failed []string
+	var extracted []string
+	var inner int
+	var locked []string
+	lastPw := ""
+	for _, e := range archives {
+		base, err := uniqueFreeName(dir, archiveExtName(e.Name), true)
 		if err != nil {
 			failed = append(failed, e.Name)
+			aiFx.clearBusy(e.Path)
 			continue
 		}
-		dst := filepath.Join(a.cur().path, base)
+		dst := filepath.Join(dir, base)
 		password, nested, err := extractArchiveNested(e.Path, dst, candidates)
 		if err != nil {
 			_ = os.RemoveAll(dst)
 			failed = append(failed, e.Name)
+			aiFx.clearBusy(e.Path)
 			continue
 		}
 		if password != "" {
-			a.lastArchivePassword = password
+			lastPw = password
 		}
 		inner += len(nested.Extracted)
 		locked = append(locked, nested.Locked...)
 		extracted = append(extracted, dst)
+		aiFx.clearBusy(e.Path)
+		aiFx.markRenamed(e.Path, dst)
 	}
-	a.reload()
-	if len(extracted) > 0 {
-		a.cur().selected = map[string]bool{}
-		for _, p := range extracted {
-			a.cur().selected[p] = true
+	srcs := make([]string, len(archives))
+	for i, e := range archives {
+		srcs[i] = e.Path
+	}
+	a.postAssist(func() {
+		if lastPw != "" {
+			a.lastArchivePassword = lastPw
 		}
-		a.cur().anchor = extracted[0]
-		a.requestPreview()
-	}
-	switch {
-	case len(failed) > 0:
-		a.statusMsg = "解压失败：" + strings.Join(failed, "、")
-	case len(locked) > 0:
-		a.statusMsg = fmt.Sprintf("已解压 %d 个归档（%d 个内层）；%d 个内层归档密码本没解开，可在 设置 → 助手 添加密码后重试：%s",
-			len(extracted), inner, len(locked), strings.Join(locked, "、"))
-	case inner > 0:
-		a.statusMsg = fmt.Sprintf("已解压 %d 个归档（自动连解 %d 个内层归档）", len(extracted), inner)
-	case len(extracted) > 0:
-		a.statusMsg = fmt.Sprintf("已解压 %d 个归档", len(extracted))
-	}
+		a.reload()
+		if len(extracted) > 0 {
+			a.cur().selected = map[string]bool{}
+			for _, p := range extracted {
+				a.cur().selected[p] = true
+			}
+			a.cur().anchor = extracted[0]
+			a.requestPreview()
+		}
+		switch {
+		case len(failed) > 0:
+			a.statusMsg = "解压失败：" + strings.Join(failed, "、")
+		case len(locked) > 0:
+			a.statusMsg = fmt.Sprintf("已解压 %d 个归档（%d 个内层）；%d 个内层归档密码本没解开，可在 设置 → 助手 添加密码后重试：%s",
+				len(extracted), inner, len(locked), strings.Join(locked, "、"))
+		case inner > 0:
+			a.statusMsg = fmt.Sprintf("已解压 %d 个归档（自动连解 %d 个内层归档）", len(extracted), inner)
+		case len(extracted) > 0:
+			a.statusMsg = fmt.Sprintf("已解压 %d 个归档", len(extracted))
+		}
+		// Next step, offered with the toast: the bin holds the originals,
+		// one click keeps only what they unpacked to.
+		if len(failed) == 0 && len(extracted) > 0 {
+			a.extractSources = srcs
+		}
+	})
 }
 
 // extractArchive 把 archive 解压到 dstDir（已存在且为空）。
@@ -167,12 +210,15 @@ func extractArchive(archive, dstDir string) error {
 		}
 		return extractTar(r, dstDir)
 	case "txz", "tar.xz":
-		// bsdtar（macOS/Linux 自带）原生读 xz。
+		// bsdtar（macOS/Linux 自带，Windows 10+ 的 System32 里也有）原生读 xz。
 		return runExtract(exec.Command("tar", "-xf", archive, "-C", dstDir))
 	case "7z", "rar":
-		// 7-Zip 或 unar，谁装了用谁。
+		// 7-Zip（Unix 的 7zz，Windows 的 7z.exe 或安装目录里的 7z）或
+		// unar，谁装了用谁。
+		if bin := sevenZipBin(); bin != "" {
+			return runExtract(exec.Command(bin, "x", "-y", "-o"+dstDir, archive))
+		}
 		for _, c := range []*exec.Cmd{
-			exec.Command("7zz", "x", "-y", "-o"+dstDir, archive),
 			exec.Command("unar", "-force-overwrite", "-o", dstDir, archive),
 			exec.Command("unrar", "x", "-y", archive, dstDir+string(filepath.Separator)),
 		} {
@@ -181,12 +227,35 @@ func extractArchive(archive, dstDir string) error {
 				return runExtract(c)
 			}
 		}
-		return errors.New("需要安装 7-Zip（7zz）或 unar 才能解压此格式")
+		return errors.New("需要安装 7-Zip 或 unar 才能解压此格式")
 	}
 	return errors.New("不支持的归档格式")
 }
 
+// sevenZipBin finds a 7-Zip CLI: Homebrew's 7zz on Unix, a 7z on PATH, or
+// the standard Windows install folder's 7z.exe.
+func sevenZipBin() string {
+	for _, name := range []string{"7zz", "7z"} {
+		if p, err := archiveLookPath(name); err == nil {
+			return p
+		}
+	}
+	if runtime.GOOS == "windows" {
+		for _, dir := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")} {
+			if dir == "" {
+				continue
+			}
+			p := filepath.Join(dir, "7-Zip", "7z.exe")
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	}
+	return ""
+}
+
 func runExtract(cmd *exec.Cmd) error {
+	hideConsole(cmd)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(b)))
 	}

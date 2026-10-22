@@ -249,6 +249,40 @@ func (a *App) doDelete() {
 // trashDir is where this OS's trash lives (platform.go).
 func trashDir() (string, error) { return sysTrashDir() }
 
+// trashPaths sends explicit paths to the bin, logging them for restore
+// and undo, the way doDelete handles the selection. The extract toast's
+// 「删除原归档」 uses it, and its status line keeps the 撤销 toast.
+func (a *App) trashPaths(paths []string) {
+	var failed []string
+	var moved []undoMove
+	for _, p := range paths {
+		if p == "" || p == pathThisPC || p == "/" {
+			failed = append(failed, filepath.Base(p))
+			continue
+		}
+		dst, key, err := moveToTrash(p)
+		if err != nil {
+			failed = append(failed, filepath.Base(p))
+			continue
+		}
+		if key != "" {
+			a.store.logTrash(p, key)
+		}
+		if dst != "" {
+			moved = append(moved, undoMove{From: p, To: dst})
+		}
+	}
+	if len(moved) > 0 {
+		a.pushUndo(undoOp{Desc: fmt.Sprintf("删除 %d 个原归档", len(moved)), Moved: moved})
+	}
+	a.reload()
+	if len(failed) > 0 {
+		a.statusMsg = "未能删除：" + strings.Join(failed, "、")
+	} else if len(moved) > 0 {
+		a.statusMsg = "已将 " + itoa(len(moved)) + " 个原归档移到回收站"
+	}
+}
+
 // moveToTrash sends path to this OS's trash, returning where it landed
 // plus the key the restore log files it under (platform.go).
 func moveToTrash(path string) (string, string, error) { return sysTrashMove(path) }

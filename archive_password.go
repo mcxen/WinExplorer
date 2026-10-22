@@ -100,11 +100,13 @@ func extractArchivePassword(archive, dstDir, password string) error {
 }
 
 func extractExternalPassword(archive, dstDir, password string) error {
+	if bin := sevenZipBin(); bin != "" {
+		return archiveRunExtract(bin, []string{"x", "-y", "-p" + password, "-o" + dstDir, archive})
+	}
 	for _, c := range []struct {
 		name string
 		args []string
 	}{
-		{name: "7zz", args: []string{"x", "-y", "-p" + password, "-o" + dstDir, archive}},
 		{name: "unar", args: []string{"-force-overwrite", "-password", password, "-o", dstDir, archive}},
 		{name: "unrar", args: []string{"x", "-p" + password, "-y", archive, dstDir + string(filepath.Separator)}},
 	} {
@@ -112,7 +114,7 @@ func extractExternalPassword(archive, dstDir, password string) error {
 			return archiveRunExtract(path, c.args)
 		}
 	}
-	return errors.New("需要安装 7-Zip（7zz）或 unar 才能解压加密归档")
+	return errors.New("需要安装 7-Zip 或 unar 才能解压加密归档")
 }
 
 var (

@@ -185,8 +185,24 @@ func TestUnzipToolNestedOutput(t *testing.T) {
 	if !strings.Contains(got, "已解压到") || !strings.Contains(got, "自动解开 2 个内层归档") {
 		t.Fatalf("unzip: %s", got)
 	}
+	// The confirm-mode next step comes with the result.
+	if !strings.Contains(got, "下一步") || !strings.Contains(got, "trash_items") {
+		t.Fatalf("no next step offered: %s", got)
+	}
 	out := filepath.Join(dir, "l1")
 	if body, err := os.ReadFile(filepath.Join(out, "l2", "l3", "l3.txt")); err != nil || string(body) != "最深层的信" {
 		t.Fatalf("nested result: %q %v", body, err)
 	}
+	// Autopilot keeps its own counsel: no prompt-shaped next step.
+	sunvaleToolState.bind(dir, false, nil, nil, true)
+	src2 := nestedZipFixture(t)
+	autosrc := filepath.Join(dir, "auto.zip")
+	if err := os.Rename(src2, autosrc); err != nil {
+		t.Fatal(err)
+	}
+	got = callToolText(t, sess, "unzip", map[string]any{"archive": "auto.zip", "dest": "auto"})
+	if strings.Contains(got, "下一步") {
+		t.Fatalf("autopilot got a choice prompt: %s", got)
+	}
+	sunvaleToolState.bind(dir, false, nil, nil, false)
 }

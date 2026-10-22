@@ -6,9 +6,62 @@ import "strings"
 // PathField, DayChips, Number, SwitchField, Segmented, MultiSelect) so the
 // AI and Settings share one vocabulary.
 
+// openFieldName reads a control's name: the spec's first positional
+// argument, or an object's name/title/label key when the model wrote the
+// control as an object. The parser names a plain value's expr with its
+// key rather than wrapping it, so both shapes read here.
+func openFieldName(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) string {
+	if name, _ := openText(env, openArg(e.args, 0), stack); strings.TrimSpace(name) != "" {
+		return strings.TrimSpace(name)
+	}
+	for _, arg := range e.args {
+		if arg.kind != "object" {
+			continue
+		}
+		for _, f := range arg.items {
+			val := f
+			if f.kind == "field" && len(f.items) > 0 {
+				val = f.items[0]
+			}
+			switch strings.ToLower(f.name) {
+			case "name", "title", "label", "field":
+				if name, _ := openText(env, val, stack); strings.TrimSpace(name) != "" {
+					return strings.TrimSpace(name)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// openFieldOpts reads a control's options: the spec's second positional
+// argument, or an object's options/items/values key.
+func openFieldOpts(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) []string {
+	if opts := openStringOpts(env, openArg(e.args, 1), stack); len(opts) > 0 {
+		return opts
+	}
+	for _, arg := range e.args {
+		if arg.kind != "object" {
+			continue
+		}
+		for _, f := range arg.items {
+			val := f
+			if f.kind == "field" && len(f.items) > 0 {
+				val = f.items[0]
+			}
+			switch strings.ToLower(f.name) {
+			case "options", "items", "values":
+				if opts := openStringOpts(env, val, stack); len(opts) > 0 {
+					return opts
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func openInputField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
-	name, _ := openText(env, openArg(e.args, 0), stack)
-	name = strings.TrimSpace(name)
+	name := openFieldName(env, e, stack)
 	if name == "" {
 		return nil
 	}
@@ -34,8 +87,7 @@ func openInputField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *O
 }
 
 func openNamedField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool, kind string) *OUIView {
-	name, _ := openText(env, openArg(e.args, 0), stack)
-	name = strings.TrimSpace(name)
+	name := openFieldName(env, e, stack)
 	if name == "" {
 		return nil
 	}
@@ -58,23 +110,18 @@ func openPathField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OU
 		v.PathMode = "folder"
 		v.Required = true
 	default:
-		if mode == "" || strings.EqualFold(mode, "folder") || strings.EqualFold(mode, "dir") {
-			v.PathMode = "folder"
-		} else {
-			v.PathMode = "folder"
-		}
+		v.PathMode = "folder"
 	}
 	openMarkRequired(v, e.args, 2)
 	return v
 }
 
 func openDayChips(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
-	name, _ := openText(env, openArg(e.args, 0), stack)
-	name = strings.TrimSpace(name)
+	name := openFieldName(env, e, stack)
 	if name == "" {
 		return nil
 	}
-	opts := openStringOpts(env, openArg(e.args, 1), stack)
+	opts := openFieldOpts(env, e, stack)
 	if len(opts) == 0 {
 		opts = []string{"每天", "工作日", "周末"}
 	}
@@ -94,9 +141,8 @@ func openSwitchField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *
 }
 
 func openSegmentedField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
-	name, _ := openText(env, openArg(e.args, 0), stack)
-	name = strings.TrimSpace(name)
-	opts := openStringOpts(env, openArg(e.args, 1), stack)
+	name := openFieldName(env, e, stack)
+	opts := openFieldOpts(env, e, stack)
 	if name == "" || len(opts) == 0 {
 		return nil
 	}
@@ -104,9 +150,8 @@ func openSegmentedField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool
 }
 
 func openMultiSelectField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
-	name, _ := openText(env, openArg(e.args, 0), stack)
-	name = strings.TrimSpace(name)
-	opts := openStringOpts(env, openArg(e.args, 1), stack)
+	name := openFieldName(env, e, stack)
+	opts := openFieldOpts(env, e, stack)
 	if name == "" || len(opts) == 0 {
 		return nil
 	}
@@ -117,9 +162,8 @@ func openMultiSelectField(env map[string]OUIExpr, e OUIExpr, stack map[string]bo
 }
 
 func openSelectField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
-	name, _ := openText(env, openArg(e.args, 0), stack)
-	name = strings.TrimSpace(name)
-	opts := openStringOpts(env, openArg(e.args, 1), stack)
+	name := openFieldName(env, e, stack)
+	opts := openFieldOpts(env, e, stack)
 	if name == "" || len(opts) == 0 {
 		return nil
 	}

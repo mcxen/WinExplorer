@@ -155,10 +155,19 @@ func UnclosedFence(text string) int {
 	return -1
 }
 
-// ParseOpenUI builds a view from one program. A bad line is skipped. root is
-// the entry; without it, the last Stack or Card is used. Unknown components
-// and cycles drop out instead of blanking the whole reply.
-func ParseOpenUI(src string) *OUIView {
+// ParseOpenUI reads one fenced program. A model that strays from the
+// vocabulary — @action without its parens, a Table column as an object, a
+// statement that stops half-written — is read as far as it can be rather
+// than dropped whole: a card missing one button beats no card. Whatever
+// cannot be read at all returns nil, which the painter draws as prose.
+// The parse is panic-guarded: a pathological program must not take the
+// pane's frame down with it.
+func ParseOpenUI(src string) (view *OUIView) {
+	defer func() {
+		if recover() != nil {
+			view = nil
+		}
+	}()
 	src = strings.TrimPrefix(strings.TrimSpace(src), "\uFEFF")
 	env := map[string]OUIExpr{}
 	var order []string
@@ -276,12 +285,16 @@ func (p *ouiParser) parseTerm() (OUIExpr, bool) {
 		}
 		p.skip()
 		if p.peek() != '(' {
-			return OUIExpr{}, false
+			// An action the model wrote without its parens — @confirm — is
+			// read as a no-argument one rather than losing the button.
+			return OUIExpr{kind: "action", name: name}, true
 		}
 		p.i++
 		args, ok := p.parseList(')')
 		if !ok {
-			return OUIExpr{}, false
+			// A truncated action keeps its name: the button sends its own
+			// label, which is what openButtonArgs falls back to.
+			return OUIExpr{kind: "action", name: name}, true
 		}
 		return OUIExpr{kind: "action", name: name, args: args}, true
 	}
@@ -815,6 +828,11 @@ func openCol(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) (OUICol, 
 		defer delete(stack, e.name)
 		return openCol(env, next, stack)
 	}
+	// The spec writes Col("名称", ["甲"]); a model that learned JSON
+	// writes {label: "名称", cells: ["甲"]}. Both make a column.
+	if e.kind == "object" {
+		return openColFromObject(env, e.items, stack)
+	}
 	if e.kind != "call" || e.name != "Col" || len(e.args) < 2 {
 		return OUICol{}, false
 	}
@@ -833,6 +851,41 @@ func openCol(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) (OUICol, 
 		if len(cells) >= openUIMaxCells {
 			break
 		}
+	}
+	return OUICol{Label: label, Cells: cells}, true
+}
+
+// openColFromObject reads {label: …, cells: …} into a column. Keys the
+// model spells another way — title/name/header, values/items — still
+// land where the column wants them. The parser names a plain value's expr
+// with its key rather than wrapping it, so both shapes read here.
+func openColFromObject(env map[string]OUIExpr, fields []OUIExpr, stack map[string]bool) (OUICol, bool) {
+	var label string
+	var cells []string
+	for _, f := range fields {
+		val := f
+		if f.kind == "field" && len(f.items) > 0 {
+			val = f.items[0]
+		}
+		switch strings.ToLower(f.name) {
+		case "label", "title", "name", "header":
+			label, _ = openText(env, val, stack)
+		case "cells", "values", "items":
+			for _, item := range openList(env, val, stack) {
+				if text, ok := openText(env, item, stack); ok {
+					cells = append(cells, text)
+				}
+			}
+		}
+	}
+	if label == "" && len(cells) == 0 {
+		return OUICol{}, false
+	}
+	if len(cells) > openUIMaxCells {
+		cells = cells[:openUIMaxCells]
+	}
+	if label == "" {
+		label = "列"
 	}
 	return OUICol{Label: label, Cells: cells}, true
 }

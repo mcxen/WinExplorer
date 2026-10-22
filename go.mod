@@ -15,6 +15,7 @@ require (
 	github.com/oneo-me/onevra/source v0.2026.11
 	golang.org/x/image v0.47.0
 	golang.org/x/net v0.59.0
+	mvdan.cc/sh/v3 v3.11.0
 )
 
 require (
@@ -72,6 +73,7 @@ require (
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

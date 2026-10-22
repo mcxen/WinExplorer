@@ -421,7 +421,7 @@ func sunvaleBuiltinToolNames() []string {
 		"rename_plan", "zip_files", "unzip", "password_list", "password_save",
 		"search_names", "grep_text", "write_text", "folder_summary", "disk_space",
 		"current_selection", "navigate_to", "offer_choices", "present_form",
-		"remember", "forget", "memory_list", "web_search", "web_read", "frequent_files",
+		"remember", "forget", "memory_list", "web_search", "web_read", "frequent_files", "bash",
 		"schedule_list", "schedule_create", "schedule_update", "schedule_delete", "schedule_run",
 		"assistant_task_run",
 	}

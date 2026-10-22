@@ -395,6 +395,11 @@ func (s *sunvaleTools) unzip(_ context.Context, _ *mcp.CallToolRequest, args unz
 			msg += "\n用户补充密码（password_save 或 设置 → 助手）后可对未解开的内层归档重试。"
 		}
 	}
+	// The natural next step: keep only what the archive became. In the
+	// pane's confirm mode the model asks before touching the original.
+	if !s.autopilotOn() {
+		msg += "\n下一步：可用 offer_choices（mode=single）询问是否把原归档移入回收站（trash_items），选项如「删除原归档」「保留」。全托管或用户已明确保留时不必问。"
+	}
 	return mcpText(msg), nil, nil
 }
 

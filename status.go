@@ -23,16 +23,17 @@ func (a *App) statusBar(c *ui.Context) {
 	bar.Children(func() {
 		left := a.statusLeft()
 		ui.Text(c, left).FontSize(12).TextColor(colorMuted()).SingleLine().Grow(1).MinWidth(0)
-		// The assistant's heat: while a run touches files the dot breathes
-		// beside the count; right after, the tally stays a few seconds.
+		// The busy heat: while a run — the assistant's, or the user's own
+		// unpack — touches files the dot breathes beside the count; right
+		// after, the tally stays a few seconds.
 		if n := aiFx.activeNow(); n > 0 {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {
 				breathDot(c, 7)
-				ui.Text(c, "AI 处理中 "+itoa(n)+" 项").FontSize(12).TextColor(colorAccent()).SingleLine()
+				ui.Text(c, "处理中 "+itoa(n)+" 项").FontSize(12).TextColor(colorAccent()).SingleLine()
 			})
 		} else if n, rem := aiFx.recentDone(statusRecentDone); n > 0 {
 			c.After(rem)
-			ui.Text(c, "AI 刚处理了 "+itoa(n)+" 项").FontSize(12).TextColor(colorMuted()).SingleLine().Shrink(0)
+			ui.Text(c, "刚处理了 "+itoa(n)+" 项").FontSize(12).TextColor(colorMuted()).SingleLine().Shrink(0)
 		}
 		ui.Text(c, a.viewModeLabel()).FontSize(12).TextColor(colorMuted()).SingleLine().Shrink(0)
 	})

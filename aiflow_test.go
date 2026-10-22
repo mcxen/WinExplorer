@@ -76,7 +76,7 @@ func TestStatusBarAssistantHeat(t *testing.T) {
 	}
 	tt := ui.NewTester(func(c *ui.Context) { a.statusBar(c) }, 800, 40)
 	tt.Frame()
-	if !tt.HasText("AI 处理中 2 项") {
+	if !tt.HasText("处理中 2 项") {
 		t.Fatalf("busy count: %v", tt.Texts())
 	}
 	if !tt.FramePending() {
@@ -88,7 +88,7 @@ func TestStatusBarAssistantHeat(t *testing.T) {
 		t.Fatalf("recentDone = %d, %v", n, rem)
 	}
 	tt.Frame()
-	if !tt.HasText("AI 刚处理了 2 项") {
+	if !tt.HasText("刚处理了 2 项") {
 		t.Fatalf("done tally: %v", tt.Texts())
 	}
 	clk.add(statusRecentDone + time.Second)

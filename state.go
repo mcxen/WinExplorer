@@ -160,6 +160,9 @@ type App struct {
 	// lastArchivePassword is the candidate that opened the previous
 	// encrypted archive. It is memory only and is tried first next time.
 	lastArchivePassword string
+	// extractSources are the archives the latest doExtract unpacked in
+	// full; the toast offers moving them to the bin (archive.go).
+	extractSources []string
 
 	// colWidths are the details view's user-adjusted column widths
 	// (files.go); zero keeps the column's default.

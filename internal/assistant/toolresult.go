@@ -17,7 +17,7 @@ func ToolText(raw string) string {
 		} `json:"content"`
 	}
 	if json.Unmarshal([]byte(raw), &envelope) != nil || len(envelope.Content) == 0 {
-		return raw
+		return StripMedia(raw)
 	}
 	var parts []string
 	for _, item := range envelope.Content {
@@ -26,7 +26,74 @@ func ToolText(raw string) string {
 		}
 	}
 	if len(parts) == 0 {
+		return StripMedia(raw)
+	}
+	return StripMedia(strings.Join(parts, "\n"))
+}
+
+// Media markers name the pictures a tool result carries. The bytes live
+// beside the turn (they are far too big for a transcript on disk); the
+// marker is what the model-side rewrite looks for, and what ToolText erases
+// before anything is shown to a person.
+const (
+	MediaOpen  = "[[sunvale-media:"
+	MediaClose = "]]"
+)
+
+// MediaMarker names one batch of pictures.
+func MediaMarker(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	return MediaOpen + strings.Join(ids, ",") + MediaClose
+}
+
+// MediaIDs lists the picture ids in a message body, marker or raw envelope.
+func MediaIDs(raw string) []string {
+	var out []string
+	rest := raw
+	for {
+		i := strings.Index(rest, MediaOpen)
+		if i < 0 {
+			break
+		}
+		rest = rest[i+len(MediaOpen):]
+		j := strings.Index(rest, MediaClose)
+		if j < 0 {
+			break
+		}
+		for _, id := range strings.Split(rest[:j], ",") {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				out = append(out, id)
+			}
+		}
+		rest = rest[j+len(MediaClose):]
+	}
+	return out
+}
+
+// StripMedia removes the markers from a body. It is idempotent and safe on
+// ordinary text.
+func StripMedia(raw string) string {
+	if !strings.Contains(raw, MediaOpen) {
 		return raw
 	}
-	return strings.Join(parts, "\n")
+	var b strings.Builder
+	rest := raw
+	for {
+		i := strings.Index(rest, MediaOpen)
+		if i < 0 {
+			b.WriteString(rest)
+			break
+		}
+		b.WriteString(rest[:i])
+		rest = rest[i+len(MediaOpen):]
+		j := strings.Index(rest, MediaClose)
+		if j < 0 {
+			break
+		}
+		rest = rest[j+len(MediaClose):]
+	}
+	return b.String()
 }

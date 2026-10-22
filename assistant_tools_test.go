@@ -103,7 +103,7 @@ func TestAssistantSpecifiedFilesAndChoices(t *testing.T) {
 	if ch == nil || !ch.Multi || len(ch.Options) != 2 || ch.Prompt != "怎么整理？" || display != "" {
 		t.Fatalf("choices display %q %+v from %s", display, ch, block)
 	}
-	note := specifiedFileNote([]string{filepath.Join(dir, "note.txt")})
+	note, _ := specifiedFileNote([]string{filepath.Join(dir, "note.txt")})
 	if !strings.Contains(note, "alpha beta") || !strings.Contains(note, "note.txt") {
 		t.Fatalf("note: %s", note)
 	}

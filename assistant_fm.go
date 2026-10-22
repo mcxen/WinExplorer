@@ -52,7 +52,7 @@ func (s *sunvaleTools) readOutside(_ context.Context, _ *mcp.CallToolRequest, ar
 	if err != nil {
 		return mcpErr(err), nil, nil
 	}
-	return readTextFile(path)
+	return readTextFile(path, s.mediaBag())
 }
 
 func (s *sunvaleTools) properties(_ context.Context, _ *mcp.CallToolRequest, args pathArgs) (*mcp.CallToolResult, any, error) {

@@ -188,6 +188,11 @@ type App struct {
 	homePath string
 	// navPCExpanded is the 此电脑 tree node's expanded state.
 	navPCExpanded bool
+	// navQuickExpanded and navRecentExpanded are the 快速访问 and 最近位置
+	// section headings' expanded state: collapsed, the section keeps its
+	// heading — a drop on 快速访问 still pins — and hides its rows.
+	navQuickExpanded  bool
+	navRecentExpanded bool
 
 	// focusSearch is set by Ctrl+E/Ctrl+F and consumed by the search
 	// field, which takes the focus on the next frame.

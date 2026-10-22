@@ -20,6 +20,11 @@ func newTestApp(t *testing.T, dir string) *App {
 		sortAsc:     true,
 		homePath:    dir,
 		previewOpen: false,
+		// The bare test app takes the zero value of the sidebar's expanded
+		// state, which is collapsed; the pane's sections start open, as the
+		// real window's do.
+		navQuickExpanded:  true,
+		navRecentExpanded: true,
 	}
 	a.reload()
 	return a

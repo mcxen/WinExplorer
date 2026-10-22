@@ -100,6 +100,7 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		// 地址栏的历史与快捷键
 		"sunvale_addr_hist", "Ctrl+L", "Alt+D", "api/fs/dirs",
 		"scrollTop", "revealName",
+		"api/fs/preview", "svFillPreview", "svDecodeText", "near:curPath",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the management page lost %q", want)

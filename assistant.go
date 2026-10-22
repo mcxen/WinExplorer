@@ -119,7 +119,17 @@ type assistantUI struct {
 	widthDirty       bool
 	widthDragging    bool
 	files            []aiAttach
-	picking          bool
+	// chipLit is when each attached path lit up: the composer's chips
+	// breathe from then on, and the sent message's chips keep the phase
+	// while the run reads them.
+	chipLit map[string]time.Time
+	// queued is a message sent while a run was going: it waits out the run
+	// and goes out by itself when the run comes back (ZCode's queue).
+	queued string
+	// flowCool is when the header strip's last sweep finishes: the run is
+	// over, but the light fades out rather than snapping off.
+	flowCool time.Time
+	picking  bool
 
 	// slashIdx is the highlighted row in the “/” popup; slashHide keeps
 	// the menu closed after Esc until the draft is no longer a slash query.
@@ -127,7 +137,19 @@ type assistantUI struct {
 	slashHide bool
 }
 
-func (a *App) toggleAssistant() { a.assistantOpen = !a.assistantOpen }
+// toggleAssistant opens or closes the pane. Opening onto a blank session
+// with sessions on disk brings up the history column, so 回车 or the
+// toolbar's 助手 lands on the conversations there is to pick from; a pane
+// reopened over a live conversation keeps whatever face it had.
+func (a *App) toggleAssistant() {
+	a.assistantOpen = !a.assistantOpen
+	if a.assistantOpen {
+		a.assist.ensure()
+		if len(a.assist.turns) == 0 && len(a.assist.sessions) > 0 {
+			a.assist.showHist = true
+		}
+	}
+}
 
 func (a *App) assistantPane(c *ui.Context) {
 	a.assist.ensure()
@@ -151,23 +173,41 @@ func (a *App) assistantPane(c *ui.Context) {
 		body := ui.Column(c).Grow(1).FillHeight().MinWidth(0).MinHeight(0)
 		body.Children(func() {
 			a.assistantHeader(c)
-			if a.assist.showHist {
-				ui.Scroll(c).FillWidth().Shrink(0).MaxHeight(280).Background(c.Theme().Surface).Children(func() {
-					a.assistantRecords(c)
+			a.assistFlowStrip(c)
+			// Below the header the pane splits like ZCode's chat: the history
+			// column on the left while 会话 is on, the conversation filling the
+			// rest. The column keeps its own scroll so a long list never
+			// pushes the composer away.
+			below := ui.Row(c).Grow(1).FillWidth().MinHeight(0).MinWidth(0)
+			below.Children(func() {
+				if a.assist.showHist {
+					// Full screen gives the column its full width; a narrow pane
+					// keeps the conversation's room and shrinks the list instead.
+					histW := float32(200)
+					if !a.assist.full {
+						histW = min(200, max(140, a.assist.width-280))
+					}
+					hist := ui.Column(c).Width(histW).Shrink(0).FillHeight().MinHeight(0).
+						Background(c.Theme().Surface)
+					hist.Children(func() {
+						ui.Scroll(c).FillWidth().Grow(1).MinHeight(0).Children(func() {
+							a.assistantRecords(c)
+						})
+					})
+					ui.Box(c).Width(1).FillHeight().Shrink(0).Background(colorDivider())
+				}
+				// The column, not the card, takes a drag from this window and a
+				// native file list. The card only sees DroppedFiles, so a drop
+				// on the composer would otherwise miss both.
+				conv := ui.Column(c).Grow(1).FillWidth().MinHeight(0).MinWidth(0)
+				conv.Children(func() {
+					chat.FloatingConversation(c, &a.assist.floatLay, &a.assist.scroll, "回到底部",
+						func(*ui.Context) { a.assistantTranscript(c) },
+						func(*ui.Context) { a.assistantComposer(c) },
+					)
 				})
-				ui.Box(c).Height(1).FillWidth().Shrink(0).Background(colorDivider())
-			}
-			// The column, not the card, takes a drag from this window and a
-			// native file list. The card only sees DroppedFiles, so a drop
-			// on the composer would otherwise miss both.
-			conv := ui.Column(c).Grow(1).FillWidth().MinHeight(0).MinWidth(0)
-			conv.Children(func() {
-				chat.FloatingConversation(c, &a.assist.floatLay, &a.assist.scroll, "回到底部",
-					func(*ui.Context) { a.assistantTranscript(c) },
-					func(*ui.Context) { a.assistantComposer(c) },
-				)
+				a.bindAssistDrop(conv)
 			})
-			a.bindAssistDrop(conv)
 		})
 	})
 	a.assist.noteChrome()
@@ -186,6 +226,26 @@ func (a *App) assistantComposer(c *ui.Context) {
 	ui.Column(c).FillWidth().MinWidth(0).Shrink(0).Gap(6).Children(func() {
 		if slashOpen {
 			a.assistantSlashMenu(c, slashItems)
+		}
+		if a.assist.queued != "" {
+			// ZCode's queue panel: the message waits for the run, a click
+			// takes it back into the box.
+			q := ui.ButtonBase(c).Key("assist-queue").FillWidth().Radius(8).
+				Padding(6, 10).Gap(8).AlignItems(ui.Center).Label("取消排队")
+			q.Border(1, colorDivider()).Background(c.Theme().Surface)
+			if q.Hovered() {
+				q.Background(colorHover())
+			}
+			q.Children(func() {
+				breathDot(c, 8)
+				ui.Text(c, "排队中："+a.assist.queued).FontSize(12).TextColor(colorText()).
+					SingleLine().Grow(1).MinWidth(0)
+				ui.Text(c, "点击取消").FontSize(11).TextColor(colorMuted()).Shrink(0)
+			})
+			if q.Clicked() {
+				a.assist.draft = a.assist.queued
+				a.assist.queued = ""
+			}
 		}
 		comp := chat.GlassComposer(c, &a.assist.floatLay, &a.assist.draft, chat.ComposerOptions{
 			Label:        "给助手的消息",
@@ -213,6 +273,20 @@ func (a *App) assistantComposer(c *ui.Context) {
 			},
 		})
 		comp.Root.FillWidth().Shrink(0)
+		if comp.Dragging {
+			// ZCode's drop overlay: hovering files over the card says what
+			// letting go does, over both the in-window drag and a native one.
+			hint := ui.Row(c).Key("assist-drop-hint").Absolute().Attach(ui.AnchorTop, ui.AnchorTop).
+				Top(6).FillWidth().Justify(ui.Center)
+			hint.Children(func() {
+				pill := ui.Row(c).Padding(5, 12).Radius(13).Gap(6).AlignItems(ui.Center).
+					Background(colorAccent())
+				pill.Children(func() {
+					components.Icon(c, lucide.Paperclip).Size(13, 13).TextColor(ui.Hex("#FFFFFF"))
+					ui.Text(c, "松开以附加到对话").FontSize(12).TextColor(ui.Hex("#FFFFFF")).SingleLine()
+				})
+			})
+		}
 		if slashOpen {
 			a.assistantSlashKeys(comp.Input, slashItems)
 		}
@@ -222,26 +296,62 @@ func (a *App) assistantComposer(c *ui.Context) {
 			a.attachDroppedPaths(comp.Dropped)
 		}
 		if comp.Stop && a.assist.stop != nil {
+			a.assist.queued = ""
 			a.assist.stop()
 			a.assist.status = "正在停止…"
 		}
-		if comp.Send && !a.assist.running {
+		switch {
+		case comp.Send && !a.assist.running:
 			a.assistantSubmit()
+		case comp.Send && strings.TrimSpace(a.assist.draft) != "":
+			// A message sent over a running turn waits out the run instead
+			// of interrupting it: the queue chip above the card says so,
+			// and cancels on a click. One message waits; a new one takes
+			// its place.
+			a.assist.queued = strings.TrimSpace(a.assist.draft)
+			a.assist.draft = ""
 		}
 	})
+}
+
+// litChip notes a freshly attached path: its chip breathes from now.
+func (u *assistantUI) litChip(path string) {
+	if u.chipLit == nil {
+		u.chipLit = map[string]time.Time{}
+	}
+	if len(u.chipLit) > 128 {
+		u.chipLit = map[string]time.Time{}
+	}
+	u.chipLit[aiFxKey(path)] = time.Now()
+}
+
+// assistChipBreath makes one attachment chip breathe: the composer's
+// chips from the moment the files are dropped or picked, the sent
+// message's chips while the run is reading them. The phase comes from
+// chipLit; a chip without an entry breathes from an arbitrary phase.
+func (a *App) assistChipBreath(c *ui.Context, chip ui.Element, path string) {
+	breathOverlay(c, chip, a.assist.chipLit[aiFxKey(path)])
 }
 
 func (a *App) assistantAttachments(c *ui.Context) {
 	drop := -1
 	for i, f := range a.assist.files {
-		res := chat.Attachment(c.Key(f.Path), chat.AttachmentOptions{
-			Label: f.Name, Detail: f.Detail, RemoveLabel: "移除 " + f.Name,
+		// A chip breathes from the moment the file joins: the drag's answer
+		// before anything is sent.
+		chip := ui.Box(c.Key(f.Path + "-fx"))
+		a.assistChipBreath(c, chip, f.Path)
+		var res chat.AttachmentResult
+		chip.Children(func() {
+			res = chat.Attachment(c.Key(f.Path), chat.AttachmentOptions{
+				Label: f.Name, Detail: f.Detail, RemoveLabel: "移除 " + f.Name,
+			})
 		})
 		if res.Remove {
 			drop = i
 		}
 	}
 	if drop >= 0 {
+		delete(a.assist.chipLit, aiFxKey(a.assist.files[drop].Path))
 		a.assist.files = append(a.assist.files[:drop], a.assist.files[drop+1:]...)
 	}
 }
@@ -324,11 +434,20 @@ func (a *App) clampAssistWidth(c *ui.Context, w float32) float32 {
 	return w
 }
 
-// assistStarters are the empty transcript's example requests.
-var assistStarters = []string{
-	"按拍摄日期重命名照片",
-	"把安装包和压缩包归档到“归档”文件夹",
-	"找出重复或临时文件",
+// assistStarter is one of the empty transcript's example requests: a
+// ZCode-style suggested prompt card — a glyph, the request itself and a
+// line about what the run then does.
+type assistStarter struct {
+	icon  func() *ui.SVG
+	title string
+	fill  string
+	hint  string
+}
+
+var assistStarters = []assistStarter{
+	{lucide.Sparkles, "按拍摄日期重命名照片", "按拍摄日期重命名照片", "读取每张照片的日期，改名并去掉重名"},
+	{lucide.FolderInput, "把安装包和压缩包归档", "把安装包和压缩包归档到“归档”文件夹", "识别安装包和压缩包，归档并报告"},
+	{lucide.Search, "找出重复或临时文件", "找出重复或临时文件", "扫描当前文件夹，汇总可清理的项"},
 }
 
 func (a *App) assistantTranscript(c *ui.Context) {
@@ -336,14 +455,28 @@ func (a *App) assistantTranscript(c *ui.Context) {
 		ui.Column(c).FillWidth().Padding(48, 8, 12, 8).Gap(8).AlignItems(ui.Center).Children(func() {
 			components.Icon(c, lucide.Bot).Size(28, 28).TextColor(colorMuted())
 			ui.Text(c, "晴谷助手").FontSize(18).FontWeight(600).TextColor(colorText())
-			ui.Text(c, "整理、重命名、归档当前文件夹里的文件。").
+			ui.Text(c, "整理、重命名、归档当前文件夹里的文件。文件、文件夹都可以拖进来。").
 				FontSize(13).TextColor(colorMuted()).Wrap().TextAlign(ui.Center)
-			// Starters put a request in the box rather than sending it: the
-			// user still reads it, picks the model and presses 发送.
-			ui.Column(c).FillWidth().Gap(6).Padding(12, 0, 0, 0).Children(func() {
+			// Starter cards put a request in the box rather than sending it:
+			// the user still reads it, picks the model and presses 发送.
+			ui.Column(c).FillWidth().Gap(8).Padding(12, 0, 0, 0).Children(func() {
 				for _, s := range assistStarters {
-					if components.Button(c, s, components.ButtonSecondary).FillWidth().Clicked() {
-						a.assist.draft = s
+					card := ui.ButtonBase(c.Key("starter-"+s.title)).FillWidth().Radius(8).
+						Padding(10, 12).Gap(10).AlignItems(ui.Center).Label(s.title)
+					card.Border(1, colorDivider()).Background(c.Theme().Surface)
+					if card.Hovered() {
+						card.Background(colorHover())
+					}
+					card.Children(func() {
+						components.Icon(c, s.icon).Size(16, 16).TextColor(colorAccent()).Shrink(0)
+						ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+							ui.Text(c, s.title).FontSize(12.5).FontWeight(600).TextColor(colorText()).SingleLine()
+							ui.Text(c, s.hint).FontSize(11).TextColor(colorMuted()).SingleLine()
+						})
+						components.Icon(c, lucide.CornerDownLeft).Size(14, 14).TextColor(colorMuted()).Shrink(0)
+					})
+					if card.Clicked() {
+						a.assist.draft = s.fill
 					}
 				}
 			})
@@ -487,7 +620,13 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			if len(user.Files) > 0 {
 				ui.Row(c).FillWidth().Wrap().Gap(4).Children(func() {
 					for _, f := range user.Files {
-						chat.Attachment(c.Key(f.Path), chat.AttachmentOptions{Label: f.Name, Detail: f.Detail})
+						chip := ui.Box(c.Key(f.Path + "-fx"))
+						if last && a.assist.running {
+							a.assistChipBreath(c, chip, f.Path)
+						}
+						chip.Children(func() {
+							chat.Attachment(c.Key(f.Path), chat.AttachmentOptions{Label: f.Name, Detail: f.Detail})
+						})
 					}
 				})
 			}
@@ -520,9 +659,6 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 				actStatus = chat.Running
 			}
 			detail := assistFirstLine(text)
-			if detail == "" && actStatus == chat.Running {
-				detail = "进行中"
-			}
 			activities = append(activities, chat.Activity{
 				ID: itoa(i), Action: action, Detail: detail,
 				Status: actStatus, Mono: true, State: st, MaxHeight: 220,
@@ -532,8 +668,10 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			})
 		}
 		if last && a.assist.running && a.assist.pending != "" {
+			// An empty Detail puts the toolkit's pulse dot on the row; the
+			// verb beats the raw tool name while it still says doing what.
 			activities = append(activities, chat.Activity{
-				ID: "pending", Action: a.assist.pending, Detail: "进行中", Status: chat.Running,
+				ID: "pending", Action: assistToolVerb(a.assist.pending), Status: chat.Running,
 			})
 			names = append(names, a.assist.pending)
 		}
@@ -714,7 +852,8 @@ func (a *App) assistantPickFiles() {
 			}
 			n := a.assist.addFiles(paths)
 			if n > 0 {
-				a.statusMsg = "已加入 " + itoa(n) + " 个文件"
+				a.noteUsedPaths(2, paths...)
+				a.statusMsg = "已加入 " + itoa(n) + " 个项目"
 			} else if len(paths) > 0 {
 				a.statusMsg = "没有新的文件"
 			}
@@ -738,7 +877,8 @@ func (a *App) assistantAttachSelection() {
 		a.statusMsg = "没有新的文件"
 		return
 	}
-	a.statusMsg = "已加入 " + itoa(n) + " 个文件"
+	a.noteUsedPaths(2, paths...)
+	a.statusMsg = "已加入 " + itoa(n) + " 个项目"
 }
 
 func (a *App) attachPastedPaths(text string) {
@@ -762,7 +902,7 @@ func (a *App) attachPastedPaths(text string) {
 	}
 	n := a.assist.addFiles(paths)
 	if n > 0 {
-		a.statusMsg = "已加入 " + itoa(n) + " 个文件"
+		a.statusMsg = "已加入 " + itoa(n) + " 个项目"
 	}
 }
 
@@ -812,7 +952,7 @@ func (a *App) attachDroppedPaths(paths []string) {
 	}
 	switch {
 	case n > 0:
-		a.statusMsg = "已加入 " + itoa(n) + " 个文件"
+		a.statusMsg = "已加入 " + itoa(n) + " 个项目"
 	case len(local) > 0:
 		a.statusMsg = "没有新的文件"
 	case rejected:
@@ -849,6 +989,7 @@ func (u *assistantUI) addFiles(paths []string) int {
 		}
 		u.files = append(u.files, aiAttach{Path: abs, Name: filepath.Base(abs), Detail: detail})
 		seen[abs] = true
+		u.litChip(abs)
 		added++
 	}
 	if added > 0 && strings.TrimSpace(u.draft) == "" {
@@ -969,6 +1110,9 @@ func (a *App) assistantRecords(c *ui.Context) {
 			if components.Button(c, "新会话", components.ButtonSecondary).Clicked() {
 				a.assistantNewSession()
 			}
+			if components.IconButton(c, lucide.PanelLeftClose(), "收起历史会话", components.IconButtonPlain).Clicked() {
+				a.assist.showHist = false
+			}
 		})
 		switch {
 		case a.assist.diskPath == "" && len(a.assist.turns) > 0:
@@ -979,7 +1123,15 @@ func (a *App) assistantRecords(c *ui.Context) {
 			metas := append([]aiSessionMeta(nil), a.assist.sessions...)
 			list := ui.Scroll(c).FillWidth().MaxHeight(220).Gap(2)
 			list.Children(func() {
+				// ZCode's timeline task list groups sessions by recency;
+				// the same buckets keep a long history scannable here.
+				group := ""
 				for _, meta := range metas {
+					if g := assistTimelineGroup(meta.Updated); g != group {
+						group = g
+						ui.Text(c, g).Key("hist-group-"+g).FontSize(11).FontWeight(600).
+							TextColor(colorMuted()).Margin(6, 4, 0, 4)
+					}
 					a.assistantSessionRow(c, meta)
 				}
 			})
@@ -1016,22 +1168,25 @@ func (a *App) assistantRecords(c *ui.Context) {
 }
 
 func (a *App) assistantSessionRow(c *ui.Context, meta aiSessionMeta) {
-	row := ui.Row(c.Key(meta.ID)).FillWidth().Gap(4).AlignItems(ui.Center)
+	row := ui.Row(c.Key(meta.ID)).FillWidth().Gap(4).AlignItems(ui.Center).Radius(4)
+	current := meta.ID == a.assist.sessionID
+	if current {
+		row.Background(colorSelected())
+	} else if row.Hovered() {
+		row.Background(colorHover())
+	}
 	row.Children(func() {
 		label := meta.Title
 		if label == "" {
 			label = "新会话"
 		}
-		if meta.ID == a.assist.sessionID {
-			label = "● " + label
-		}
-		btn := ui.ButtonBase(c).Grow(1).MinWidth(0).Padding(2, 4).Radius(4)
-		if btn.Hovered() {
-			btn.Background(colorHover())
-		}
+		btn := ui.ButtonBase(c).Grow(1).MinWidth(0).Padding(2, 4).Radius(4).Label(label)
 		btn.Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-				ui.Text(c, label).FontSize(12).TextColor(colorText()).SingleLine()
+				title := ui.Text(c, label).FontSize(12).TextColor(colorText()).SingleLine()
+				if current {
+					title.FontWeight(600)
+				}
 				detail := assistWhen(meta.Updated)
 				if base := filepath.Base(meta.Folder); base != "" && base != "." && base != string(filepath.Separator) {
 					if detail != "" {
@@ -1053,10 +1208,45 @@ func (a *App) assistantSessionRow(c *ui.Context, meta aiSessionMeta) {
 		if btn.Clicked() {
 			a.assistantOpenSession(meta.ID)
 		}
-		if components.Button(c, "删除", components.ButtonGhost).Clicked() {
-			a.assistantDeleteSession(meta.ID)
+		// The delete action stays out of the row until it is hovered, the way
+		// ZCode's task rows reveal their inline actions, so a quiet list does
+		// not carry one button per row.
+		if row.Hovered() || current {
+			if components.Button(c, "删除", components.ButtonGhost).Clicked() {
+				a.assistantDeleteSession(meta.ID)
+			}
 		}
 	})
+}
+
+// assistTimelineGroup is the history list's recency bucket, as ZCode's
+// taskTimelineGroups: 今天, 昨天, 本周, 上周, 本月, then 更早.
+func assistTimelineGroup(t time.Time) string {
+	if t.IsZero() {
+		return "更早"
+	}
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	switch diff := int(today.Sub(day).Hours() / 24); {
+	case diff <= 0:
+		return "今天"
+	case diff == 1:
+		return "昨天"
+	}
+	// The week starts on Monday, as the rest of the app's Chinese chrome.
+	weekday := int(now.Weekday()+6) % 7
+	thisWeek := today.AddDate(0, 0, -weekday)
+	switch {
+	case !day.Before(thisWeek):
+		return "本周"
+	case !day.Before(thisWeek.AddDate(0, 0, -7)):
+		return "上周"
+	case day.Year() == now.Year() && day.Month() == now.Month():
+		return "本月"
+	default:
+		return "更早"
+	}
 }
 
 func (a *App) assistantMemoryRow(c *ui.Context, m aiMemory) {

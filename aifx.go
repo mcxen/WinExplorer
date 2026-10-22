@@ -53,7 +53,35 @@ type aiFxStore struct {
 	// renamed holds the time the new name was first drawn; zero until then,
 	// as the listing may reload long after the rename itself.
 	renamed map[string]time.Time
-	now     func() time.Time
+	// lit is how many distinct paths the current run has touched; endRun
+	// moves it to lastDone so the status bar can say the run's total.
+	lit        int
+	lastDone   int
+	lastDoneAt time.Time
+	now        func() time.Time
+}
+
+// activeNow is how many rows the assistant is working on this frame.
+func (s *aiFxStore) activeNow() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.busy)
+}
+
+// recentDone is the last finished run's tally and how much longer the
+// status bar may show it, both on the store's clock: a test's fake clock
+// and the window's real one tell the same story.
+func (s *aiFxStore) recentDone(within time.Duration) (int, time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lastDone <= 0 || s.lastDoneAt.IsZero() {
+		return 0, 0
+	}
+	rem := s.lastDoneAt.Add(within).Sub(s.now())
+	if rem <= 0 {
+		return 0, 0
+	}
+	return s.lastDone, rem
 }
 
 var aiFx = newAIFx()
@@ -80,9 +108,14 @@ func (s *aiFxStore) markBusy(paths ...string) {
 			continue
 		}
 		k := aiFxKey(p)
+		_, busied := s.busy[k]
+		_, cooled := s.cooling[k]
 		delete(s.cooling, k)
 		if _, ok := s.busy[k]; !ok {
 			s.busy[k] = now
+		}
+		if !busied && !cooled {
+			s.lit++
 		}
 	}
 	s.mu.Unlock()
@@ -144,6 +177,11 @@ func (s *aiFxStore) endRun() {
 			s.cooling[k] = lit
 		}
 	}
+	if len(s.busy) > 0 || s.lit > 0 {
+		s.lastDone = s.lit
+		s.lastDoneAt = now
+	}
+	s.lit = 0
 	s.busy = map[string]time.Time{}
 	s.mu.Unlock()
 	repaint()
@@ -268,6 +306,25 @@ func breath(d time.Duration) float32 {
 
 func easeIn(t float32) float32  { return t * t }
 func easeOut(t float32) float32 { return 1 - (1-t)*(1-t) }
+
+// breathOverlay washes el with the accent at one breath per aiFxPulse:
+// the attachment chips' version of the listing rows' glow. since starts
+// the phase; the zero time still breathes, from an arbitrary phase. The
+// desktop's reduce-motion preference stills it to a calm tint.
+func breathOverlay(c *ui.Context, el ui.Element, since time.Time) {
+	calm := c.Preferences().ReduceMotion
+	el.Draw(func(p *ui.Painter, r ui.Rect) {
+		glow := float32(0.65)
+		if !calm {
+			glow = breath(time.Since(since))
+			p.AnimationFrame()
+		}
+		acc := colorAccent()
+		p.Fill(r, acc.Alpha(0.10*glow), 8)
+		edge := ui.Rect{X: r.X + 0.5, Y: r.Y + 0.5, W: r.W - 1, H: r.H - 1}
+		p.Stroke(edge, acc.Alpha(0.45*glow), 8, 1)
+	})
+}
 
 // aiFxRow applies path's look to its row or tile: the slide and fade, the
 // fold of its height (full is its resting height, 0 for a tile that keeps

@@ -280,12 +280,12 @@ func TestScore(t *testing.T) {
 		{"report.json", "/Library/Caches/com.app/report.json", false, now.Add(-time.Hour), MatchName, 5970, 6030, "位于缓存或生成目录，降低排序"},
 	}
 	pathQuery := Parse("path:report")
-	if got, kind, reasons := pathQuery.Score("notes.txt", home+"/Documents/report/notes.txt", false, now, now, home); kind != MatchPath || got == 0 || len(reasons) == 0 || !strings.Contains(reasons[0].Text, "路径命中") {
+	if got, kind, reasons := pathQuery.Score("notes.txt", home+"/Documents/report/notes.txt", false, now, now, home, ""); kind != MatchPath || got == 0 || len(reasons) == 0 || !strings.Contains(reasons[0].Text, "路径命中") {
 		t.Fatalf("path-only hit = score %d, kind %v, reasons %+v", got, kind, reasons)
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, kind, reasons := q.Score(tc.name, tc.path, tc.isDir, tc.mod, now, home)
+			got, kind, reasons := q.Score(tc.name, tc.path, tc.isDir, tc.mod, now, home, "")
 			if kind != tc.wantKind {
 				t.Fatalf("kind = %v, want %v", kind, tc.wantKind)
 			}
@@ -305,9 +305,33 @@ func TestScore(t *testing.T) {
 	}
 	// The deep cache hit stays below the ordinary home hit, as in the
 	// design's ordering.
-	ordinary, _, _ := q.Score("report.md", home+"/Documents/report.md", false, now, now, home)
-	cache, _, _ := q.Score("report.json", "/Library/Caches/com.app/report.json", false, now, now, "")
+	ordinary, _, _ := q.Score("report.md", home+"/Documents/report.md", false, now, now, home, "")
+	cache, _, _ := q.Score("report.json", "/Library/Caches/com.app/report.json", false, now, now, "", "")
 	if ordinary <= cache {
 		t.Fatalf("ordinary score %d is not above cache %d", ordinary, cache)
+	}
+}
+
+// TestScoreCurrentFolderFirst: a weaker name in the folder on screen leads
+// an exact name further down, and that still leads an exact name elsewhere.
+func TestScoreCurrentFolderFirst(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	home := "/Users/alice"
+	folder := home + "/Photos"
+	q := Parse("report")
+	here, _, reasons := q.Score("notes-report.txt", folder+"/notes-report.txt", false, now, now, home, folder)
+	deep, _, _ := q.Score("report.txt", folder+"/sub/report.txt", false, now, now, home, folder)
+	out, _, _ := q.Score("report.txt", "/elsewhere/report.txt", false, now, now, home, folder)
+	if here <= deep || deep <= out {
+		t.Fatalf("scores here %d, inside %d, elsewhere %d", here, deep, out)
+	}
+	found := false
+	for _, r := range reasons {
+		if r.Text == "位于当前文件夹" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("reasons = %+v, want 位于当前文件夹", reasons)
 	}
 }

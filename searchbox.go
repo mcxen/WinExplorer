@@ -85,9 +85,12 @@ type searchBoxState struct {
 	sortBy searchSort
 	// scores, kinds and reasons cache what Score said when a hit arrived, so
 	// a streamed batch does not rescore every row or the preview.
+	// near is the folder on screen when those scores were computed: hits
+	// there lead the default relevance order.
 	scores  map[string]int
 	kinds   map[string]searchquery.MatchKind
 	reasons map[string][]searchquery.Reason
+	near    string
 	// src is the engine that answered the results on screen (searchSource).
 	src searchSource
 	// totalHits is everything the raw query found before the filter bar
@@ -271,11 +274,23 @@ func searchQueryWithFiltersKind(q string, f searchFilters, withKind bool) string
 // same live walk the pane's search box runs, on the box's own roots.
 func (a *App) searchBoxFrame() {
 	b := &a.searchBox
+	// The folder on screen leads the relevance order. Set it before the
+	// queue drains, so a batch that lands this frame is scored against it.
+	near := ""
+	if p := a.cur().path; p != "" && !specialPath(p) {
+		near = p
+	}
+	prevNear := b.near
+	b.near = near
 	// What the search running off this thread has handed over — the hits it
 	// found, and the news that it is through — applies here, where the box's
 	// fields are this frame's alone.
 	for _, op := range b.queue.take() {
 		op()
+	}
+	if b.open && prevNear != b.near && b.walked != "" && len(b.allResults) > 0 {
+		b.refilter()
+		b.cursor = b.cursorRow()
 	}
 	if !b.open {
 		return
@@ -444,7 +459,7 @@ func (b *searchBoxState) refilter() {
 		if !b.parsed.Matches(e.Name, e.Path, info) {
 			continue
 		}
-		score, kind, reasons := b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
+		score, kind, reasons := b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home, b.near)
 		b.results = append(b.results, e)
 		b.scores[e.Path], b.kinds[e.Path] = score, kind
 		b.reasons[e.Path] = reasons
@@ -543,7 +558,7 @@ func sortHitsByQuery(hits []Entry, q searchquery.Query) {
 	now, home := time.Now(), homeForSearch()
 	scores := make(map[string]int, len(hits))
 	for _, e := range hits {
-		scores[e.Path], _, _ = q.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
+		scores[e.Path], _, _ = q.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home, "")
 	}
 	sortHitsByScore(hits, scores)
 }

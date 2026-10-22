@@ -279,6 +279,7 @@ func (a *App) assistantComposerTrailing(c *ui.Context) {
 		return
 	}
 	if chat.IconAction(c, "停止", lucide.Square).Clicked() && a.assist.stop != nil {
+		a.assist.queued = ""
 		a.assist.stop()
 		a.assist.status = "正在停止…"
 	}

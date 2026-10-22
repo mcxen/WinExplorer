@@ -270,6 +270,7 @@ func (a *App) remoteMux() http.Handler {
 	mux.HandleFunc("/api/fs/list", a.remoteHandleFSList)
 	mux.HandleFunc("/api/fs/get", a.remoteHandleFSGet)
 	mux.HandleFunc("/api/fs/search", a.remoteHandleFSSearch)
+	mux.HandleFunc("/api/fs/preview", a.remoteHandleFSPreview)
 	mux.HandleFunc("/d/", a.remoteHandleDown)
 	mux.HandleFunc("/p/", a.remoteHandleProxy)
 	mux.HandleFunc("/ping", a.remoteHandlePing)

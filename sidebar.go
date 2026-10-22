@@ -256,18 +256,28 @@ func (a *App) navRows() []navRow {
 	for _, it := range a.pluginNavItems() {
 		rows = append(rows, navRow{kind: navRowPlugin, key: it.Key, label: it.Label, icon: it.Kind, path: it.Path, act: it.Run})
 	}
+	// The 快速访问 heading stays when collapsed — and when nothing is
+	// pinned — so a drop still has a target; its pins hide with it.
 	rows = append(rows, navRow{
 		kind: navRowSection, key: "nav-quick-access", label: "快速访问", pinDrop: true,
+		hasKids: true, open: a.navQuickExpanded,
 	})
-	for _, p := range a.pinnedPlaces() {
-		rows = append(rows, navRow{
-			kind: navRowPlace, key: "nav-" + p.Path, label: p.Name, icon: p.Kind, path: p.Path,
-			file: p.Kind == "file",
-		})
+	if a.navQuickExpanded {
+		for _, p := range a.pinnedPlaces() {
+			rows = append(rows, navRow{
+				kind: navRowPlace, key: "nav-" + p.Path, label: p.Name, icon: p.Kind, path: p.Path,
+				file: p.Kind == "file",
+			})
+		}
 	}
 	if recent := a.recentPlaceRows(); len(recent) > 0 {
-		rows = append(rows, navRow{kind: navRowSection, key: "nav-recent-head", label: "最近位置"})
-		rows = append(rows, recent...)
+		rows = append(rows, navRow{
+			kind: navRowSection, key: "nav-recent-head", label: "最近位置",
+			hasKids: true, open: a.navRecentExpanded,
+		})
+		if a.navRecentExpanded {
+			rows = append(rows, recent...)
+		}
 	}
 	rows = append(rows, navRow{
 		kind: navRowThisPC, key: "nav-thispc", label: "此电脑", icon: "thispc",
@@ -334,13 +344,19 @@ func (a *App) navPaneRow(c *ui.Context, r navRow) {
 }
 
 // navSectionRow is a heading: 快速访问 or 最近位置. It does not navigate.
-// 快速访问 takes a drop and pins it. A folder row under the heading still
-// moves a drop into that folder; only the heading pins.
+// Its twist collapses the section, hiding its rows while the heading stays;
+// 快速访问 takes a drop and pins it, collapsed or not. A folder row under
+// the heading still moves a drop into that folder; only the heading pins.
 func (a *App) navSectionRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
-		Radius(4).Padding(0, 8).AlignItems(ui.Center).Justify(ui.Start).Label(r.label)
+		Radius(4).Padding(0, 8, 0, 2).Gap(4).AlignItems(ui.Center).Justify(ui.Start).Label(r.label)
 	a.paintNavRow(row, r)
 	row.Children(func() {
+		chev := a.navTwist(c, r, "折叠 "+r.label)
+		if chev.Clicked() {
+			a.navSetSectionOpen(r, !r.open)
+			return
+		}
 		ui.Text(c, r.label).FontSize(11).FontWeight(600).TextColor(colorMuted()).
 			SingleLine()
 	})
@@ -349,6 +365,16 @@ func (a *App) navSectionRow(c *ui.Context, r navRow) {
 	}
 	if r.pinDrop {
 		a.bindPinDrop(row)
+	}
+}
+
+// navSetSectionOpen opens or closes a section heading's rows.
+func (a *App) navSetSectionOpen(r navRow, open bool) {
+	switch r.key {
+	case "nav-quick-access":
+		a.navQuickExpanded = open
+	case "nav-recent-head":
+		a.navRecentExpanded = open
 	}
 }
 

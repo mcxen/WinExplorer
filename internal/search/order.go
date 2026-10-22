@@ -20,7 +20,7 @@ func sortHitsByQuery(hits []fsentry.Entry, query searchquery.Query) {
 	}
 	scores := make(map[string]int, len(hits))
 	for _, hit := range hits {
-		scores[hit.Path], _, _ = query.Score(hit.Name, hit.Path, hit.IsDir, hit.ModTime, now, home)
+		scores[hit.Path], _, _ = query.Score(hit.Name, hit.Path, hit.IsDir, hit.ModTime, now, home, "")
 	}
 	slices.SortStableFunc(hits, func(x, y fsentry.Entry) int {
 		if c := scores[y.Path] - scores[x.Path]; c != 0 {

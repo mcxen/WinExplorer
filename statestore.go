@@ -45,6 +45,11 @@ type persistedState struct {
 	// unmarshals to nil, and the setters initialize it lazily.
 	PluginSettings map[string]map[string]string `json:"pluginSettings"`
 
+	// Freq is the usage ledger behind the assistant's 常用文件: how often
+	// and how recently each path was opened, visited, pinned, attached or
+	// read, so the model can be told what the user actually works with.
+	Freq map[string]pathFreq `json:"freq,omitempty"`
+
 	// path is the state file the store reads and writes, set by loadState
 	// and never serialized. A store built in memory — the tests' and the
 	// remote plugin's — has none and keeps its state in memory, instead
@@ -304,6 +309,7 @@ func (st *persistedState) pin(path string) bool {
 		return false
 	}
 	st.Pinned = slices.Insert(st.Pinned, 0, path)
+	st.noteFreqLocked(path, 3) // a pin is a stated favorite
 	st.saveLocked()
 	return true
 }
@@ -335,6 +341,7 @@ func (st *persistedState) pushRecent(path string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	path = filepath.Clean(path)
+	st.noteFreqLocked(path, 1) // opening ranks in the usage ledger
 	st.Recent = slices.DeleteFunc(st.Recent, func(p string) bool {
 		return p == path
 	})
@@ -377,6 +384,7 @@ func (st *persistedState) pushVisit(dir string) {
 	if len(st.Visited) > maxVisited {
 		st.Visited = st.Visited[:maxVisited]
 	}
+	st.noteFreqLocked(dir, 1) // visiting ranks in the usage ledger
 	st.saveLocked()
 }
 

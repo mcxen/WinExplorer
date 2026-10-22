@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	assistant "sunvale/internal/assistant"
 	"sunvale/internal/rename"
 )
 
@@ -35,9 +36,19 @@ type sunvaleTools struct {
 	selected  []string
 	autopilot bool
 	nav       string
-	memory    []aiMemory
-	memAdd    []aiMemory
-	memDrop   []string
+	// web is the run's web_search/web_read configuration, bound from
+	// prefs.webSearch; webOff is the skill toggle turning them down.
+	web    assistant.WebSearch
+	webOff bool
+	// frequent is the run's snapshot of the usage ledger, backing the
+	// frequent_files tool.
+	frequent []string
+	// media holds the pictures one run extracted. Tool text only carries
+	// their ids; the model-side rewrite turns those into real image parts.
+	media   *assistMediaBag
+	memory  []aiMemory
+	memAdd  []aiMemory
+	memDrop []string
 	// onToolCall is an optional test hook. Production leaves it nil; the
 	// real-model regression uses it to record the exact tool sequence.
 	onToolCall func(string)
@@ -97,6 +108,19 @@ func (s *sunvaleTools) bind(root string, showHidden bool, book []archivePassword
 	s.undos = nil
 	s.nav = ""
 	s.mu.Unlock()
+}
+
+// bindMedia points the run's read tools at a fresh picture bag.
+func (s *sunvaleTools) bindMedia(bag *assistMediaBag) {
+	s.mu.Lock()
+	s.media = bag
+	s.mu.Unlock()
+}
+
+func (s *sunvaleTools) mediaBag() *assistMediaBag {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.media
 }
 
 // setToolCallHook installs the test-only observer without exposing the
@@ -207,15 +231,18 @@ func (s *sunvaleTools) readFile(_ context.Context, _ *mcp.CallToolRequest, args 
 	if err != nil {
 		return mcpErr(err), nil, nil
 	}
-	return readTextFile(path)
+	// The row of the file being read breathes until the run ends, and the
+	// read scores in the window's usage ledger: what the assistant keeps
+	// looking at is part of what the user works with.
+	aiFx.markBusy(path)
+	noteAssistRead(path)
+	return readTextFile(path, s.mediaBag())
 }
 
-func readTextFile(path string) (*mcp.CallToolResult, any, error) {
-	text, err := readTextHead(path)
-	if err != nil {
-		return mcpErr(err), nil, nil
-	}
-	return mcpText(text), nil, nil
+// readTextFile is named for the common case but reads any file the
+// extractor understands: text, documents, pictures, media and archives.
+func readTextFile(path string, bag *assistMediaBag) (*mcp.CallToolResult, any, error) {
+	return mcpText(readAnyFile(path, bag)), nil, nil
 }
 
 type renameArgs struct {
@@ -354,11 +381,21 @@ func (s *sunvaleTools) unzip(_ context.Context, _ *mcp.CallToolRequest, args unz
 		return mcpErr(err), nil, nil
 	}
 	passwords := archivePasswordCandidates(s.archivePasswordBook())
-	if _, err := extractWithPasswords(src, dst, passwords); err != nil {
+	aiFx.markBusy(src)
+	_, nested, err := extractArchiveNested(src, dst, passwords)
+	if err != nil {
 		_ = os.RemoveAll(dst)
 		return mcpErr(err), nil, nil
 	}
-	return mcpText("已解压到 " + dst), nil, nil
+	noteAssistRead(src)
+	msg := "已解压到 " + dst
+	if s := nested.summary(); s != "" {
+		msg += "\n" + s
+		if len(nested.Locked) > 0 {
+			msg += "\n用户补充密码（password_save 或 设置 → 助手）后可对未解开的内层归档重试。"
+		}
+	}
+	return mcpText(msg), nil, nil
 }
 
 func (s *sunvaleTools) archivePasswordBook() []archivePassword {
@@ -406,10 +443,10 @@ func newSunvaleServer() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "sunvale", Version: "0.1.0"}, nil)
 	s := sunvaleToolState
 	addSunvaleTool(s, server, &mcp.Tool{Name: "list_dir", Description: "列出当前文件夹里的项目。path 相对当前文件夹。"}, s.listDir)
-	addSunvaleTool(s, server, &mcp.Tool{Name: "read_file", Description: "读取当前文件夹里的一个文本文件。大文件只返回开头。"}, s.readFile)
-	addSunvaleTool(s, server, &mcp.Tool{Name: "read_files", Description: "读取用户指定的多个文本文件。路径相对当前文件夹，或绝对路径。"}, s.readFiles)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "read_file", Description: "读取当前文件夹里的一个文件：文本、代码、Word/Excel/PPT/PDF/epub 正文、图片、视频帧、音频、压缩包清单都可以。路径相对当前文件夹，大文件只返回开头。"}, s.readFile)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "read_files", Description: "读取用户指定的多个文件，最多 12 个。图片和视频会直接附上画面（模型能看图时），文档返回正文，音视频返回时长与画面帧。路径相对当前文件夹，或绝对路径。"}, s.readFiles)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "list_outside", Description: "列出任意绝对路径上的文件夹。"}, s.listOutside)
-	addSunvaleTool(s, server, &mcp.Tool{Name: "read_outside", Description: "读取任意绝对路径上的文本文件。"}, s.readOutside)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "read_outside", Description: "读取任意绝对路径上的文件，支持的类型与 read_file 相同。"}, s.readOutside)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "properties", Description: "查看文件或文件夹的大小、时间和权限。路径相对当前文件夹，或绝对路径。"}, s.properties)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "mkdir", Description: "在当前文件夹里新建文件夹。"}, s.mkdir)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "new_text_file", Description: "在当前文件夹里新建文本文件。"}, s.newTextFile)
@@ -431,12 +468,14 @@ func newSunvaleServer() *mcp.Server {
 	addSunvaleTool(s, server, &mcp.Tool{Name: "folder_summary", Description: "统计文件夹里的文件数、文件夹数、总大小和常见扩展名。"}, s.folderSummary)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "disk_space", Description: "查看路径所在磁盘还剩多少空间。"}, s.diskSpace)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "current_selection", Description: "这次发送时用户选中的路径，不含之后新点的项目。"}, s.currentSelection)
+	addSunvaleTool(s, server, &mcp.Tool{Name: "frequent_files", Description: "列出用户常用的文件和文件夹（按使用频率与最近程度排序）。用户说「常看的」「之前用过的」「老用的」时先调用本工具，不要猜。"}, s.frequentFiles)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "navigate_to", Description: "本轮结束后让窗口打开一个文件夹，本轮里的工具仍用原来的文件夹。"}, s.navigateTo)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "present_form", Description: "向用户出示可填写的规范表单（时间、路径、开关、分段等）。缺路径/时间时先调用；调用后停止本轮等用户提交。preset=schedule 可直接给出定时任务表单。"}, s.presentForm)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "offer_choices", Description: "把可多选的做法交给用户。用户要求选择或比较方案时必须调用；调用后停止本轮，等用户勾选。"}, s.offerChoices)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "remember", Description: "记住一句用户明确要求留下的事实，供以后的会话使用。不要记密码、密钥或文件内容。"}, s.remember)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "forget", Description: "按原文忘掉一条记忆。有多条相似时先让用户说完整的一句。"}, s.forget)
 	addSunvaleTool(s, server, &mcp.Tool{Name: "memory_list", Description: "列出已经记住的短事实。"}, s.memoryList)
+	registerWebSearchTools(s, server)
 	registerScheduleTools(s, server)
 	registerAssistantTaskTools(s, server)
 	return server

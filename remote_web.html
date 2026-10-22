@@ -327,19 +327,25 @@ async function openPreview(path){
  if(raw&&d.sign&&raw.indexOf('sign=')<0)raw+=(raw.indexOf('?')<0?'?':'&')+'sign='+encodeURIComponent(d.sign);
  const kind=itemKind(d.name||name,!!d.is_dir,d.type);
  if(raw){const dl=$('pvDownload');dl.href=raw;dl.classList.remove('hidden')}
- if(!raw||kind==='other'){pvMsg('不支持预览');return}
  const body=$('pvBody');body.innerHTML='';
+ if(kind==='archive'||kind==='doc'||kind==='other'){
+  const extra=await api('/api/fs/preview','POST',{path:path,password:sharePwd});
+  if(svFillPreview(body,extra&&extra.data))return;
+  pvMsg((extra&&extra.data&&extra.data.note)||'不支持预览');
+  return;
+ }
+ if(!raw){pvMsg('不支持预览');return}
  if(kind==='video'){
-  const v=document.createElement('video');v.controls=true;v.autoplay=true;v.src=raw;body.appendChild(v);
+  const v=document.createElement('video');v.controls=true;v.autoplay=true;v.src=raw;svMediaFallback(v,'浏览器无法播放此视频，可用「下载」保存');body.appendChild(v);
  }else if(kind==='audio'){
-  const a=document.createElement('audio');a.controls=true;a.src=raw;body.appendChild(a);
+  const a=document.createElement('audio');a.controls=true;a.src=raw;svMediaFallback(a,'浏览器无法播放此音频，可用「下载」保存');body.appendChild(a);
  }else if(kind==='image'){
-  const i=document.createElement('img');i.src=raw;i.alt=name;body.appendChild(i);
+  const i=document.createElement('img');i.src=raw;i.alt=name;svMediaFallback(i,'浏览器无法显示此图片，可用「下载」保存');body.appendChild(i);
  }else if(kind==='pdf'){
   const f=document.createElement('iframe');f.src=raw;body.appendChild(f);
  }else{
   const pre=document.createElement('pre');body.appendChild(pre);
-  try{const r=await fetch(raw);pre.textContent=(await r.text()).slice(0,65536)}
+  try{const r=await fetch(raw);pre.textContent=(await svDecodeText(await r.arrayBuffer())).slice(0,65536)}
   catch(e){pre.textContent='加载失败'}
  }
 }

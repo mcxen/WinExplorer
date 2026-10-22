@@ -9,6 +9,7 @@ import (
 	"github.com/oneo-me/onevra/source/components"
 
 	assistant "sunvale/internal/assistant"
+	"sunvale/internal/fileview"
 )
 
 // settings_assistant.go is the 助手 category of the system Settings dialog:
@@ -21,9 +22,13 @@ import (
 type settingsAssistForm struct {
 	editID                string
 	name, url, model, key string
+	vision                string // assistant.VisionAuto / VisionOn / VisionOff
 	extraDraft            string
 	extraLoaded           bool
 	pwName, pwSecret      string
+	// web search drafts; webLoaded mirrors extraLoaded for the new group.
+	webProvider, webKey, webURL string
+	webLoaded                   bool
 }
 
 // openAssistantSettings focuses the Settings dialog on the 助手 category.
@@ -40,6 +45,8 @@ func (a *App) openAssistantSettings() {
 func (a *App) settingsAssistantGroups() []components.SettingsGroup {
 	return []components.SettingsGroup{
 		a.settingsAssistantModelsGroup(),
+		a.settingsAssistantWebSearchGroup(),
+		a.settingsAssistantReaderGroup(),
 		a.settingsAssistantPromptGroup(),
 		a.settingsAssistantSkillsGroup(),
 		a.settingsAssistantMCPGroup(),
@@ -67,7 +74,7 @@ func (a *App) settingsAssistantModelsGroup() components.SettingsGroup {
 			if p.APIKey != "" {
 				keyNote = "已保存密钥"
 			}
-			desc = desc + " · " + keyNote
+			desc = desc + " · " + keyNote + " · " + visionLabel(p)
 			pid := id
 			items = append(items, components.SettingsItem{
 				ID: "prov-" + id, Title: label, Description: desc, Keywords: []string{"供应商", "模型", "密钥"},
@@ -85,6 +92,7 @@ func (a *App) settingsAssistantModelsGroup() components.SettingsGroup {
 							a.settingsAssist.url = p.BaseURL
 							a.settingsAssist.model = p.Model
 							a.settingsAssist.key = ""
+							a.settingsAssist.vision = p.Vision
 						}
 						if components.Button(c, "删除", components.ButtonGhost).Clicked() {
 							_ = deleteAssistantProvider(pid)
@@ -117,6 +125,7 @@ func (a *App) settingsAssistantModelsGroup() components.SettingsGroup {
 					Grow(1).MinWidth(0).Height(28).FontSize(12).
 					Placeholder("sk-…").Label("密钥").Password()
 			})
+			a.settingsAssistVisionRow(c)
 			ui.Row(c).FillWidth().Gap(6).Children(func() {
 				label := "保存"
 				if a.settingsAssist.editID == "" {
@@ -136,11 +145,80 @@ func (a *App) settingsAssistantModelsGroup() components.SettingsGroup {
 	return components.SettingsGroup{ID: "models", Title: "模型与密钥", Items: items}
 }
 
+// settingsAssistVisionRow is the 看图 selector: auto asks the model name,
+// on forces pictures even at a failed request, off keeps a text-only route
+// private and cheap.
+func (a *App) settingsAssistVisionRow(c *ui.Context) {
+	ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "看图").FontSize(11).TextColor(colorMuted()).Width(36).Shrink(0)
+		for _, opt := range []struct {
+			label, value string
+		}{
+			{"自动判断", assistant.VisionAuto},
+			{"总是看图", assistant.VisionOn},
+			{"不看图", assistant.VisionOff},
+		} {
+			opt := opt
+			style := components.ButtonGhost
+			if a.settingsAssist.vision == opt.value {
+				style = components.ButtonSecondary
+			}
+			if components.Button(c, opt.label, style).Clicked() {
+				a.settingsAssist.vision = opt.value
+			}
+		}
+	})
+	guess := assistant.ModelSeesImages(a.settingsAssist.model)
+	hint := "按模型名判断：当前模型" + map[bool]string{true: "会看图", false: "不看图"}[guess] + "。图片、PDF 页和视频帧都会直接发给模型。"
+	if a.settingsAssist.vision == assistant.VisionOn {
+		hint = "强制看图。模型不支持时会自动退回纯文字。"
+	} else if a.settingsAssist.vision == assistant.VisionOff {
+		hint = "不发送图片，只给文字描述与文件元数据。"
+	}
+	ui.Text(c, hint).FontSize(11).TextColor(colorMuted()).FillWidth().Wrap()
+}
+
+// settingsAssistantReaderGroup lists what this machine can extract, so a
+// missing frame or a PDF that came back as a picture has an explanation one
+// click away instead of a support question.
+func (a *App) settingsAssistantReaderGroup() components.SettingsGroup {
+	return components.SettingsGroup{
+		ID: "reader", Title: "文件读取",
+		Items: []components.SettingsItem{{
+			ID: "reader-backends", Title: "读取后端",
+			Description: "助手按文件类型选择读取方式：内置解析优先，缺什么再用命令行工具或 Python 脚本兜底。",
+			Keywords:    []string{"读取", "图片", "视频", "ffmpeg", "Python", "PDF"},
+			Stacked:     true,
+			Build: func(c *ui.Context) {
+				ui.Column(c).FillWidth().Gap(2).Children(func() {
+					for _, line := range fileview.ExtractorStatus() {
+						ui.Text(c, line).FontSize(11).TextColor(colorText()).Wrap()
+					}
+				})
+			},
+		}},
+	}
+}
+
+func visionLabel(p aiProvider) string {
+	switch p.Vision {
+	case assistant.VisionOn:
+		return "总是看图"
+	case assistant.VisionOff:
+		return "不看图"
+	}
+	if assistant.ModelSeesImages(p.Model) {
+		return "自动·看图"
+	}
+	return "自动·不看图"
+}
+
 func (a *App) settingsAssistSaveProvider() {
 	in := assistantConfigInput{
 		ID: a.settingsAssist.editID, Name: a.settingsAssist.name,
 		BaseURL: a.settingsAssist.url, Model: a.settingsAssist.model,
-		APIKey: a.settingsAssist.key, Active: a.settingsAssist.editID == "",
+		APIKey: a.settingsAssist.key, Vision: a.settingsAssist.vision,
+		Active: a.settingsAssist.editID == "",
 	}
 	if _, err := saveAssistantProvider(in); err != nil {
 		a.statusMsg = err.Error()
@@ -229,6 +307,7 @@ func (a *App) settingsAssistantSkillsGroup() components.SettingsGroup {
 			skillSwitch("skill-files", "文件能力", "关闭后 A2A 卡片不再声明 files 技能（本机工具仍可用）。", assistant.SkillFiles),
 			skillSwitch("skill-memory", "记忆能力", "关闭后不向模型注入记忆，也不提供记忆工具入口；会话抽屉隐藏记忆列表。", assistant.SkillMemory),
 			skillSwitch("skill-archive", "压缩与密码", "可选标记；解压密码本仍可在下方管理。", assistant.SkillArchive),
+			skillSwitch("skill-web", "网页搜索", "关闭后 web_search 与 web_read 即使配置了也不接受调用。", assistant.SkillWeb),
 		},
 	}
 }
@@ -314,6 +393,22 @@ func (a *App) settingsAssistantBehaviorGroup() components.SettingsGroup {
 				a.assist.memories = nil
 				a.statusMsg = "已清空记忆"
 			}),
+			{
+				ID:    "freq-files",
+				Title: "常用文件记录",
+				Description: fmt.Sprintf("使用频率账本共 %d 条：打开、访问、固定和拖给助手的文件都会积累，供助手回答「我常看的」类问题。",
+					a.storeFreqSnapshot()),
+				Keywords: []string{"常用", "频率", "使用记录"},
+				Build: func(c *ui.Context) {
+					if a.store == nil {
+						return
+					}
+					if components.Button(c, "清除并重新开始", components.ButtonGhost).Clicked() {
+						n := a.store.clearFreq()
+						a.statusMsg = fmt.Sprintf("已清除 %d 条常用文件记录", n)
+					}
+				},
+			},
 			{
 				ID: "history-path", Title: "会话与记忆路径", Description: hist,
 				Keywords: []string{"路径", "历史", "sessions"},

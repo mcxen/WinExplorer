@@ -45,13 +45,13 @@ func TestOpenUIStreamAndHistory(t *testing.T) {
 }
 
 func TestAssistantInstructionMentionsOpenUI(t *testing.T) {
-	for _, want := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "```openui", "ToAssistant", "offer_choices", "present_form", "CardHeader", "TreeItem", "TimeField", "PathField", "DayChips"} {
+	for _, want := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "{frequent}", "```openui", "ToAssistant", "offer_choices", "present_form", "CardHeader", "TreeItem", "TimeField", "PathField", "DayChips"} {
 		if !strings.Contains(assistantInstruction, want) {
 			t.Fatalf("instruction missing %s", want)
 		}
 	}
 	stripped := assistantInstruction
-	for _, keep := range []string{"{folder}", "{mode}", "{selection}", "{memory}"} {
+	for _, keep := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "{frequent}"} {
 		stripped = strings.ReplaceAll(stripped, keep, "")
 	}
 	if strings.ContainsAny(stripped, "{}") {

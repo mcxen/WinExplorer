@@ -46,6 +46,9 @@ type assistRun struct {
 	prefs     assistPrefs
 	hist      []*schema.Message
 	memories  []aiMemory
+	// freqPaths is the run's snapshot of the usage ledger: it fills the
+	// prompt's {frequent} section and backs the frequent_files tool.
+	freqPaths []string
 	// onLive paints one transcript line as it grows. onStatus is the working
 	// label; onPending names a tool that has been chosen and not returned.
 	// onSwitched records a model that took over after the first one was
@@ -118,6 +121,9 @@ func (a *App) assistantSubmit() {
 	for i, f := range files {
 		paths[i] = f.Path
 	}
+	// The attached files are the first thing the run reads: their rows
+	// breathe from the moment the message goes out.
+	aiFx.markBusy(paths...)
 	var selected []string
 	for _, e := range a.selectedEntries() {
 		if e.Path != "" {
@@ -128,6 +134,7 @@ func (a *App) assistantSubmit() {
 		prov: prov, root: root, hidden: a.store.settings().ShowHidden,
 		book: append([]archivePassword(nil), a.assist.passwords...), selected: selected,
 		files: paths, autopilot: a.assist.autopilot,
+		freqPaths: a.frequentTop(20),
 		prefs: assistPrefs{
 			Width: a.assist.width, Full: a.assist.full, Autopilot: a.assist.autopilot,
 			ExtraInstruction: a.assist.extraInstruction,
@@ -183,6 +190,7 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 			a.assist.pending = ""
 			a.assist.resetLive()
 			a.assist.status = ""
+			a.assist.flowCool = time.Now().Add(assistFlowCool)
 			aiFx.endRun()
 			a.reloadAfterFx()
 			for _, id := range plans {
@@ -190,6 +198,13 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 			}
 			if nav != "" {
 				a.navigate(nav)
+			}
+			// A queued message waited out this run: it goes out now, as
+			// ZCode's queue panel sends when the turn frees up.
+			if a.assist.queued != "" {
+				a.assist.draft = a.assist.queued
+				a.assist.queued = ""
+				a.assistantSubmit()
 			}
 		})
 	}()
@@ -244,7 +259,13 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 // local pane and A2A render the same tool output.
 func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, error) {
 	sunvaleToolState.bind(run.root, run.hidden, run.book, run.selected, run.autopilot)
+	sunvaleToolState.bindWeb(run.prefs.WebSearch, assistant.SkillDisabled(run.prefs, assistant.SkillWeb))
 	sunvaleToolState.bindMemory(run.memories)
+	sunvaleToolState.bindFrequent(run.freqPaths)
+	// The one place every run ends, windowed or headless: the lit rows'
+	// breathing belongs to the run that asked for it, or a headless turn
+	// (A2A, scheduled tasks) would leave its rows glowing forever.
+	defer aiFx.endRun()
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		APIKey:  run.prov.APIKey,
 		BaseURL: run.prov.BaseURL,
@@ -255,6 +276,11 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 	if err != nil {
 		return assistRunResult{}, err
 	}
+	// The bag is this run's pictures. Binding it before the tools means the
+	// first read_file already lands in the right place.
+	bag := newMediaBag()
+	sunvaleToolState.bindMedia(bag)
+	vision := visionModel{inner: chatModel, bag: bag, vision: run.prov.VisionEnabled()}
 	sess, err := sunvaleSession(ctx)
 	if err != nil {
 		return assistRunResult{}, err
@@ -277,7 +303,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		Name:        "sunvale",
 		Description: "晴谷文件管理器助手",
 		Instruction: assistant.EffectiveInstruction(run.prefs.ExtraInstruction),
-		Model:       chatModel,
+		Model:       vision,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: tools},
 		},
@@ -292,6 +318,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		"mode":      mode,
 		"selection": sessionPlain(selectionText(run.selected)),
 		"memory":    memoryPrompt(memories),
+		"frequent":  sessionPlain(freqPromptText(run.freqPaths)),
 	}))
 	var result assistRunResult
 	nextID := 0
@@ -393,8 +420,9 @@ func publishAssist(run assistRun, id int, turn aiTurn, partial bool, result *ass
 }
 
 // assistModelHistory appends the named-file excerpts to the last user
-// message. The caller's history is left alone: its messages are shared with
-// the visible transcript, and the excerpts must not be written to disk.
+// message, and the pictures with them when the model can see. The caller's
+// history is left alone: its messages are shared with the visible
+// transcript, and the excerpts must not be written to disk.
 func assistModelHistory(run assistRun) []*schema.Message {
 	hist := append([]*schema.Message(nil), run.hist...)
 	if len(run.files) == 0 || len(hist) == 0 {
@@ -404,9 +432,16 @@ func assistModelHistory(run assistRun) []*schema.Message {
 	if last == nil || last.Role != schema.User {
 		return hist
 	}
-	copyLast := *last
-	copyLast.Content += "\n\n" + specifiedFileNote(run.files)
-	hist[len(hist)-1] = &copyLast
+	note, frames := specifiedFileNote(run.files)
+	body := last.Content
+	if body != "" {
+		body += "\n\n"
+	}
+	body += note
+	if !run.prov.VisionEnabled() {
+		frames = nil
+	}
+	hist[len(hist)-1] = attachFiles(body, frames)
 	return hist
 }
 

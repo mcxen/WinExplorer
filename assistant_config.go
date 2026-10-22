@@ -45,6 +45,7 @@ type assistantConfigView struct {
 	Name          string `json:"name"`
 	BaseURL       string `json:"baseURL"`
 	Model         string `json:"model"`
+	Vision        string `json:"vision,omitempty"`
 	KeyConfigured bool   `json:"keyConfigured"`
 	Active        bool   `json:"active"`
 }
@@ -61,15 +62,18 @@ type assistantConfigStatus struct {
 }
 
 type assistantConfigInput struct {
-	ID      string  `json:"id,omitempty"`
-	Name    string  `json:"name"`
-	BaseURL string  `json:"baseURL"`
-	Model   string  `json:"model"`
-	APIKey  string  `json:"apiKey,omitempty"`
-	Active  bool    `json:"active,omitempty"`
-	Width   float32 `json:"width,omitempty"`
-	Full    *bool   `json:"full,omitempty"`
-	Auto    *bool   `json:"autopilot,omitempty"`
+	ID      string `json:"id,omitempty"`
+	Name    string `json:"name"`
+	BaseURL string `json:"baseURL"`
+	Model   string `json:"model"`
+	APIKey  string `json:"apiKey,omitempty"`
+	// Vision is assistant.VisionAuto / VisionOn / VisionOff: whether this
+	// model receives pictures.
+	Vision string  `json:"vision,omitempty"`
+	Active bool    `json:"active,omitempty"`
+	Width  float32 `json:"width,omitempty"`
+	Full   *bool   `json:"full,omitempty"`
+	Auto   *bool   `json:"autopilot,omitempty"`
 }
 
 // assistantConfigPath is the file assistantUI.ensure uses. Tests can set
@@ -124,7 +128,7 @@ func assistantConfigStatusOf(disk assistantDisk) assistantConfigStatus {
 	}
 	for _, p := range disk.Providers {
 		st.Providers = append(st.Providers, assistantConfigView{
-			ID: p.ID, Name: p.Name, BaseURL: p.BaseURL, Model: p.Model,
+			ID: p.ID, Name: p.Name, BaseURL: p.BaseURL, Model: p.Model, Vision: p.Vision,
 			KeyConfigured: p.APIKey != "", Active: p.ID == disk.ActiveID,
 		})
 	}
@@ -182,7 +186,7 @@ func saveAssistantProvider(in assistantConfigInput) (aiProvider, error) {
 	if in.APIKey == "" {
 		return aiProvider{}, fmt.Errorf("新供应商需要 apiKey")
 	}
-	p := aiProvider{ID: id, Name: in.Name, BaseURL: in.BaseURL, Model: in.Model, APIKey: in.APIKey}
+	p := aiProvider{ID: id, Name: in.Name, BaseURL: in.BaseURL, Model: in.Model, APIKey: in.APIKey, Vision: in.Vision}
 	found := false
 	for i := range disk.Providers {
 		if disk.Providers[i].ID == id {
@@ -417,7 +421,7 @@ func sunvaleBuiltinToolNames() []string {
 		"rename_plan", "zip_files", "unzip", "password_list", "password_save",
 		"search_names", "grep_text", "write_text", "folder_summary", "disk_space",
 		"current_selection", "navigate_to", "offer_choices", "present_form",
-		"remember", "forget", "memory_list",
+		"remember", "forget", "memory_list", "web_search", "web_read", "frequent_files",
 		"schedule_list", "schedule_create", "schedule_update", "schedule_delete", "schedule_run",
 		"assistant_task_run",
 	}

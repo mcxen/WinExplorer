@@ -43,11 +43,13 @@ function svToggleTheme(){
 const SV_SUN='<circle cx="12" cy="12" r="4"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/>';
 const SV_MOON='<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
 const EXT={
- video:'mp4 mkv avi mov m4v webm flv ts rmvb wmv 3gp mpg mpeg f4v asf',
- audio:'mp3 flac wav aac ogg m4a wma opus ape aiff mid amr',
- image:'jpg jpeg jpe png gif webp bmp svg ico tif tiff heic heif avif',
- text:'txt md log json xml html htm css js ts jsx tsx go py rb java c h cpp cs rs sh bat yml yaml toml ini conf cfg csv sql lock',
- pdf:'pdf'
+ video:'mp4 mkv avi mov m4v webm flv ts rmvb wmv 3gp mpg mpeg f4v asf ogv m2ts mts 3g2 m2v m4p',
+ audio:'mp3 flac wav aac ogg m4a wma opus ape aiff aif aifc oga mka mp2 weba caf mid amr',
+ image:'jpg jpeg jpe jfif pjp pjpeg png gif webp bmp svg ico tif tiff heic heif avif jxl',
+ text:'txt md markdown mdx rst adoc tex org log json jsonl ndjson geojson xml html htm css scss sass less js mjs cjs ts jsx tsx vue svelte go py pyw rb java kt kts c h cpp cc hpp cs rs swift m mm php lua dart scala pl pm sh bash zsh fish bat ps1 cmd yml yaml toml ini conf cfg env properties editorconfig gitignore gitattributes dockerfile makefile cmake gradle mod sum proto graphql gql csv tsv sql lock srt vtt ass ssa lrc nfo eml ics vcf diff patch reg url m3u m3u8',
+ pdf:'pdf',
+ doc:'docx docm dotx dotm xlsx xlsm xltx xltm pptx pptm potx potm ppsx odt ods odp odg rtf epub',
+ archive:'zip jar war ear apk aab ipa whl vsix xpi crx nupkg cbz pages numbers key tar gz tgz bz2 tbz2 xz txz zst tzst lz4 7z rar cab'
 };
 const ICONS={
  dash:'<path d="M4.5 17.5a9 9 0 1 1 15 0"/><path d="M12 13.5l3.5-3.5"/><path d="M12 16.5h.01"/>',
@@ -98,7 +100,65 @@ function extKind(name){
  for(const k in EXT)if((' '+EXT[k]+' ').indexOf(' '+e+' ')>=0)return k;
  return'other';
 }
-function typeIcon(name){const k=extKind(name);return(k==='other'||k==='pdf')?'file':k}
+function typeIcon(name){
+ const k=extKind(name);
+ if(k==='archive')return 'archive';
+ if(k==='other'||k==='pdf'||k==='doc')return 'file';
+ return k;
+}
+function svDecodeText(buf){
+ const b=new Uint8Array(buf);
+ let enc='utf-8',skip=0;
+ if(b.length>=2&&b[0]===0xFF&&b[1]===0xFE){enc='utf-16le';skip=2}
+ else if(b.length>=2&&b[0]===0xFE&&b[1]===0xFF){enc='utf-16be';skip=2}
+ else if(b.length>=3&&b[0]===0xEF&&b[1]===0xBB&&b[2]===0xBF)skip=3;
+ else{
+  const n=Math.min(b.length-(b.length%2),512);
+  if(n>=8){
+   let even=0,odd=0,pairs=n/2;
+   for(let i=0;i<n;i+=2){if(b[i]===0)even++;if(b[i+1]===0)odd++}
+   if(odd*10>=pairs*8&&even*10<pairs*2)enc='utf-16le';
+   else if(even*10>=pairs*8&&odd*10<pairs*2)enc='utf-16be';
+  }
+ }
+ try{return new TextDecoder(enc).decode(skip?b.subarray(skip):b)}catch(e){return ''}
+}
+function svMediaFallback(node,msg){
+ node.addEventListener('error',()=>{
+  const s=document.createElement('span');
+  s.textContent=msg;
+  if(node.parentNode)node.replaceWith(s);
+ });
+}
+function svFillPreview(box,data){
+ if(!data)return false;
+ box.textContent='';
+ if(data.kind==='archive'){
+  const entries=data.entries||[];
+  if(!entries.length){
+   box.append(document.createTextNode(data.note||'压缩包是空的'));
+   return true;
+  }
+  const pre=document.createElement('pre');
+  const lines=entries.map(e=>(e.dir?'[文件夹] ':'')+e.name+(e.dir?'':'  '+fmtSize(e.size||0)));
+  if(data.truncated)lines.push('… 仅列出前 '+entries.length+' 项');
+  if(data.note)lines.push(data.note);
+  pre.textContent=lines.join('\n');
+  box.append(pre);
+  return true;
+ }
+ if(data.text){
+  const pre=document.createElement('pre');
+  pre.textContent=data.text;
+  box.append(pre);
+  return true;
+ }
+ if(data.note){
+  box.append(document.createTextNode(data.note));
+  return true;
+ }
+ return false;
+}
 function fmtSize(n){
  if(n==null||isNaN(n))return'\u2014';
  if(n<1024)return n+' B';

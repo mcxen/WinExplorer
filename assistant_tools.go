@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,12 +21,7 @@ import (
 // named, search and skim text, write, summarize a folder, and ask the user
 // to pick. The walk is capped so one question cannot scan a whole disk.
 
-const (
-	assistReadBytes = 32 * 1024
-	assistReadFiles = 12
-	assistNoteBytes = 48 * 1024
-	assistWalkNodes = 3000
-)
+const assistWalkNodes = 3000
 
 // errWalkStop ends a capped walk with whatever has been collected.
 var errWalkStop = errors.New("stop walk")
@@ -80,59 +74,9 @@ func (s *sunvaleTools) selectedPaths() []string {
 	return append([]string(nil), s.selected...)
 }
 
-// readTextHead reads the start of a text file. A large file is not an error:
-// the user asked to read it, and the rest can be fetched again if needed.
-func readTextHead(path string) (string, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("这是文件夹")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	buf := make([]byte, assistReadBytes)
-	n, err := f.Read(buf)
-	if n == 0 && err != nil && err != io.EOF {
-		return "", err
-	}
-	if bytes.Contains(buf[:n], []byte{0}) {
-		return "", fmt.Errorf("不是文本文件")
-	}
-	text := string(buf[:n])
-	if info.Size() > int64(n) {
-		text += fmt.Sprintf("\n…已截断，文件共 %d 字节", info.Size())
-	}
-	return text, nil
-}
-
-// specifiedFileNote is the excerpt attached to the user message, so a model
-// that forgets to call read_files still sees what was asked for. The budget
-// keeps a dozen large files from becoming the whole context.
-func specifiedFileNote(paths []string) string {
-	var b strings.Builder
-	b.WriteString("用户指定的文件，回答前先看这里；不够再调用 read_files：\n")
-	used := 0
-	for _, raw := range paths {
-		piece, err := readTextHead(raw)
-		if err != nil {
-			piece = err.Error()
-		}
-		block := raw + "\n" + piece + "\n---\n"
-		if used > 0 && used+len(block) > assistNoteBytes {
-			b.WriteString(raw)
-			b.WriteString("\n（超出本次附带上限，请用 read_files 读取）\n")
-			continue
-		}
-		b.WriteString(block)
-		used += len(block)
-	}
-	return b.String()
-}
+// readFiles answers with every kind of file, not just text: a picture
+// arrives as a picture, a clip as sampled frames. The extraction lives in
+// assistant_files.go so the same read backs the composer's attachments.
 
 type pathsArgs struct {
 	Paths []string `json:"paths" jsonschema:"要读的路径，相对当前文件夹或绝对路径，最多 12 个"`
@@ -155,12 +99,10 @@ func (s *sunvaleTools) readFiles(_ context.Context, _ *mcp.CallToolRequest, args
 			fmt.Fprintf(&b, "%s\n%s\n---\n", raw, err.Error())
 			continue
 		}
-		text, err := readTextHead(path)
-		if err != nil {
-			fmt.Fprintf(&b, "%s\n%s\n---\n", path, err.Error())
-			continue
-		}
-		fmt.Fprintf(&b, "%s\n%s\n---\n", path, text)
+		// Reading a file lights its row's breath until the run ends.
+		aiFx.markBusy(path)
+		noteAssistRead(path)
+		fmt.Fprintf(&b, "%s\n---\n", readAnyFile(path, s.mediaBag()))
 	}
 	return mcpText(b.String()), nil, nil
 }

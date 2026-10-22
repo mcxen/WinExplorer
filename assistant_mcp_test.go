@@ -65,14 +65,14 @@ func TestSunvaleMCPReachesAnyPath(t *testing.T) {
 	if !strings.Contains(text, "a.txt") || !strings.Contains(text, "sub/") {
 		t.Fatalf("list: %s", text)
 	}
-	if got := callToolText(t, sess, "read_file", map[string]any{"path": "a.txt"}); got != "hello" {
+	if got := callToolText(t, sess, "read_file", map[string]any{"path": "a.txt"}); !strings.Contains(got, "hello") || !strings.Contains(got, "类型:") {
 		t.Fatalf("read: %q", got)
 	}
 	far := filepath.Join(t.TempDir(), "out.txt")
 	if err := os.WriteFile(far, []byte("far"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := callToolText(t, sess, "read_file", map[string]any{"path": far}); got != "far" {
+	if got := callToolText(t, sess, "read_file", map[string]any{"path": far}); !strings.Contains(got, "far") {
 		t.Fatalf("read outside folder: %q", got)
 	}
 	book := callToolText(t, sess, "password_list", map[string]any{})
@@ -96,7 +96,7 @@ func TestSunvaleMCPReachesAnyPath(t *testing.T) {
 	if err := os.WriteFile(outFile, []byte("outside"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := callToolText(t, sess, "read_outside", map[string]any{"path": outFile}); got != "outside" {
+	if got := callToolText(t, sess, "read_outside", map[string]any{"path": outFile}); !strings.Contains(got, "outside") {
 		t.Fatalf("read_outside: %q", got)
 	}
 	listed := callToolText(t, sess, "list_outside", map[string]any{"path": outside})

@@ -33,7 +33,7 @@ func (a *App) visibleEntries() []Entry {
 	// listing so it never goes blank mid-typing.
 	if q != "" && !specialPath(t.path) && t.search.results != nil {
 		out := append([]Entry(nil), t.search.results...)
-		a.sortEntries(out)
+		a.sortSearchEntries(out, t.path)
 		return out
 	}
 	out := make([]Entry, 0, len(t.entries))
@@ -53,6 +53,37 @@ func (a *App) visibleEntries() []Entry {
 	}
 	a.sortEntries(out)
 	return out
+}
+
+// sortSearchEntries is the search listing's order: hits that live in the
+// folder on screen come first, then everything further down the tree.
+// Inside each band the ordinary sort still applies, directories first.
+func (a *App) sortSearchEntries(out []Entry, folder string) {
+	sort.SliceStable(out, func(i, j int) bool {
+		if ri, rj := searchPlaceRank(out[i], folder), searchPlaceRank(out[j], folder); ri != rj {
+			return ri < rj
+		}
+		if out[i].IsDir != out[j].IsDir {
+			return out[i].IsDir
+		}
+		less := entryLess(out[i], out[j], a.sortKey)
+		if !a.sortAsc {
+			less = entryLess(out[j], out[i], a.sortKey)
+		}
+		return less
+	})
+}
+
+// searchPlaceRank is 0 for a hit in the folder on screen, 1 otherwise.
+func searchPlaceRank(e Entry, folder string) int {
+	if folder != "" && (pathsEqual(e.Dir, folder) || pathsEqual(e.Path, folder)) {
+		return 0
+	}
+	return 1
+}
+
+func pathsEqual(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }
 
 // sortEntries orders in place: directories first, then by the current

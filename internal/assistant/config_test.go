@@ -83,3 +83,34 @@ func TestPrefsSkillsAndJSON(t *testing.T) {
 		t.Fatalf("round-trip skills: %v", round.Prefs.DisabledSkills)
 	}
 }
+
+func TestVisionModeAndDetection(t *testing.T) {
+	for _, tc := range []struct {
+		model, vision string
+		want          bool
+	}{
+		{"gpt-4o-mini", VisionAuto, true},
+		{"qwen2.5-vl-72b-instruct", VisionAuto, true},
+		{"claude-sonnet-4-5", VisionAuto, true},
+		{"gemini-2.5-flash", VisionAuto, true},
+		{"llama-3.2-11b-vision-instruct", VisionAuto, true},
+		{"o3-mini", VisionAuto, true},
+		{"grok-4-0709", VisionAuto, true},
+		{"gemma-3-27b-it", VisionAuto, true},
+		{"llama-4-scout-17b-16e-instruct", VisionAuto, true},
+		{"gpt-3.5-turbo-instruct", VisionAuto, false},
+		{"text-embedding-3-small", VisionAuto, false},
+		{"qwen-max", VisionAuto, false},
+		{"deepseek-chat", VisionAuto, false},
+		{"llama-3.1-8b-instruct", VisionAuto, false},
+		{"", VisionAuto, false},
+		// An explicit choice beats the name.
+		{"qwen-max", VisionOn, true},
+		{"gpt-4o", VisionOff, false},
+	} {
+		p := Provider{Model: tc.model, Vision: tc.vision}
+		if got := p.VisionEnabled(); got != tc.want {
+			t.Fatalf("VisionEnabled(%q, %q) = %v, want %v", tc.model, tc.vision, got, tc.want)
+		}
+	}
+}

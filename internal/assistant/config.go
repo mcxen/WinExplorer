@@ -18,25 +18,95 @@ type Provider struct {
 	BaseURL string `json:"baseURL"`
 	Model   string `json:"model"`
 	APIKey  string `json:"apiKey"`
+	// Vision says whether this model receives pictures. Empty means auto:
+	// the model name decides, because /models endpoints report no
+	// capabilities and asking the user is worse than a good guess.
+	Vision string `json:"vision,omitempty"`
 }
 
 // Prefs contains the assistant pane's model-independent settings.
 // ExtraInstruction is appended to the built-in Instruction at run time.
 // DisabledSkills lists capability ids (files, memory, archive) the user turned off.
 type Prefs struct {
-	Width            float32  `json:"width,omitempty"`
-	Full             bool     `json:"full,omitempty"`
-	Autopilot        bool     `json:"autopilot,omitempty"`
-	ExtraInstruction string   `json:"extraInstruction,omitempty"`
-	DisabledSkills   []string `json:"disabledSkills,omitempty"`
+	Width            float32   `json:"width,omitempty"`
+	Full             bool      `json:"full,omitempty"`
+	Autopilot        bool      `json:"autopilot,omitempty"`
+	ExtraInstruction string    `json:"extraInstruction,omitempty"`
+	DisabledSkills   []string  `json:"disabledSkills,omitempty"`
+	WebSearch        WebSearch `json:"webSearch,omitempty"`
 }
 
-// SkillFiles, SkillMemory and SkillArchive are Prefs.DisabledSkills ids.
+// WebSearch configures the web_search and web_read tools. Provider is
+// "tavily" or "bocha"; BaseURL overrides the provider's endpoint, which
+// mainly serves gateways and tests. The key stays in the local
+// assistant.json, as the providers' keys do.
+type WebSearch struct {
+	Enabled  bool   `json:"enabled,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	APIKey   string `json:"apiKey,omitempty"`
+	BaseURL  string `json:"baseURL,omitempty"`
+}
+
+// SkillFiles, SkillMemory, SkillArchive and SkillWeb are
+// Prefs.DisabledSkills ids.
 const (
 	SkillFiles   = "files"
 	SkillMemory  = "memory"
 	SkillArchive = "archive"
+	SkillWeb     = "web"
 )
+
+// Vision modes for Provider.Vision.
+const (
+	VisionAuto = ""
+	VisionOn   = "on"
+	VisionOff  = "off"
+)
+
+// VisionEnabled reports whether this route may carry pictures. Auto mode
+// trusts the model name: a wrong guess degrades to text at request time, so
+// guessing is cheaper than asking every user to know their model.
+func (p Provider) VisionEnabled() bool {
+	switch strings.TrimSpace(p.Vision) {
+	case VisionOn:
+		return true
+	case VisionOff:
+		return false
+	}
+	return ModelSeesImages(p.Model)
+}
+
+// ModelSeesImages is the auto-detection heuristic. Positive markers win
+// over the negative ones: "qwen2.5-vl-72b-instruct" is a vision model even
+// though its name ends in -instruct. A wrong guess degrades to a text retry
+// at request time, so guessing is cheaper than asking every user to know
+// what their model does.
+func ModelSeesImages(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if m == "" {
+		return false
+	}
+	for _, yes := range []string{
+		"vision", "-vl", "vl-", "vl:", "4o", "gpt-4.1", "gpt-5", "gpt-4-turbo",
+		"gemini", "gemma-3", "claude", "pixtral", "llava", "internvl", "minicpm-v",
+		"cogvlm", "qvq", "glm-4v", "glm-4.5v", "glm-4.1v", "grok", "llama-4",
+		"doubao", "step-1v", "moonshot-v1-vision", "kimi-vl", "mimo-vl", "seed-1",
+	} {
+		if strings.Contains(m, yes) {
+			return true
+		}
+	}
+	for _, no := range []string{"embed", "whisper", "tts", "dall-e", "moderation", "completion"} {
+		if strings.Contains(m, no) {
+			return false
+		}
+	}
+	switch {
+	case strings.HasPrefix(m, "o1"), strings.HasPrefix(m, "o3"), strings.HasPrefix(m, "o4"):
+		return !strings.Contains(m, "preview")
+	}
+	return false
+}
 
 // SkillDisabled reports whether id is listed in prefs.DisabledSkills.
 func SkillDisabled(prefs Prefs, id string) bool {

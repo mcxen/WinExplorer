@@ -121,7 +121,11 @@ func (a *App) searchPreviewReasons(c *ui.Context, e Entry) {
 	reasons := b.reasons[e.Path]
 	if reasons == nil {
 		now, home := time.Now(), homeForSearch()
-		score, _, reasons = b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home)
+		near := ""
+		if p := a.cur().path; !specialPath(p) {
+			near = p
+		}
+		score, _, reasons = b.parsed.Score(e.Name, e.Path, e.IsDir, e.ModTime, now, home, near)
 	}
 	ui.Column(c).FillWidth().Gap(2).Children(func() {
 		ui.Text(c, "排序依据（得分 "+itoa(score)+"）").FontSize(12).

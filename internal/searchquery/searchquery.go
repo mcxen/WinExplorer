@@ -437,13 +437,15 @@ func KindOfExt(ext string) string {
 
 // Score ranks a hit: higher is better. now is passed in so tests are stable,
 // and home lets common folders be favored without the package reading the
-// machine's state. The caller has already checked Matches; Score describes
-// why a matching hit deserves its place.
+// machine's state. near is the folder the user is looking at; hits there
+// outrank the same name anywhere else. An empty near leaves the order
+// unchanged. The caller has already checked Matches; Score describes why a
+// matching hit deserves its place.
 //
-// Priority, highest first: the name match (exact stem, then prefix, then
-// substring), path-only hits below all of them, then recency, depth, a
-// cache penalty and a home bonus as tiebreakers.
-func (q Query) Score(name, path string, isDir bool, mod, now time.Time, home string) (int, MatchKind, []Reason) {
+// Priority, highest first: the current folder, then its subtree, then the
+// name match (exact stem, prefix, substring), path-only hits below all of
+// those, then recency, depth, a cache penalty and a home bonus.
+func (q Query) Score(name, path string, isDir bool, mod, now time.Time, home, near string) (int, MatchKind, []Reason) {
 	score := 0
 	kind := MatchNone
 	var reasons []Reason
@@ -551,7 +553,40 @@ func (q Query) Score(name, path string, isDir bool, mod, now time.Time, home str
 		score += 5
 		reasons = append(reasons, Reason{Text: "位于主文件夹，常用位置加权", Weight: 5})
 	}
+	// The folder the user has open is the default place to look. The two
+	// bands sit above any name score, so a weaker name in that folder still
+	// leads an exact name somewhere else; within a band the name score
+	// still decides.
+	if bonus, why := nearBonus(path, near); bonus != 0 {
+		score += bonus
+		reasons = append(reasons, Reason{Text: why, Weight: bonus})
+	}
 	return score, kind, reasons
+}
+
+// nearBonus is how far a hit sits from the folder on screen. Direct
+// children (and the folder itself) lead; deeper descendants follow;
+// anywhere else gets nothing.
+func nearBonus(path, near string) (int, string) {
+	if near == "" || path == "" {
+		return 0, ""
+	}
+	if pathsSame(path, near) || pathsSame(filepath.Dir(path), near) {
+		return scoreInFolder, "位于当前文件夹"
+	}
+	if pathWithin(path, near) {
+		return scoreUnderFolder, "位于当前文件夹内"
+	}
+	return 0, ""
+}
+
+const (
+	scoreInFolder    = 20000
+	scoreUnderFolder = 10000
+)
+
+func pathsSame(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }
 
 func penalizedPath(path string) bool {

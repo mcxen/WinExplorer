@@ -417,6 +417,7 @@ func (a *App) a2aMessageSend(w http.ResponseWriter, req a2aRPCRequest) {
 	}
 	if a.store != nil {
 		run.hidden = a.store.remoteShowHidden()
+		run.freqPaths = a.store.frequentPaths(20)
 	}
 	go func(taskID string) {
 		assistantRunMu.Lock()
@@ -718,6 +719,7 @@ func (a *App) runAssistantFromMCP(ctx context.Context, in assistantRunArgs) (ass
 	}
 	if a.store != nil {
 		run.hidden = a.store.remoteShowHidden()
+		run.freqPaths = a.store.frequentPaths(20)
 	}
 	assistantRunMu.Lock()
 	result, runErr := runAssistantHeadless(ctx, run)

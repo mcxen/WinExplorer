@@ -78,6 +78,8 @@ func (a *App) doCompress() {
 
 // doExtract 解压选中的每个归档到以其基础名命名的子文件夹。加密归档
 // 会按密码本顺序重试；最后一个候选密码留在内存里给下一次解压优先试。
+// 归档套归档时自动连解（嵌套深度与个数有上限），解不开的内层归档在
+// 状态栏点名，不拖累其它内容落地。
 func (a *App) doExtract() {
 	sel := a.selectedEntries()
 	if len(sel) == 0 || specialPath(a.cur().path) {
@@ -86,6 +88,8 @@ func (a *App) doExtract() {
 	a.assist.ensure()
 	var failed []string
 	var extracted []string
+	var inner int
+	var locked []string
 	candidates := archivePasswordCandidates(a.assist.passwords)
 	if a.lastArchivePassword != "" {
 		ordered := []string{a.lastArchivePassword}
@@ -106,7 +110,7 @@ func (a *App) doExtract() {
 			continue
 		}
 		dst := filepath.Join(a.cur().path, base)
-		password, err := extractWithPasswords(e.Path, dst, candidates)
+		password, nested, err := extractArchiveNested(e.Path, dst, candidates)
 		if err != nil {
 			_ = os.RemoveAll(dst)
 			failed = append(failed, e.Name)
@@ -115,6 +119,8 @@ func (a *App) doExtract() {
 		if password != "" {
 			a.lastArchivePassword = password
 		}
+		inner += len(nested.Extracted)
+		locked = append(locked, nested.Locked...)
 		extracted = append(extracted, dst)
 	}
 	a.reload()
@@ -126,9 +132,15 @@ func (a *App) doExtract() {
 		a.cur().anchor = extracted[0]
 		a.requestPreview()
 	}
-	if len(failed) > 0 {
+	switch {
+	case len(failed) > 0:
 		a.statusMsg = "解压失败：" + strings.Join(failed, "、")
-	} else if len(extracted) > 0 {
+	case len(locked) > 0:
+		a.statusMsg = fmt.Sprintf("已解压 %d 个归档（%d 个内层）；%d 个内层归档密码本没解开，可在 设置 → 助手 添加密码后重试：%s",
+			len(extracted), inner, len(locked), strings.Join(locked, "、"))
+	case inner > 0:
+		a.statusMsg = fmt.Sprintf("已解压 %d 个归档（自动连解 %d 个内层归档）", len(extracted), inner)
+	case len(extracted) > 0:
 		a.statusMsg = fmt.Sprintf("已解压 %d 个归档", len(extracted))
 	}
 }

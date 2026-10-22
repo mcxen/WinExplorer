@@ -120,6 +120,7 @@ input:focus{border-color:var(--accent)}
 .pvhead{font-size:13px;font-weight:600;margin-bottom:8px;overflow-wrap:anywhere}
 .pvbox{display:flex;align-items:center;justify-content:center;min-height:110px;padding:6px;background:var(--hover);border-radius:6px;overflow:hidden}
 .pvbox img,.pvbox video{max-width:100%;max-height:210px;border-radius:4px}
+.pvbox pre{margin:0;max-height:240px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
 .pvbox audio{width:100%}
 .pvbox iframe{width:100%;height:220px;border:0;background:var(--card);border-radius:4px}
 .pvbox pre{margin:0;width:100%;max-height:210px;overflow:auto;padding:8px;background:none;color:inherit;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
@@ -967,10 +968,22 @@ function typeName(it){
  const e=extOf(it);
  return e?e.toUpperCase()+' 文件':'文件';
 }
+function placeRank(parent){
+ const p=parent||'/';
+ if(p===curPath)return 0;
+ if(curPath!=='/'&&p.startsWith(curPath+'/'))return 1;
+ if(curPath==='/'&&p!=='/')return 1;
+ return 2;
+}
 function sortList(list){
  const out=list.slice();
  const dir=sortAsc?1:-1,key=sortKey;
+ const ranked=globalSearch;
  out.sort((a,b)=>{
+  if(ranked){
+   const d=placeRank(a.parent)-placeRank(b.parent);
+   if(d)return d;
+  }
   if(a.is_dir!==b.is_dir)return a.is_dir?-1:1;
   let r=0;
   if(key==='date')r=new Date(a.modified||0)-new Date(b.modified||0);
@@ -982,6 +995,7 @@ function sortList(list){
  return out;
 }
 const locLabel=p=>!p||p==='/'?'主文件夹':p;
+function itemPath(it){return it&&it.parent?joinPath(it.parent,it.name):joinPath(curPath,it.name)}
 // inSearch：全局搜索视图生效中（有结果或正在搜索）
 function inSearch(){return globalSearch&&!!(searchResults||$('filterBox').value.trim())}
 function visibleItems(){
@@ -1677,7 +1691,7 @@ function setSearchScope(on){
 }
 async function runGlobalSearch(kw){
  const seq=++searchSeq;
- const j=await api('/api/fs/search','POST',{parent:'/',keywords:kw,scope:0,page:1,per_page:200,global:true});
+ const j=await api('/api/fs/search','POST',{parent:'/',keywords:kw,scope:0,page:1,per_page:200,global:true,near:curPath});
  if(seq!==searchSeq)return;
  if(!j||j.code!==200){searchResults=[];render();toast('搜索失败：'+(j&&j.message||'网络错误'),0);return}
  searchResults=(j.data&&j.data.content)||[];
@@ -2038,13 +2052,13 @@ async function putEmpty(path){
  }catch(e){return{code:0,message:'网络连接失败'}}
 }
 async function propertiesOne(it){
- const j=await api('/api/fs/get','POST',{path:joinPath(curPath,it.name)});
+ const j=await api('/api/fs/get','POST',{path:itemPath(it)});
  if(!j||j.code!==200||!j.data){toast('读取属性失败：'+(j&&j.message||'网络错误'),0);return}
  const d=j.data;
  frameModal('属性 · '+d.name,b=>{
   const add=(k,v)=>{const r=el('div','setrow');r.append(el('b','',k+'：'),el('span','',v));b.append(r)};
   add('类型',typeName(it));
-  add('位置',curPath);
+  add('位置',it.parent||curPath);
   if(!d.is_dir)add('大小',fmtSize(d.size)+'（'+(d.size||0)+' 字节）');
   add('修改日期',fmtTime(d.modified));
   add('创建日期',fmtTime(d.created));
@@ -2120,7 +2134,7 @@ async function paintPreview(it,target,stale){
   add('类型',typeName(it));
   if(!it.is_dir)add('大小',fmtSize(it.size));
   add('修改日期',fmtTime(it.modified));
-  add('位置',curPath);
+  add('位置',it.parent||curPath);
  }
  if(target.dl)target.dl.classList.add('hidden');
  if(it.is_dir){
@@ -2128,7 +2142,7 @@ async function paintPreview(it,target,stale){
   return;
  }
  box.append(el('span','pvempty','加载中…'));
- const j=await api('/api/fs/get','POST',{path:joinPath(curPath,it.name)});
+ const j=await api('/api/fs/get','POST',{path:itemPath(it)});
  if(stale&&stale())return;
  if(!j||j.code!==200||!j.data){
   box.textContent='';
@@ -2144,7 +2158,14 @@ async function paintPreview(it,target,stale){
  }
  box.textContent='';
  const kind=extKind(it.name);
- if(!raw||kind==='other'){
+ if(kind==='archive'||kind==='doc'||kind==='other'){
+  const extra=await api('/api/fs/preview','POST',{path:itemPath(it)});
+  if(stale&&stale())return;
+  if(svFillPreview(box,extra&&extra.data))return;
+  box.append(el('span','pvempty',(extra&&extra.data&&extra.data.note)||'此类型不支持预览，可用「下载」保存'));
+  return;
+ }
+ if(!raw){
   box.append(el('span','pvempty','此类型不支持预览，可用「下载」保存'));
   return;
  }
@@ -2153,17 +2174,20 @@ async function paintPreview(it,target,stale){
   v.controls=true;
   if(target.full)v.autoplay=true;
   v.src=raw;
+  svMediaFallback(v,'浏览器无法播放此视频，可用「下载」保存');
   box.append(v);
  }else if(kind==='audio'){
   const a=document.createElement('audio');
   a.controls=true;
   a.src=raw;
+  svMediaFallback(a,'浏览器无法播放此音频，可用「下载」保存');
   box.append(a);
  }else if(kind==='image'){
   const img=document.createElement('img');
   img.src=raw;
   img.alt=it.name;
   if(target.full)attachZoom(img);
+  svMediaFallback(img,'浏览器无法显示此图片，可用「下载」保存');
   box.append(img);
  }else if(kind==='pdf'){
   const f=document.createElement('iframe');
@@ -2174,7 +2198,7 @@ async function paintPreview(it,target,stale){
   box.append(pre);
   try{
    const r=await fetch(raw);
-   const t=await r.text();
+   const t=await svDecodeText(await r.arrayBuffer());
    if(stale&&stale())return;
    pre.textContent=t.slice(0,65536);
   }catch(e){
@@ -2276,7 +2300,7 @@ function bindPreviewSwipe(){
 }
 bindPreviewSwipe();
 async function downloadFile(it){
- const j=await api('/api/fs/get','POST',{path:joinPath(curPath,it.name)});
+ const j=await api('/api/fs/get','POST',{path:itemPath(it)});
  if(!j||j.code!==200||!j.data||!j.data.raw_url){toast('获取下载链接失败',0);return}
  const a=document.createElement('a');
  a.href=j.data.raw_url;

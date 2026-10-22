@@ -127,6 +127,7 @@ func (u *assistantUI) clearSession() {
 	u.folder = ""
 	u.turns = nil
 	u.halted = false
+	u.chipLit = nil
 	u.resetLive()
 }
 

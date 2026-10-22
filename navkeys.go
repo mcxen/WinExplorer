@@ -86,6 +86,12 @@ func (a *App) navTreeRight(rows []navRow, i int) {
 		a.navTreeFocus(r.key)
 		return
 	}
+	// A section heading's rows sit at its own depth, so the descent looks
+	// past the depth walk's break for the first selectable row under it.
+	if r.kind == navRowSection {
+		a.navTreeMoveTo(rows, navTreeSelectable(rows, i+1, 1))
+		return
+	}
 	for j := i + 1; j < len(rows); j++ {
 		if rows[j].depth <= r.depth {
 			break
@@ -99,12 +105,18 @@ func (a *App) navTreeRight(rows []navRow, i int) {
 
 func (a *App) navTreeLeft(rows []navRow, i int) {
 	r := rows[i]
-	if (r.kind == navRowFolder || r.kind == navRowThisPC) && r.open {
+	if (r.kind == navRowFolder || r.kind == navRowThisPC || r.kind == navRowSection) && r.open {
 		a.navTreeSetOpen(r, false)
 		a.navTreeFocus(r.key)
 		return
 	}
 	for j := i - 1; j >= 0; j-- {
+		if rows[j].kind == navRowSection && rows[j].hasKids {
+			// A section's rows name no common parent the depth walk could
+			// climb to; the nearest heading above is their Left target.
+			a.navTreeMoveTo(rows, j)
+			return
+		}
 		if rows[j].depth < r.depth && rows[j].kind != navRowSection {
 			a.navTreeMoveTo(rows, j)
 			return
@@ -117,6 +129,10 @@ func (a *App) navTreeSetOpen(r navRow, open bool) {
 		a.navPCExpanded = open
 		return
 	}
+	if r.kind == navRowSection {
+		a.navSetSectionOpen(r, open)
+		return
+	}
 	if a.navTree.open == nil {
 		a.navTree.open = map[string]bool{}
 	}
@@ -125,6 +141,10 @@ func (a *App) navTreeSetOpen(r navRow, open bool) {
 
 func (a *App) navTreeActivate(r navRow) {
 	if r.kind == navRowSection {
+		// A heading goes nowhere: Enter folds or unfolds it, as it does
+		// for a folder that is only a twist away.
+		a.navTreeSetOpen(r, !r.open)
+		a.navTreeFocus(r.key)
 		return
 	}
 	if r.act != nil {

@@ -37,7 +37,7 @@ func TestAttachDroppedPathsLeavesOriginals(t *testing.T) {
 		a.assist.files[1].Path != folder || a.assist.files[1].Detail != "文件夹" {
 		t.Fatalf("files = %+v", a.assist.files)
 	}
-	if a.assist.draft != "请阅读这些文件" || a.statusMsg != "已加入 2 个文件" {
+	if a.assist.draft != "请阅读这些文件" || a.statusMsg != "已加入 2 个项目" {
 		t.Fatalf("draft %q status %q", a.assist.draft, a.statusMsg)
 	}
 	entries, err := os.ReadDir(folder)
@@ -116,7 +116,7 @@ func TestDragOntoAssistantAttaches(t *testing.T) {
 	if _, err := os.Stat(note); err != nil {
 		t.Fatalf("transcript drop moved the file: %v", err)
 	}
-	if a.statusMsg != "已加入 1 个文件" || a.assist.draft != "请阅读这些文件" || !tt.HasText("chat-note.txt") {
+	if a.statusMsg != "已加入 1 个项目" || a.assist.draft != "请阅读这些文件" || !tt.HasText("chat-note.txt") {
 		t.Fatalf("status %q draft %q texts %v", a.statusMsg, a.assist.draft, tt.Texts())
 	}
 
@@ -128,7 +128,7 @@ func TestDragOntoAssistantAttaches(t *testing.T) {
 	if _, err := os.Stat(folder); err != nil {
 		t.Fatalf("composer drop moved the folder: %v", err)
 	}
-	if a.statusMsg != "已加入 1 个文件" || !tt.HasText("chat-folder") || !tt.HasText("文件夹") {
+	if a.statusMsg != "已加入 1 个项目" || !tt.HasText("chat-folder") || !tt.HasText("文件夹") {
 		t.Fatalf("status %q texts %v", a.statusMsg, tt.Texts())
 	}
 	payload = dragPayload{paths: []string{note}}

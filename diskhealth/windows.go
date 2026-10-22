@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -20,12 +21,19 @@ import (
 
 const probeTimeout = 12 * time.Second
 
+// createNoWindow is Windows' CREATE_NO_WINDOW. The shipped binary is linked
+// with -H=windowsgui, so it owns no console. A bare exec of powershell.exe
+// then allocates a new visible one. The tray polls this probe every few
+// seconds while disk capacity or speed is shown, which is the default, so
+// the window kept opening on its own.
+const createNoWindow = 0x08000000
+
 func probe() Report {
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 	r := Report{At: time.Now(), Sources: []string{"PowerShell Storage"}}
 
-	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive",
+	out, err := quietCommand(ctx, "powershell", "-NoProfile", "-NonInteractive",
 		"-Command", diskProbePS).Output()
 	if err != nil || len(out) == 0 {
 		return Report{At: r.At, Notes: []string{"PowerShell 没有返回磁盘信息"}}
@@ -41,6 +49,18 @@ func probe() Report {
 		r.Disks = append(r.Disks, d)
 	}
 	return r
+}
+
+// quietCommand starts a console program without a window. HideWindow covers
+// the show-state; CREATE_NO_WINDOW stops the console from being allocated
+// at all, which is what keeps a GUI parent from flashing powershell.exe.
+func quietCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: createNoWindow,
+	}
+	return cmd
 }
 
 // diskProbeRow is one row the PowerShell probe emits.

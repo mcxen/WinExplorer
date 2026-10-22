@@ -236,12 +236,23 @@ func newAppWithStore(store *persistedState) *App {
 		// The 此电脑 tree shows from the start: it is what follows the tab
 		// around, and a window whose tree is collapsed shows no sync at all.
 		navPCExpanded: true,
-		homePath:      home,
-		previewOpen:   false,
-		previewW:      320,
-		store:         store,
+		// The 快速访问 and 最近位置 sections start expanded, as the pinned
+		// places are the pane's quickest way somewhere.
+		navQuickExpanded:  true,
+		navRecentExpanded: true,
+		homePath:          home,
+		previewOpen:       false,
+		previewW:          320,
+		store:             store,
 		// A window opened fresh has no saved record yet (session.go).
 		sessionSlot: -1,
+	}
+	// The assistant's reads score in the process's usage ledger. One hook
+	// for every window: they share the store.
+	assistNoteUsed = func(paths ...string) {
+		for _, p := range paths {
+			store.notePath(p, 1)
+		}
 	}
 	// shellExts are the registered context-menu commands (extensions.go);
 	// the load's per-entry problems stay on the app, for the settings
@@ -408,7 +419,15 @@ func (a *App) handleKeys(c *ui.Context) {
 	case c.Shortcut(ui.Alt, ui.KeyUp):
 		a.up()
 	case c.Shortcut(0, ui.KeyEnter):
-		a.doOpen()
+		if len(a.selectedEntries()) > 0 {
+			a.doOpen()
+		} else if !a.assistantOpen {
+			// A bare Enter with nothing to open goes to the assistant, and
+			// the pane comes up on its history column: the global 回车 the
+			// window listens for, next to the toolbar's 助手.
+			a.toggleAssistant()
+			a.assist.showHist = true
+		}
 	case c.Shortcut(0, ui.KeyDelete), c.Shortcut(ui.Cmd, ui.KeyBackspace), c.Shortcut(ui.Ctrl, ui.KeyD):
 		a.doDelete()
 	case c.Shortcut(0, ui.KeyF2):

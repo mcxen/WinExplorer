@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"sunvale/internal/remote"
+	"sunvale/internal/searchquery"
 
 	"sunvale/internal/rename"
 )
@@ -434,6 +435,10 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 		Scope    int    `json:"scope"`
 		Page     int    `json:"page"`
 		PerPage  int    `json:"per_page"`
+		// Near is the folder on screen. Hits there lead the page; an empty
+		// near uses Parent, so a search of the current folder still lists
+		// its own files before files further down.
+		Near string `json:"near"`
 	}
 	if err := remote.ReadReq(r, &req); err != nil {
 		remote.Err(w, 400, "bad request")
@@ -457,11 +462,22 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 		deadline = searchTimeout
 	}
 	hits := walkMatches(disk, req.Keywords, false, time.Now().Add(deadline))
-	items := make([]remoteFSSearchItem, 0, len(hits))
+	kept := make([]Entry, 0, len(hits))
 	for _, h := range hits {
 		if (req.Scope == 1 && !h.IsDir) || (req.Scope == 2 && h.IsDir) {
 			continue
 		}
+		kept = append(kept, h)
+	}
+	nearDisk := disk
+	if req.Near != "" {
+		if d, ok := a.remoteDiskPath(req.Near); ok {
+			nearDisk = d
+		}
+	}
+	rankRemoteHits(kept, nearDisk, searchquery.Parse(req.Keywords))
+	items := make([]remoteFSSearchItem, 0, len(kept))
+	for _, h := range kept {
 		items = append(items, remoteFSSearchItem{
 			Parent: path.Dir(remoteVPath(h.Path)),
 			Name:   h.Name,
@@ -480,4 +496,21 @@ func (a *App) remoteHandleFSSearch(w http.ResponseWriter, r *http.Request) {
 		content = items[start:end]
 	}
 	remote.OK(w, remoteFSSearchData{Content: content, Total: int64(len(items))})
+}
+
+// rankRemoteHits puts the folder on screen first, then its subtree, then
+// the rest. Relevance still orders hits inside each band.
+func rankRemoteHits(hits []Entry, near string, q searchquery.Query) {
+	now := time.Now()
+	sort.SliceStable(hits, func(i, j int) bool {
+		si, _, _ := q.Score(hits[i].Name, hits[i].Path, hits[i].IsDir, hits[i].ModTime, now, "", near)
+		sj, _, _ := q.Score(hits[j].Name, hits[j].Path, hits[j].IsDir, hits[j].ModTime, now, "", near)
+		if si != sj {
+			return si > sj
+		}
+		if c := strings.Compare(strings.ToLower(hits[i].Name), strings.ToLower(hits[j].Name)); c != 0 {
+			return c < 0
+		}
+		return hits[i].Path < hits[j].Path
+	})
 }

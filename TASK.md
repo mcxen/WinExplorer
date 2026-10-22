@@ -74,6 +74,7 @@
 | SCH1 | 定时任务：每日钟点 + 文件规则/脚本/助手 + 设置页 + MCP | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | A4 | `feat/scheduled-tasks` |
 | FORM1 | 规范表单组件：共享 schema + OpenUI 扩展 + present_form + 定时任务表单 v2 | 高 | 已完成 | [08](docs/specs/08-forms.md) | SCH1、A5 | `feat/form-components` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
+| A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
@@ -239,6 +240,12 @@
 - **目标**：设置 → 定时任务；进程内分钟调度；文件规则/脚本/助手三种动作；助手可通过 MCP 创建任务。
 - **范围**：见 `docs/specs/07-scheduled-tasks.md`。持久化 `sunvale/schedules.json`。
 - **验收**：`go test ./internal/schedule ./...`；`TestPromptListsAllTools` 含 schedule_*；手动或 MCP 可建「每晚 19:00 移动下载文档」。
+
+### A6 助手全量文件读取与看图
+- **目标**：`read_file` / `read_files` / `read_outside` 读**所有**类型：文本/代码、Word/Excel/PPT/PDF/epub/ODF/RTF 正文、图片、视频帧、音频、压缩包清单、二进制十六进制与格式判断；每条结果写明读取方式。视频与文档缺库时走脚本路线（内置 Python 脚本，可选 Pillow/OpenCV/pypdf/python-docx/mutagen/matplotlib），命令行兜底 `ffprobe`/`ffmpeg`/`pdftotext`，最后系统渲染（Quick Look）。
+- **看图**：图片与视频帧作为真实图片分片进模型请求（工具结果经 `[[sunvale-media:…]]` 标记 + 每轮图片袋，`visionModel` 在模型边界转成分片；用户附件同理）。供应商可选「自动判断 / 总是看图 / 不看图」，自动按模型名判断；请求因图片被拒时自动退回纯文字重试。不能看图时结果里写明，不让模型假装看过。
+- **范围**：新增 `internal/fileview`（内核 + 内置 `extract.py`）、`assistant_files.go`（读取与图片袋）、`assistant_vision.go`（模型包装）、设置 → 助手新增「文件读取」后端清单与供应商「看图」选项；提示词同步。不改远程预览的抽取实现。
+- **验收**：`internal/fileview` 单测（文本/编码/office/图片帧/压缩包/二进制分类）；`assistant_files_test.go`（标记、图片袋、看图重写与降级重试）；`internal/assistant` 看图判定单测；`go build/vet/test` 与 `GOOS=windows/linux/js` 编译通过；截图 `docs/assets/shots/A6/`。
 
 ### SCH2 AI 任务立刻跑
 - **目标**：助手预设（分类下载 / 收件箱整理 / 按内容重命名）；`assistant_task_run` 一次性全托管；`schedule_run` 与提示词引导「现在跑」；斜杠 `/分类` `/立即执行`。

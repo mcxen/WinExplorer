@@ -33,6 +33,10 @@ type Turn struct {
 	OpenDone map[string]string `json:"openDone,omitempty"`
 	Tool     string            `json:"tool,omitempty"`
 	Stopped  bool              `json:"stopped,omitempty"`
+	// Error marks a failed run's message: the transcript shows it as one
+	// collapsible line instead of a reply, so a long error cannot push the
+	// composer away.
+	Error bool `json:"error,omitempty"`
 	// At stamps the line for the chat's time label; Op and Steps turn a
 	// tool line into a file-operation card and a plan list.
 	At    time.Time  `json:"at,omitempty"`

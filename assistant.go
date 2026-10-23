@@ -48,18 +48,20 @@ type aiRenamePlan struct {
 // the cross-session memory are shared on disk. The transcript is one session,
 // also on disk, so each window can reopen the last conversation.
 type assistantUI struct {
-	loaded     bool
-	draft      string
-	running    bool
-	status     string
-	turns      []aiTurn
-	scroll     chat.ConversationState
-	plans      map[string]aiRenamePlan
-	applied    map[string]bool
-	showProv   bool
-	showBook   bool
-	showHist   bool
-	floatLay   chat.FloatingConversationState
+	loaded   bool
+	draft    string
+	running  bool
+	status   string
+	turns    []aiTurn
+	scroll   chat.ConversationState
+	plans    map[string]aiRenamePlan
+	applied  map[string]bool
+	showProv bool
+	showBook bool
+	showHist bool
+	floatLay chat.FloatingConversationState
+	// errOpen is which error lines are expanded (assistErrorLine).
+	errOpen    map[int]bool
 	modelPick  chat.PickerState
 	modelLists map[string][]string
 	modelBusy  map[string]bool
@@ -546,7 +548,7 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		key = ex.Rest[0]
 	}
 	paint := a.assist.paintFor(key)
-	var tools, cards []int
+	var tools, cards, errs []int
 	var answer strings.Builder
 	var replies []int
 	for _, i := range ex.Rest {
@@ -557,6 +559,8 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			cards = append(cards, i)
 		case t.Role == "tool":
 			tools = append(tools, i)
+		case t.Error:
+			errs = append(errs, i)
 		default:
 			text := t.Text
 			if t.Choice != nil && strings.TrimSpace(text) == t.Choice.Prompt {
@@ -737,6 +741,9 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 				}
 				hide := t.Choice != nil && t.Choice.Prompt != "" && strings.Contains(final, t.Choice.Prompt)
 				a.assistantChoices(c.Key("choice-"+itoa(i)), i, hide)
+			}
+			for _, i := range errs {
+				a.assistErrorLine(c, i, turns[i].Text)
 			}
 		},
 	})

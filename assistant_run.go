@@ -558,7 +558,12 @@ func planIDFrom(text string) string {
 
 func (a *App) failAssist(err error) {
 	a.postAssist(func() {
-		a.assist.turns = append(a.assist.turns, aiTurn{Role: "assistant", Text: err.Error()})
+		a.assist.turns = append(a.assist.turns, aiTurn{Role: "assistant", Text: assistErrorText(err), Error: true, At: time.Now()})
+		// The composer must take input again right away: the run's own
+		// cleanup follows, but an error never leaves the box busy.
+		a.assist.running = false
+		a.assist.stop = nil
+		a.assist.pending = ""
 		a.assist.status = ""
 		a.assist.persistSession(a.assist.folder)
 	})

@@ -339,3 +339,10 @@
 - **根因（推断）**：运行失败时错误全文（代理/供应商常返回整页 HTML，Windows 上带 `\r\n`）作为一条助手回复进入 Markdown 渲染，长文本撑高对话流并压在浮动输入框（`FloatingConversation` 的绝对定位层）一带；忙碌状态只在运行收尾的 defer 中复位，失败与复位分两次投递到主线程。
 - **范围**：`internal/assistant/types.go`（`Turn.Error`）、`assistant_error.go`（错误文本规范化：`\r\n`→`\n`、截断 2000 字；对话流内单行可折叠、展开限高 160 滚动）、`assistant.go`（错误行渲染在回合页脚）、`assistant_run.go`（`failAssist` 立即复位 running/stop/pending/status）。
 - **验收**：`TestAssistantComposerUsableAfterError`（长错误后可点击输入框并再次发送）、`TestAssistErrorText`。
+
+## WIN1 Windows 只开一个窗口
+
+- **状态**：已合入 `main`，未发版。Linux 上无法复现 Windows 双窗口，按代码推断修复。
+- **根因（推断）**：`main.go` 从未调用单实例锁。关闭窗口只是藏进托盘，进程常驻；再点快捷方式、NSIS 完成页「运行」叠加开机自启、文件关联打开压缩包，都会再起一个进程并新建窗口（再加上会话恢复，每个进程各开一扇）。mygo 本身不会建两个窗口。
+- **范围**：`singleinstance.go`（先走 mygo 的单实例 socket，第二个实例把命令行交给第一个后退出；第一个在 `OnSecondInstance` 里从托盘唤起并聚焦窗口）、`singleinstance_windows.go`（`Local\com.mcxen.sunvale.single-instance` 命名 mutex 兜底：socket 不可用时仍判定为第二实例，按标题找窗口 `SW_RESTORE`+`SetForegroundWindow`；更新重启时旧进程尚未退出，mutex 最多重试 3 秒）、`singleinstance_other.go`、`main.go`。
+- **验收**：`TestAcquireSingleInstance`（首个实例、socket 交接、更新重启竞态、socket 失效四种情况）。

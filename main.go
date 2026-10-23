@@ -52,6 +52,11 @@ func main() {
 	// The updater plugin's window is native UI, as this app's windows
 	// are: it needs no webview.
 	mygo.Use(native.Plugin)
+	// One process per user (singleinstance.go): a second launch raises the
+	// running window and exits before building any of its own.
+	if !installSingleInstance() {
+		return
+	}
 	store := loadState()
 	// 自动更新按镜像列表换线下载（updatemirror.go），签名校验仍由 mygo 完成。
 	installUpdateMirrors(store)

@@ -75,11 +75,13 @@
 | SCH1 | 定时任务：每日钟点 + 文件规则/脚本/助手 + 设置页 + MCP | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | A4 | `feat/scheduled-tasks` |
 | FORM1 | 规范表单组件：共享 schema + OpenUI 扩展 + present_form + 定时任务表单 v2 | 高 | 已完成 | [08](docs/specs/08-forms.md) | SCH1、A5 | `feat/form-components` |
 | OPENUI2 | OpenUI 扩展控件 + 六场景演示 + 演示路径沙箱 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI2 | FORM1 | `demo/openui-scenes` → `main` |
+| OPENUI3 | OpenUI 列表/图片/视频控件 + 媒体演示场景 | 高 | 进行中 | [08](docs/specs/08-forms.md) OPENUI3 | OPENUI2 | `feat/openui-media` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
+
 
 建议顺序：F6 → F1–F4 → R1 → S1 → S3 → TB3 → 其余并行；R5 必须在 S1–S8 全部完成后。
 
@@ -88,6 +90,13 @@
 ## 任务详情
 
 通用交付要求（每个任务都适用，下文不再重复）：代码 + 测试、通过工作方式第 6 条、UI 任务附截图到 `docs/assets/shots/<ID>/`、更新本表状态、必要时更新 `README.md` 与 `docs/UI.md`。
+
+### OPENUI3 — 列表 / 图片 / 视频
+
+- **目标**：助手表单可用可勾选/单选文件清单、内嵌图片预览、视频关键帧+系统打开播放；附演示场景与截图。
+- **范围**：`internal/forms`（`list`/`image`/`video` kind、`ListItem`、scenes `filelist|image|video`、sandbox PNG/clip）、`forms_paint.go` / `forms_media.go`、`internal/assistant/openui*.go`、`assistant_openui_paint.go`、`prompt.go`；截图 `docs/assets/shots/OPENUI-MEDIA/`；`docs/UI.md`、`docs/specs/08-forms.md`。
+- **验收**：`ListField`/`ImageField`/`VideoField` 解析与绘制单测通过；空列表占位、坏图占位、关键帧+「打开播放」可见；`gofmt`/`go build`/`vet`/`test` 与 Windows 交叉编译通过；仅推 `feat/openui-media`（不 force-push main）。
+- **已知限制**：mygo/Onevra 无原生 video；关键帧依赖本机 `ffmpeg`；列表「选择方式」分段仅为表单字段，不动态改写同一 List 的 multi/single。
 
 ### F6 gofmt gifplay.go
 - **目标**：`gofmt -l .` 无输出。

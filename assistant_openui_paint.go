@@ -229,7 +229,8 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 		})
 		p.form = outer
 	case "input", "select", "number", "path", "time", "date", "days", "switch", "segmented",
-		"multi_select", "filetypes", "tags", "slider", "progress", "table_select":
+		"multi_select", "filetypes", "tags", "slider", "progress", "table_select",
+		"list", "image", "video":
 		a.paintOpenField(c, v, p)
 	case "button":
 		a.paintOpenButton(c, v, p)
@@ -350,7 +351,8 @@ func (a *App) paintOpenField(c *ui.Context, v *ouiView, p *openPaint) {
 	}
 	if strings.TrimSpace(*val) == "" && v.Placeholder != "" {
 		switch kind {
-		case "progress", "slider", "tags", "time", "date", "number", "text", "textarea", "password":
+		case "progress", "slider", "tags", "time", "date", "number", "text", "textarea", "password",
+			"image", "video":
 			*val = v.Placeholder
 		}
 	}

@@ -1,6 +1,10 @@
 package forms
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,17 +45,33 @@ func EnsureDemoSandbox() string {
 			}
 		}
 		files := map[string]string{
-			filepath.Join(root, "Downloads", "会议纪要.md"):      "# 会议纪要\n",
-			filepath.Join(root, "Downloads", "IMG_0001.jpg"): "\xff\xd8\xff demo",
-			filepath.Join(root, "Downloads", "资料.zip"):       "PK\x03\x04 demo",
-			filepath.Join(root, "Documents", "报告.pdf"):       "%PDF-1.4 demo",
-			filepath.Join(root, "Movies", "demo.mp4"):        "ftypmp42",
+			filepath.Join(root, "Downloads", "会议纪要.md"):         "# 会议纪要\n",
+			filepath.Join(root, "Downloads", "IMG_0001.jpg"):    "\xff\xd8\xff demo",
+			filepath.Join(root, "Downloads", "资料.zip"):          "PK\x03\x04 demo",
+			filepath.Join(root, "Documents", "报告.pdf"):          "%PDF-1.4 demo",
+			filepath.Join(root, "Downloads", "broken-note.txt"): "not an image",
+			filepath.Join(root, "Movies", "demo.mp4"):           "ftypmp42",
 		}
 		for path, body := range files {
 			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 				demoErr = err
 				return
 			}
+		}
+		// Tiny valid PNGs so KindImage / list thumbs decode without Quick Look.
+		for name, data := range map[string][]byte{
+			filepath.Join(root, "Downloads", "demo-photo.png"): demoPNG(70, 140, 220),
+			filepath.Join(root, "Downloads", "demo-thumb.png"): demoPNG(40, 180, 120),
+		} {
+			if err := os.WriteFile(name, data, 0o644); err != nil {
+				demoErr = err
+				return
+			}
+		}
+		// Prefer a real short clip when the agent/CI left one beside the sandbox seed.
+		clipDst := filepath.Join(root, "Movies", "demo-clip.mp4")
+		if err := seedDemoClip(clipDst); err != nil {
+			_ = os.WriteFile(clipDst, []byte("ftypmp42"), 0o644)
 		}
 		demoRoot = root
 	})
@@ -116,4 +136,40 @@ func ExistingDir(path string) string {
 func pathUsable(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && (st.IsDir() || st.Mode().IsRegular())
+}
+
+// demoPNG returns a minimal 64×40 RGB PNG (stdlib-decodable) filled with rgb.
+func demoPNG(r, g, b byte) []byte {
+	const w, h = 64, 40
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+// seedDemoClip copies a prebuilt sample mp4 into dst when available
+// (agent workspace /tmp or SUNVALE_DEMO_CLIP). Otherwise returns an error
+// so the caller can fall back to a tiny placeholder.
+func seedDemoClip(dst string) error {
+	candidates := []string{
+		os.Getenv("SUNVALE_DEMO_CLIP"),
+		"/tmp/sunvale-media-samples/demo-clip.mp4",
+	}
+	for _, src := range candidates {
+		src = strings.TrimSpace(src)
+		if src == "" {
+			continue
+		}
+		data, err := os.ReadFile(src)
+		if err != nil || len(data) < 32 {
+			continue
+		}
+		return os.WriteFile(dst, data, 0o644)
+	}
+	return os.ErrNotExist
 }

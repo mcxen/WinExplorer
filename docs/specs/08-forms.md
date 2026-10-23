@@ -52,3 +52,17 @@
 无 `~/Downloads` / `~/Documents` 的环境（CI、部分 Linux 主机）上，`PreferPath` / `EnsureDemoSandbox`（`internal/forms/sandbox.go`）在 `TempDir/sunvale-openui-demo` 创建真实目录与样例文件，定时任务与场景表单默认路径指向它们。`formPickPath` 用 `ExistingDir` 避免原生对话框对缺失 DefaultPath 报 `no such file or directory`。
 
 截图：`docs/assets/shots/OPENUI-DEMO/`。
+
+## OPENUI3 — 列表 / 图片 / 视频
+
+新增 field kind：
+
+| kind | OpenUI 组件 | 说明 |
+| --- | --- | --- |
+| `list` | `ListField(name, options, mode?)` | 可勾选/单选文件清单。options 每项 `文件名\|大小\|缩略图路径`（后两段可空）；`path_mode`/`mode` 为 `multi`（默认）或 `single`；空 options 显示空状态（placeholder 或「暂无项目」）。提交值为所选**文件名**的逗号拼接。 |
+| `image` | `ImageField(name, src)` | 表单内嵌图片。`value`/`src` 为本地路径或 `data:image/…;base64,…`；缩放 `Contain`；坏图占位（图标 + 原因）。 |
+| `video` | `VideoField(name, path)` | 关键帧预览（`ffmpeg` 抽帧，与预览窗格相同）+「打开播放」走系统播放器。**无内嵌视频解码器**（mygo/Onevra 限制）。 |
+
+`present_form` 预设追加：`filelist` | `image` | `video`（`internal/forms/scenes.go`）。
+
+截图：`docs/assets/shots/OPENUI-MEDIA/`。

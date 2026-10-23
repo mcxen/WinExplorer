@@ -101,6 +101,27 @@ func fieldOpenUI(ref string, field Field) string {
 		return fmt.Sprintf("%s = ProgressBar(%q, %q)\n", ref, field.ID, field.Value)
 	case KindTableSelect:
 		return fmt.Sprintf("%s = TableSelect(%q, [%s]%s)\n", ref, field.ID, quoteList(field.Options), req)
+	case KindList:
+		mode := field.PathMode
+		if mode == "" {
+			mode = ListMulti
+		}
+		if ph != "" {
+			return fmt.Sprintf("%s = ListField(%q, [%s], %q, %q%s)\n", ref, field.ID, quoteList(field.Options), mode, ph, req)
+		}
+		return fmt.Sprintf("%s = ListField(%q, [%s], %q%s)\n", ref, field.ID, quoteList(field.Options), mode, req)
+	case KindImage:
+		src := field.Value
+		if src == "" {
+			src = field.Placeholder
+		}
+		return fmt.Sprintf("%s = ImageField(%q, %q)\n", ref, field.ID, src)
+	case KindVideo:
+		src := field.Value
+		if src == "" {
+			src = field.Placeholder
+		}
+		return fmt.Sprintf("%s = VideoField(%q, %q)\n", ref, field.ID, src)
 	default:
 		return fmt.Sprintf("%s = Input(%q, %q, \"text\"%s)\n", ref, field.ID, ph, req)
 	}

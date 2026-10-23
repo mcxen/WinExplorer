@@ -51,6 +51,12 @@ func (a *App) paintFormField(c *ui.Context, kind, label string, value *string, o
 			a.paintFormFileTypes(c, value, opts)
 		case forms.KindTableSelect:
 			a.paintFormTableSelect(c, value, opts)
+		case forms.KindList:
+			a.paintFormList(c, value, opts)
+		case forms.KindImage:
+			a.paintFormImage(c, value, opts)
+		case forms.KindVideo:
+			a.paintFormVideo(c, value, opts)
 		case forms.KindTags:
 			a.paintFormTags(c, value, opts)
 		case forms.KindDate:
@@ -466,6 +472,115 @@ func parseProgressFraction(s string) float64 {
 		return 1
 	}
 	return v
+}
+
+func (a *App) paintFormList(c *ui.Context, value *string, opts formFieldOpts) {
+	if len(opts.Options) == 0 {
+		hint := opts.Hint
+		if hint == "" {
+			hint = "暂无项目"
+		}
+		ui.Column(c).FillWidth().Padding(12, 8).Children(func() {
+			ui.Text(c, hint).FontSize(12).TextColor(colorMuted())
+		})
+		return
+	}
+	single := opts.PathMode == forms.ListSingle || opts.PathMode == "single"
+	selected := splitCSVSet(*value)
+	ui.Column(c).FillWidth().Gap(2).Children(func() {
+		for i, raw := range opts.Options {
+			it := forms.ParseListItem(raw)
+			if it.Name == "" {
+				continue
+			}
+			on := selected[it.Name]
+			ui.Row(c.Key(i)).FillWidth().Gap(8).AlignItems(ui.Center).Padding(4, 6).Children(func() {
+				if it.Thumb != "" {
+					if bm, _ := formLoadBitmap(it.Thumb, formThumbSide); bm != nil {
+						ui.Image(c, bm).Fit(ui.Cover).Size(32, 32)
+					} else {
+						components.Icon(c, lucide.File()).Size(20, 20).TextColor(colorMuted())
+					}
+				}
+				ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+					ui.Text(c, it.Name).FontSize(12).TextColor(colorText()).MaxLines(1)
+					if it.Size != "" {
+						ui.Text(c, it.Size).FontSize(11).TextColor(colorMuted())
+					}
+				})
+				sw := ui.Switch(c, &on).Shrink(0)
+				if opts.Locked {
+					sw.Disabled(true)
+				}
+				if sw.Changed() && !opts.Locked {
+					if single {
+						selected = map[string]bool{}
+						if on {
+							selected[it.Name] = true
+						}
+					} else {
+						selected[it.Name] = on
+					}
+					*value = joinCSVSelected(forms.ListItemNames(opts.Options), selected)
+				}
+			})
+		}
+	})
+}
+
+func (a *App) paintFormImage(c *ui.Context, value *string, opts formFieldOpts) {
+	src := strings.TrimSpace(*value)
+	if src == "" {
+		src = strings.TrimSpace(opts.Hint)
+	}
+	ui.Column(c).FillWidth().Gap(6).Children(func() {
+		bm, errMsg := formLoadBitmap(src, formMediaSide)
+		if bm != nil {
+			ui.Box(c).FillWidth().Height(160).Clip().Children(func() {
+				ui.Image(c, bm).Fill().Fit(ui.Contain)
+			})
+		} else {
+			a.paintFormMediaBroken(c, errMsg)
+		}
+	})
+}
+
+func (a *App) paintFormVideo(c *ui.Context, value *string, opts formFieldOpts) {
+	src := strings.TrimSpace(*value)
+	if src == "" {
+		src = strings.TrimSpace(opts.Hint)
+	}
+	ui.Column(c).FillWidth().Gap(8).Children(func() {
+		bm, errMsg := formLoadPoster(src, formMediaSide)
+		ui.Box(c).FillWidth().Height(160).Clip().Children(func() {
+			if bm != nil {
+				ui.Image(c, bm).Fill().Fit(ui.Contain)
+			} else {
+				a.paintFormMediaBroken(c, errMsg)
+			}
+		})
+		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, baseName(src)).FontSize(11).TextColor(colorMuted()).Grow(1).MinWidth(0).MaxLines(1)
+			if !opts.Locked && src != "" {
+				if components.Button(c, "打开播放", components.ButtonSecondary).Clicked() {
+					if err := openWithOS(src); err != nil {
+						a.statusMsg = err.Error()
+					}
+				}
+			}
+		})
+		ui.Text(c, "无内嵌播放器：关键帧预览，播放交给系统播放器。").FontSize(11).TextColor(colorMuted()).Wrap()
+	})
+}
+
+func (a *App) paintFormMediaBroken(c *ui.Context, msg string) {
+	if msg == "" {
+		msg = "无法显示"
+	}
+	ui.Column(c).FillWidth().Height(120).Gap(6).AlignItems(ui.Center).Padding(16, 0).Children(func() {
+		components.Icon(c, lucide.ImageOff()).Size(28, 28).TextColor(colorMuted().Alpha(0.7))
+		ui.Text(c, msg).FontSize(12).TextColor(colorMuted()).TextAlign(ui.Center)
+	})
 }
 
 // paintFormFence draws a ```form JSON block by converting it to OpenUI so

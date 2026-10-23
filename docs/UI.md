@@ -213,3 +213,13 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **空状态**（`assistantEmpty`）：左对齐头像 + 「晴谷助手」18/600 + 一句能力说明；「试试这样问」11/600 小标题下六张示例卡（新建、修改、重命名并归类、删除临时文件、批量、总结），卡片 `colorAddress()` 底、图标块 26×26、第二行是会填入输入框的原话；点击只填入不发送，悬停提示说明。
 - **与文件列表动效对应**：卡片执行中 ↔ 行右缘呼吸光（`aiFx.markBusy`）；重命名完成 ↔ 新名称强调色高亮（`markRenamed`）；移动/删除完成 ↔ 行滑出收起（`markLeaving`）；一轮结束 ↔ `aiFx.endRun()` + `reloadAfterFx`。
 - **布局修复**：对话列在横向 Row 中需 `FillHeight()`，否则长对话把顶栏覆盖、输入框挤出窗格（`assistantPane` 的 `conv`）。
+
+## OpenUI 媒体控件（OPENUI3）
+
+在 OPENUI2 之上增加：
+
+- **列表 `list` / `ListField`**：文件名 + 可选大小与 32px 缩略图；多选开关或单选；空 options 显示空状态。
+- **图片 `image` / `ImageField`**：卡片内嵌预览（本地路径或 data URL），高度约 160、`Fit(Contain)`；坏图占位。
+- **视频 `video` / `VideoField`**：关键帧（`ffmpeg`，见 `media.go:videoPosterImage`）+「打开播放」；无内嵌播放。限制写在本段与 `docs/specs/08-forms.md` OPENUI3。
+
+演示预设：`filelist` / `image` / `video`。截图 `docs/assets/shots/OPENUI-MEDIA/`。

@@ -1,6 +1,6 @@
 # 晴谷（Sunvale）界面与动效规范
 
-本文是界面的**现行规范**，所有数值均对照 `origin/main` 74ead83 的代码核实（`文件:函数/常量`）。代码与本文不一致时：若代码是有意的改动，同一提交更新本文；否则以本文为准修代码。标注“规划中”的条目尚未实现，规格见 `docs/specs/`。
+本文是界面的**现行规范**，所有数值均对照 `origin/main`（OpenUI 骨架占位合入后）的代码核实（`文件:函数/常量`）。代码与本文不一致时：若代码是有意的改动，同一提交更新本文；否则以本文为准修代码。标注“规划中”的条目尚未实现，规格见 `docs/specs/`。
 
 截图（离屏渲染，均为浅色主题）位于 `docs/assets/ui/`。
 
@@ -144,7 +144,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 移出（删除/移动） | 项目被移走（`markLeaving`） | 滑出 340ms（`aiFxSlide`）+ 折叠 320ms（`aiFxFold`） | 滑出 easeIn（t²），折叠 easeOut | 左移 1.05×行宽、透明度 1→0；行高 → 0（磁贴保留格位） | `aifx.go:look`、`aiFxRow`；`pendingLeave` 让刷新等动画结束 |
 | 减少动画 | `ReduceMotion` 开 | — | — | 呼吸光静止为 0.8；无滑出/折叠，到时直接消失 | `aifx.go:aiFxRow` |
 | 回复流式显示 | 模型输出 token | 合并重绘最多每 33ms 一次（`assistLiveEvery`） | — | 未闭合的 choices/OpenUI/代码围栏先隐藏，避免标记闪现 | `assistant_run.go:noteAssistLive`、`flushAssistLive`、`streamLive`、`streamShown` |
-| OpenUI 生成占位 | 流式中出现未闭合 openui 块 | 至闭合 | — | 最小高 64、圆角 8、`colorSurface()` 底、`colorDivider()` 边框、转圈 + “正在生成界面…”；与卡片同尺寸，避免闭合围栏时高度跳变 | `assistant_markdown.go:assistOpenPlaceholder` |
+| OpenUI 生成占位（骨架） | 流式中出现未闭合 `openui`/`form` 围栏（`CodeBlockView.Open`） | 围栏闭合为止；闭合后交叉淡入淡出 `assistOpenSkelFade`=180ms | 条带：`Loop("pulse", aiFxPulse=1.6s, Bounce(EaseInOut))`；替换：`EaseOut`（Transition 默认） | 最小高 64、圆角 8、`colorSurface()` 底、1px `colorDivider()` **虚线**边框（`BorderStyle(BorderDashed)`，同 mygo gallery 放置区）；内 3 条骨架条（高 8、圆角 4、间距 8、上下内边距 10，宽约 100%/68%/42%），`colorMuted()` α 0.10–0.24 随脉冲；`ReduceMotion` 条带停在 α≈0.19；闭合后骨架 `Exit` 淡出、卡片 `assistOpenReveal` `Enter` 淡入，避免硬切 | `assistant_markdown.go:assistOpenPlaceholder`、`assistOpenSkelBar`、`assistOpenReveal`；截图 `docs/assets/shots/OPENUI-SKEL/` |
 | 标签拖动 | 按住标签拖动 | 实时 | 无插值 | 越过半个标签宽（标签宽+2）与相邻标签交换 | `chrome_tab.go:tabDragFrame` |
 | 地址建议下拉 | 编辑地址时有建议或错误 | 即时出现 | — | 浮层圆角 8、阴影 (0,8,16) α0.14、上边距 4 | `addressbar.go:pathDropdown` |
 | GIF 播放 | 预览/缩略图中的 GIF | 按帧延时，默认 100ms，最小 10ms | — | — | `gifplay.go` |

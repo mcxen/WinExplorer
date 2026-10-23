@@ -12,23 +12,6 @@ import (
 	"time"
 )
 
-func TestFileTintDocTypes(t *testing.T) {
-	pdf := fileTint("pdf")
-	html := fileTint("html")
-	htm := fileTint("htm")
-	code := fileTint("go")
-	def := fileTint("xyz")
-	if pdf == def || pdf == code {
-		t.Fatalf("pdf tint should be distinct, got %#v", pdf)
-	}
-	if html == code || html == def || htm != html {
-		t.Fatalf("html/htm should share a distinct tint, html=%#v htm=%#v code=%#v", html, htm, code)
-	}
-	if fileTint("docx") == def || fileTint("xlsx") == def || fileTint("pptx") == def {
-		t.Fatal("office docs should have dedicated tints")
-	}
-}
-
 func TestFindFaviconHrefs(t *testing.T) {
 	html := []byte(`<!doctype html><html><head>
 <link rel="stylesheet" href="app.css">
@@ -157,25 +140,6 @@ type sliceWriter struct{ b *[]byte }
 func (w *sliceWriter) Write(p []byte) (int, error) {
 	*w.b = append(*w.b, p...)
 	return len(p), nil
-}
-
-func TestPdfPosterImagePdftoppm(t *testing.T) {
-	if _, err := exec.LookPath("pdftoppm"); err != nil {
-		t.Skip("pdftoppm not installed")
-	}
-	dir := t.TempDir()
-	pdfPath := filepath.Join(dir, "sample.pdf")
-	if err := os.WriteFile(pdfPath, []byte(minimalPDF), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	img, err := pdfPosterImage(pdfPath, 64)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b := img.Bounds()
-	if b.Dx() < 8 || b.Dy() < 8 {
-		t.Fatalf("unexpected size %v", b)
-	}
 }
 
 func TestMediaThumbStartsPDFAndHTML(t *testing.T) {

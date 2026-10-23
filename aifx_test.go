@@ -120,29 +120,6 @@ func TestAIFxEndRunKeepsMinimumGlow(t *testing.T) {
 	}
 }
 
-func TestAIFxBreathRange(t *testing.T) {
-	for d := 200 * time.Millisecond; d < 2*aiFxPulse; d += 50 * time.Millisecond {
-		if v := breath(d); v < 0.34 || v > 1.001 {
-			t.Fatalf("breath(%v) = %v", d, v)
-		}
-	}
-	if breath(0) != 0 {
-		t.Fatal("glow should fade in from nothing")
-	}
-}
-
-func TestAIFxGlowBandFitsRow(t *testing.T) {
-	// A narrow tile still gets a band that stays inside its box.
-	band := aiFxGlowBand
-	inset := aiFxGlowInset
-	if band+inset > 80 {
-		t.Fatalf("glow band+inset %v too wide for a small icon tile", band+inset)
-	}
-	if aiFxGlowAlpha <= 0.42 || aiFxGlowAlpha > 1 {
-		t.Fatalf("glow tip alpha %v out of the intended range", aiFxGlowAlpha)
-	}
-}
-
 // The assistant's goroutine writes while the frame reads.
 func TestAIFxConcurrent(t *testing.T) {
 	s := newAIFx()

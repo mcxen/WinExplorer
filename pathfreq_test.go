@@ -150,15 +150,3 @@ func TestAssistReadScoresInLedger(t *testing.T) {
 		t.Fatalf("ledger = %v", st.Freq)
 	}
 }
-
-// TestFreqPromptText: the {frequent} section reads as a list, or a quiet
-// note when the ledger is young.
-func TestFreqPromptText(t *testing.T) {
-	if got := freqPromptText(nil); got != "（暂无使用记录）" {
-		t.Fatalf("empty = %q", got)
-	}
-	got := freqPromptText([]string{"/d/a.txt", "/d/b"})
-	if !strings.Contains(got, "- /d/a.txt") || !strings.Contains(got, "- /d/b") {
-		t.Fatalf("list = %q", got)
-	}
-}

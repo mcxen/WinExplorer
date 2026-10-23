@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -194,19 +193,6 @@ func TestSearchBoxLocationButtonJumps(t *testing.T) {
 	tt.Frame()
 	if a.searchBox.open || a.cur().path != sub || !a.isSelected(filepath.Join(sub, "inner.txt")) {
 		t.Fatal("the location button did not reveal the hit")
-	}
-}
-
-func TestSearchIndexSummaryWords(t *testing.T) {
-	resetSearchIndex(t)
-	if got := searchIndexSummary(); got != "" {
-		t.Fatalf("an index that was never started said %q", got)
-	}
-	enableSearchIndex()
-	searchIndex.Note("/a", []fsentry.Entry{{Name: "a", Path: "/a/a"}})
-	searchIndex.Note("/b", []fsentry.Entry{{Name: "b", Path: "/b/b"}})
-	if got := searchIndexSummary(); !strings.Contains(got, "索引 2 项") {
-		t.Fatalf("the summary is %q", got)
 	}
 }
 

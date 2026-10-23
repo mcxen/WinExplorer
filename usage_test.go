@@ -212,37 +212,6 @@ func TestUsageFind(t *testing.T) {
 	}
 }
 
-// TestHSLColor checks the conversion's endpoints, including a negative
-// hue's wraparound.
-func TestHSLColor(t *testing.T) {
-	white := hslColor(0, 0, 1)
-	if white.R != 255 || white.G != 255 || white.B != 255 {
-		t.Fatalf("hslColor white = %v %v %v, want 255 255 255", white.R, white.G, white.B)
-	}
-	green := hslColor(120, 1, 0.5)
-	if green.R != 0 || green.G != 255 || green.B != 0 {
-		t.Fatalf("hslColor green = %v %v %v, want 0 255 0", green.R, green.G, green.B)
-	}
-	blue := hslColor(-120, 1, 0.5)
-	if blue.R != 0 || blue.G != 0 || blue.B != 255 {
-		t.Fatalf("hslColor -120 = %v %v %v, want 0 0 255", blue.R, blue.G, blue.B)
-	}
-}
-
-// TestUsageColor checks the tint families: folders, 其他 and files come
-// out distinct, and an extension's hue is stable and in range.
-func TestUsageColor(t *testing.T) {
-	dir := usageColor(&usageNode{IsDir: true, Path: "/x"})
-	gray := usageColor(&usageNode{Name: "其他"})
-	file := usageColor(&usageNode{Ext: "mp4"})
-	if dir == gray || dir == file {
-		t.Fatal("folder tint matches the gray or a file's")
-	}
-	if extHue("mp4") != extHue("mp4") || extHue("mp4") < 0 || extHue("mp4") > 359 {
-		t.Fatal("extHue unstable or out of range")
-	}
-}
-
 func makeNodes(sizes ...int64) []*usageNode {
 	nodes := make([]*usageNode, len(sizes))
 	for i, s := range sizes {

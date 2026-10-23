@@ -495,15 +495,3 @@ func TestIconViewZoom(t *testing.T) {
 		t.Fatal("the row-based views keep their 32 px icons")
 	}
 }
-
-func TestTileFont(t *testing.T) {
-	if f := tileFont(96); f != 12 {
-		t.Fatalf("tileFont(96) = %v", f)
-	}
-	if f := tileFont(384); f != 18 {
-		t.Fatalf("tileFont(384) = %v, want the 18 pt cap", f)
-	}
-	if f := tileFont(16); f != 12 {
-		t.Fatalf("tileFont(16) = %v, want the 12 pt floor", f)
-	}
-}

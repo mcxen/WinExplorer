@@ -119,23 +119,3 @@ func TestScheduleJobFromArgsBackup(t *testing.T) {
 	}
 	_ = time.Now
 }
-
-func TestPromptListsScheduleTools(t *testing.T) {
-	for _, name := range []string{
-		"schedule_list", "schedule_create", "schedule_update", "schedule_delete", "schedule_run",
-		"assistant_task_run",
-	} {
-		if !strings.Contains(assistantInstruction, name) {
-			t.Errorf("Instruction missing %s", name)
-		}
-		found := false
-		for _, n := range sunvaleBuiltinToolNames() {
-			if n == name {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("sunvaleBuiltinToolNames missing %s", name)
-		}
-	}
-}

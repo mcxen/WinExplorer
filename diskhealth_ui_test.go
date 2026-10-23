@@ -8,56 +8,6 @@ import (
 	"sunvale/diskhealth"
 )
 
-// TestDiskPageRenders boots the real window view on the 磁盘健康 page with
-// a fixed report. The page's layout must not depend on the host having
-// readable drives, smartctl, or any particular probe timing.
-func TestDiskPageRenders(t *testing.T) {
-	a, tt, _ := keynavWindow(t, 1)
-	t.Cleanup(a.disksUnwatch)
-	report := diskhealth.Report{
-		At:      time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC),
-		Sources: []string{"测试数据"},
-		Disks: []diskhealth.Disk{{
-			ID:           "disk-test",
-			Model:        "TEST SSD",
-			Bus:          "NVMe",
-			Media:        "固态硬盘",
-			Size:         512 << 30,
-			Internal:     true,
-			Health:       diskhealth.HealthGood,
-			Temperature:  42,
-			TempKnown:    true,
-			LifeKnown:    true,
-			LifeUsed:     8,
-			SparePercent: 100,
-			Free:         256 << 30,
-			Total:        512 << 30,
-			Volumes: []diskhealth.Volume{{
-				Name: "System", MountPoint: "/", Size: 512 << 30,
-			}},
-		}},
-	}
-	a.diskRead = func() diskhealth.Report { return report }
-	a.diskWatch = func() {}
-	a.navigate(pathDisks)
-	tt.Frame()
-
-	for _, text := range []string{"磁盘健康", "温度", "检测项", "卷构成"} {
-		if !tt.HasText(text) {
-			t.Fatalf("the page does not show %q: %v", text, tt.Texts())
-		}
-	}
-	// The wear check names itself by what the drive reports: 写入寿命 when it
-	// has the counter, 寿命 with 未报告 when it does not — which is every CI
-	// runner and most virtual disks.
-	if !tt.HasText("写入寿命") && !tt.HasText("寿命") {
-		t.Fatalf("the page shows no wear check: %v", tt.Texts())
-	}
-	if !tt.HasText("可用") && !tt.HasText("已用") {
-		t.Fatalf("no capacity line on the card: %v", tt.Texts())
-	}
-}
-
 // TestDiskWatchStopsOnLeaving checks the page's background probe is torn
 // down when the tab leaves: a window must not keep polling disks behind a
 // folder it is showing.

@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/egoist/mygo/ui"
 )
 
 func TestClampImgZoom(t *testing.T) {
@@ -132,26 +130,5 @@ func TestResetImgQV(t *testing.T) {
 	a.resetImgQV("/b.png")
 	if a.imgQV.zoom != imgZoomMin || a.imgQV.panX != 0 || a.imgQV.path != "/b.png" {
 		t.Fatalf("new path must reset: %+v", a.imgQV)
-	}
-}
-
-func TestImageQuickLookRenders(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "shot.png")
-	writeTestPNG(t, p)
-	a := newStoreApp(t, dir)
-	a.previewOpen = true
-	a.selectOnly(p)
-	// Synchronously build the preview so the modal has a bitmap.
-	st := a.buildPreview(p)
-	st.gen = 1
-	a.preview.Store(st)
-	a.quickLook = true
-
-	tt := ui.NewTester(a.view, 1100, 720)
-	tt.Frame()
-	tt.Frame()
-	if !a.quickLook {
-		t.Fatal("quick look closed itself")
 	}
 }

@@ -24,6 +24,11 @@ func TestLookupMatchesMakers(t *testing.T) {
 		{"QNAP SSD-1T", "QNAP"},
 		{"Lenovo ThinkPad SSD", "Lenovo"},
 	}
+	for _, model := range []string{"", "   ", "CRUCIAL CT1000MX500SSD1", "KIOXIA KXG80ZNV1T02"} {
+		if logo := Lookup(model); logo != nil {
+			t.Fatalf("Lookup(%q) = %+v, want nil", model, logo)
+		}
+	}
 	for _, c := range cases {
 		logo := Lookup(c.model)
 		if logo == nil {
@@ -34,16 +39,6 @@ func TestLookupMatchesMakers(t *testing.T) {
 		}
 		if logo.SVG == nil {
 			t.Fatalf("Lookup(%q) has no parsed SVG", c.model)
-		}
-	}
-}
-
-// TestLookupUnknown checks that a maker outside the set — and an empty
-// model — yields no logo, so the page falls back to the generic glyph.
-func TestLookupUnknown(t *testing.T) {
-	for _, model := range []string{"", "   ", "CRUCIAL CT1000MX500SSD1", "KIOXIA KXG80ZNV1T02"} {
-		if logo := Lookup(model); logo != nil {
-			t.Fatalf("Lookup(%q) = %+v, want nil", model, logo)
 		}
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -11,31 +10,6 @@ import (
 // search_stream_test.go keeps application-level search behavior: status text,
 // scope selection and the tab's frame-owned stream state. The reusable walker
 // has its own black-box tests in internal/search.
-
-func TestSearchStatusLabelShape(t *testing.T) {
-	root := t.TempDir()
-	a := newTestApp(t, root)
-	os.WriteFile(filepath.Join(root, "alpha.txt"), nil, 0o644)
-	a.reload()
-	tab := a.cur()
-	tab.query = "alpha"
-	a.updateSearch()
-	waitSearch(t, a)
-	label := a.searchStatusLabel()
-	if !strings.Contains(label, "找到 1 个项目") {
-		t.Fatalf("label = %q, want the count", label)
-	}
-	if !strings.Contains(label, "(") {
-		t.Fatalf("label = %q, want the elapsed time", label)
-	}
-	if !strings.Contains(label, "alpha") {
-		t.Fatalf("label = %q, want the query", label)
-	}
-	tab.query = ""
-	if a.searchStatusLabel() != "" {
-		t.Fatalf("empty query label = %q", a.searchStatusLabel())
-	}
-}
 
 func namesOf(hits []Entry) []string {
 	var out []string

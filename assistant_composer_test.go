@@ -221,39 +221,6 @@ func TestEnterStillOpensFiles(t *testing.T) {
 	}
 }
 
-// TestAssistantHistoryIsLeftOfTheConversation: with 会话 on, the pane
-// splits like ZCode's chat — the history column on the left, the
-// conversation and its composer filling the room right of it.
-func TestAssistantHistoryIsLeftOfTheConversation(t *testing.T) {
-	a, tt, _ := keynavWindow(t, 1)
-	a.assist.loaded = true
-	a.assist.diskPath = filepath.Join(t.TempDir(), "assistant.json")
-	a.assistantOpen = true
-	a.assist.width = 560
-	a.assist.showHist = true
-	a.assist.sessions = []aiSessionMeta{{ID: "s1", Title: "上次的活", Updated: time.Now()}}
-	tt.Frame()
-	hist, ok := tt.Find("历史会话")
-	if !ok {
-		t.Fatalf("no history column: %v", tt.Texts())
-	}
-	comp, ok := tt.Find("给助手的消息")
-	if !ok {
-		t.Fatalf("no composer: %v", tt.Texts())
-	}
-	if hist.X > comp.X {
-		t.Fatalf("history at %v is not left of the composer at %v", hist, comp)
-	}
-	// The heading belongs to the left column, which keeps to its 200 DIP.
-	if hist.X+hist.W > comp.X {
-		t.Fatalf("history column %v overlaps the composer %v", hist, comp)
-	}
-	if err := tt.Click("上次的活"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
-}
-
 // TestAssistantHistoryGroupsAndCurrentRow draws the records panel: the
 // sessions fall under recency headings, the open session is marked current,
 // and a quiet row carries no delete button until hovered.

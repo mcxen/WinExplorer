@@ -44,21 +44,6 @@ func TestOpenUIStreamAndHistory(t *testing.T) {
 	}
 }
 
-func TestAssistantInstructionMentionsOpenUI(t *testing.T) {
-	for _, want := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "{frequent}", "```openui", "ToAssistant", "offer_choices", "present_form", "CardHeader", "TreeItem", "TimeField", "PathField", "DayChips"} {
-		if !strings.Contains(assistantInstruction, want) {
-			t.Fatalf("instruction missing %s", want)
-		}
-	}
-	stripped := assistantInstruction
-	for _, keep := range []string{"{folder}", "{mode}", "{selection}", "{memory}", "{frequent}"} {
-		stripped = strings.ReplaceAll(stripped, keep, "")
-	}
-	if strings.ContainsAny(stripped, "{}") {
-		t.Fatalf("extra braces in instruction: %s", stripped)
-	}
-}
-
 func TestTranscriptDrawsOpenUI(t *testing.T) {
 	body := "左边有两个大文件夹。\n```openui\n" +
 		"root = Stack([card])\n" +

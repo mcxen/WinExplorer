@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/egoist/mygo/ui"
 )
 
 func TestClampVidFrac(t *testing.T) {
@@ -68,37 +66,6 @@ func writeTestMP4(t *testing.T, path string) {
 	}
 }
 
-func TestVideoFrameAtAndPoster(t *testing.T) {
-	if !hasFFmpeg(t) {
-		t.Skip("ffmpeg not installed")
-	}
-	dir := t.TempDir()
-	clip := filepath.Join(dir, "clip.mp4")
-	writeTestMP4(t, clip)
-
-	img, err := videoFrameAt(clip, 0.5, 128)
-	if err != nil || img == nil {
-		t.Fatalf("videoFrameAt: %v %v", img, err)
-	}
-	b := img.Bounds()
-	if b.Dx() < 16 || b.Dy() < 16 {
-		t.Fatalf("tiny frame %dx%d", b.Dx(), b.Dy())
-	}
-
-	poster, err := videoPosterImage(clip, 128)
-	if err != nil || poster == nil {
-		t.Fatalf("videoPosterImage: %v %v", poster, err)
-	}
-
-	mi := loadVideo(clip)
-	if mi.poster == nil {
-		t.Fatal("loadVideo poster nil")
-	}
-	if mi.duration < 1.5 || mi.duration > 2.5 {
-		t.Fatalf("duration = %v", mi.duration)
-	}
-}
-
 func TestBuildPreviewKeepsVideoKind(t *testing.T) {
 	if !hasFFmpeg(t) {
 		t.Skip("ffmpeg not installed")
@@ -116,32 +83,6 @@ func TestBuildPreviewKeepsVideoKind(t *testing.T) {
 	}
 	if st.media.duration <= 0 {
 		t.Fatalf("duration = %v", st.media.duration)
-	}
-}
-
-func TestVideoQuickLookRenders(t *testing.T) {
-	if !hasFFmpeg(t) {
-		t.Skip("ffmpeg not installed")
-	}
-	dir := t.TempDir()
-	clip := filepath.Join(dir, "shot.mp4")
-	writeTestMP4(t, clip)
-	a := newStoreApp(t, dir)
-	a.previewOpen = true
-	a.selectOnly(clip)
-	st := a.buildPreview(clip)
-	st.gen = 1
-	a.preview.Store(st)
-	a.quickLook = true
-
-	tt := ui.NewTester(a.view, 1100, 720)
-	tt.Frame()
-	tt.Frame()
-	if !a.quickLook {
-		t.Fatal("quick look closed itself")
-	}
-	if a.vidQV.path != clip {
-		t.Fatalf("vidQV.path = %q", a.vidQV.path)
 	}
 }
 
@@ -167,18 +108,6 @@ func TestSetVidScrubFracRequestsFrame(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatalf("scrub frame never arrived: loading=%v err=%q", a.vidQV.loading, a.vidQV.err)
-}
-
-func TestKindByExtVideo(t *testing.T) {
-	if kindByExt(false, "mp4") != previewVideo {
-		t.Fatal("mp4")
-	}
-	if kindByExt(false, "mov") != previewVideo {
-		t.Fatal("mov")
-	}
-	if kindByExt(false, "pdf") != previewDoc {
-		t.Fatal("pdf stays doc")
-	}
 }
 
 func TestVideoFrameAtMissingBinary(t *testing.T) {

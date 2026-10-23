@@ -23,7 +23,11 @@ func samplePicture(w, h int) *image.RGBA {
 
 // TestScaleToFitKeepsAspect checks the target size: the longest edge is the
 // side asked for and the aspect ratio survives, at every size the app uses.
-func TestScaleToFitKeepsAspect(t *testing.T) {
+func TestScaleToFit(t *testing.T) {
+	small := samplePicture(100, 80)
+	if got := scaleToFit(small, 512); got.Bounds() != small.Bounds() {
+		t.Fatalf("100×80 scaled to %v, want unchanged", got.Bounds())
+	}
 	src := samplePicture(1600, 1200)
 	for _, side := range []int{48, 200, 512, 1024} {
 		got := scaleToFit(src, side)
@@ -35,16 +39,6 @@ func TestScaleToFitKeepsAspect(t *testing.T) {
 		if diff := absInt(b.Dx()*3 - b.Dy()*4); diff > 4 {
 			t.Fatalf("side %d: aspect %dx%d is not 4:3", side, b.Dx(), b.Dy())
 		}
-	}
-}
-
-// TestScaleToFitNeverEnlarges checks that a small picture is returned as it
-// is: upscaling would cost memory and add nothing but blur.
-func TestScaleToFitNeverEnlarges(t *testing.T) {
-	src := samplePicture(100, 80)
-	got := scaleToFit(src, 512)
-	if got.Bounds() != src.Bounds() {
-		t.Fatalf("100×80 scaled to %v, want unchanged", got.Bounds())
 	}
 }
 

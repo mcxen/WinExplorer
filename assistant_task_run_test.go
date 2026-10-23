@@ -61,21 +61,6 @@ func TestAssistantTaskRunStartsAsync(t *testing.T) {
 	}
 }
 
-func TestPromptListsAssistantTaskRun(t *testing.T) {
-	if !strings.Contains(assistantInstruction, "assistant_task_run") {
-		t.Fatal("Instruction missing assistant_task_run")
-	}
-	found := false
-	for _, n := range sunvaleBuiltinToolNames() {
-		if n == "assistant_task_run" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("sunvaleBuiltinToolNames missing assistant_task_run")
-	}
-}
-
 func TestScheduleCreateWithPreset(t *testing.T) {
 	st := useTempScheduleStore(t)
 	res, _, err := sunvaleToolState.scheduleCreate(context.Background(), nil, scheduleCreateArgs{

@@ -33,6 +33,11 @@ type Turn struct {
 	OpenDone map[string]string `json:"openDone,omitempty"`
 	Tool     string            `json:"tool,omitempty"`
 	Stopped  bool              `json:"stopped,omitempty"`
+	// At stamps the line for the chat's time label; Op and Steps turn a
+	// tool line into a file-operation card and a plan list.
+	At    time.Time  `json:"at,omitempty"`
+	Op    *FileOp    `json:"op,omitempty"`
+	Steps []PlanStep `json:"steps,omitempty"`
 }
 
 // Memory is one fact. Text is what the prompt and the panel show.

@@ -413,6 +413,9 @@ func (a *App) settingsUpdateGroups() []components.SettingsGroup {
 		last = t.Local().Format("2006/01/02 15:04")
 	}
 	items = append(items, components.SettingsItem{ID: "last", Title: "上次检查", Description: last})
+	// 下载线路按顺序换线（updatemirror.go），在状态文件的 updateMirrors 里配置。
+	items = append(items, components.SettingsItem{ID: "mirrors", Title: "下载线路",
+		Description: strings.Join(updateMirrorList(), " → ")})
 	return []components.SettingsGroup{{ID: "app", Items: items}}
 }
 

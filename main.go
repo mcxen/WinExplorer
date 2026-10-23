@@ -53,6 +53,8 @@ func main() {
 	// are: it needs no webview.
 	mygo.Use(native.Plugin)
 	store := loadState()
+	// 自动更新按镜像列表换线下载（updatemirror.go），签名校验仍由 mygo 完成。
+	installUpdateMirrors(store)
 	// The 外观 mode the settings dialog last saved, before any window
 	// builds: a forced source applies at Run, so it decides the tokens
 	// WhenReady resolves for the first frame.

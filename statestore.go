@@ -99,6 +99,12 @@ type appSettings struct {
 	// Ctrl+K / ⌘K.
 	SearchHotkey string `json:"searchHotkey,omitempty"`
 
+	// UpdateMirrors are the download prefixes the updater tries in order
+	// (updatemirror.go): "https://tvv.tw/" style proxies and "direct" for
+	// github.com itself, separated by commas or newlines. Empty means
+	// defaultUpdateMirrors. A string keeps appSettings comparable.
+	UpdateMirrors string `json:"updateMirrors,omitempty"`
+
 	ColName float32 `json:"colName,omitempty"`
 	ColDate float32 `json:"colDate,omitempty"`
 	ColType float32 `json:"colType,omitempty"`

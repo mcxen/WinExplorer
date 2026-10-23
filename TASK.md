@@ -325,3 +325,10 @@
 - **状态**：已合入 `main`，随 v0.2.0 发布。
 - **范围**：`quicklook.go`、`preview_pane.go`、`videoview.go`、`docview.go`：删除快捷键提示与解释性文案，错误/降级原因缩为一句，截断提示缩短；`mygo.json` 版本升至 0.2.0。
 - **验收**：`go build`、`go vet`、`go test ./...` 通过；截图未重拍。
+
+## UPD1 自动更新镜像换线
+
+- **状态**：已合入 `main`，未发版。
+- **根因**：更新检测请求的是 `https://github.com/mcxen/WinExplorer/releases/latest/download/update-<平台>.json`（不走 api.github.com，与限流无关）；v0.2.1 的 release 没有 `update-*.json`（仓库未配 `UPDATE_PRIVATE_KEY`，CI 跳过签名产物），所以检测必然 404。
+- **范围**：`updatemirror.go`（`http.DefaultClient` 的传输层：github.com release 下载按镜像顺序换线，每线 20 秒响应头超时；代理不跟随 `latest/download` 跳转，先 HEAD `releases/latest` 解析 tag 再走代理）、`statestore.go`（`updateMirrors`，默认 `https://tvv.tw/`→直连）、设置页「更新」显示下载线路、`main.go` 安装。签名仍由 mygo 用 `mygo.json` 的 `updates.publicKey` 校验。
+- **待用户**：本地 `mygo keygen` 生成密钥，私钥内容写入仓库 secret `UPDATE_PRIVATE_KEY`，`mygo-update.pub` 与 `mygo.json` 的 publicKey 必须一致（不一致则换公钥，且旧版无法自动更新到新签名），然后发新版本。

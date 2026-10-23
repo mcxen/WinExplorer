@@ -79,6 +79,10 @@ var runAssistantHeadless assistantRunner = runWithRateFallback
 
 func (a *App) assistantSubmit() {
 	a.assist.ensure()
+	if assistDemoOn() {
+		a.assistDemoSubmit()
+		return
+	}
 	a.assist.refreshConfig()
 	text := strings.TrimSpace(a.assist.draft)
 	files := append([]aiAttach(nil), a.assist.files...)
@@ -107,7 +111,7 @@ func (a *App) assistantSubmit() {
 	a.assist.halted = false
 	a.assist.pending = ""
 	a.assist.resetLive()
-	a.assist.turns = append(a.assist.turns, aiTurn{Role: "user", Text: text, Files: files})
+	a.assist.turns = append(a.assist.turns, aiTurn{Role: "user", Text: text, Files: files, At: time.Now()})
 	a.assist.persistSession(root)
 	a.assist.running = true
 	if a.assist.autopilot {

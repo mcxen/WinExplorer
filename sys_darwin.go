@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"os"
@@ -56,7 +57,10 @@ func sysThumbImage(path string, size int) (image.Image, error) {
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	cmd := exec.Command("qlmanage", "-t", "-s", fmt.Sprint(size), "-o", dir, path)
+	ctx, cancel := context.WithTimeout(context.Background(), sysCmdTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "qlmanage", "-t", "-s", fmt.Sprint(size), "-o", dir, path)
+	cmd.WaitDelay = time.Second
 	if b, e := cmd.CombinedOutput(); e != nil {
 		return nil, fmt.Errorf("%s: %v", string(b), e)
 	}
@@ -75,7 +79,9 @@ func sysThumbImage(path string, size int) (image.Image, error) {
 
 // sysFileMeta adds the Spotlight attributes mdls knows.
 func sysFileMeta(path string) ([]propRow, bool) {
-	out, err := exec.Command("mdls", "-name", "kMDItemPixelWidth",
+	ctx, cancel := context.WithTimeout(context.Background(), sysCmdTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "mdls", "-name", "kMDItemPixelWidth",
 		"-name", "kMDItemPixelHeight", "-name", "kMDItemNumberOfPages",
 		"-name", "kMDItemFSOwnerName", path).Output()
 	if err != nil {
@@ -100,7 +106,9 @@ func sysAudioPlay(path string) (name string, args []string, dur time.Duration, o
 	if _, err := exec.LookPath("afplay"); err != nil {
 		return "", nil, 0, false
 	}
-	out, err := exec.Command("afinfo", path).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), sysCmdTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "afinfo", path).Output()
 	if err != nil {
 		return "", nil, 0, false
 	}
@@ -257,3 +265,7 @@ func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
 // sysRootName is the root volume's name in the sidebar, the breadcrumb and
 // This PC: Finder's name for the startup volume.
 func sysRootName() string { return "Macintosh HD" }
+
+// sysCmdTimeout bounds blocking helper commands (qlmanage, mdls, afinfo)
+// so a stuck Quick Look generator cannot hang previews or tests.
+const sysCmdTimeout = 8 * time.Second

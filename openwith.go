@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // openwith.go is Explorer's 打开方式 (Open with) submenu: applications
@@ -114,7 +116,9 @@ func appDeclaredExts(bundle string) []string {
 	}
 	if !strings.HasPrefix(strings.TrimSpace(string(data)), "<?xml") &&
 		!strings.Contains(string(data), "<plist") {
-		data, err = exec.Command("plutil", "-convert", "xml1", "-o", "-", plist).Output()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		data, err = exec.CommandContext(ctx, "plutil", "-convert", "xml1", "-o", "-", plist).Output()
+		cancel()
 		if err != nil {
 			return nil
 		}

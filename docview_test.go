@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,9 @@ func TestDocPDFSourceNoOffice(t *testing.T) {
 	old := sofficeBin
 	sofficeBin = func() string { return "" }
 	defer func() { sofficeBin = old }()
+	oldThumb := sysThumbHook
+	sysThumbHook = func(string, int) (image.Image, error) { return nil, nil }
+	defer func() { sysThumbHook = oldThumb }()
 	p := filepath.Join(t.TempDir(), "a.docx")
 	os.WriteFile(p, []byte("x"), 0o644)
 	if _, err := docPDFSource(p); err != errNoOffice {

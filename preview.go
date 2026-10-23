@@ -359,10 +359,13 @@ func decodeImage(path string) (*ui.Bitmap, error) {
 	return quickLookThumb(path, 1024)
 }
 
+// sysThumbHook lets tests bypass the system thumbnailer.
+var sysThumbHook = sysThumbImage
+
 // quickLookThumb renders a system thumbnail of path (platform.go:
 // Quick Look on macOS; nil where the OS has none).
 func quickLookThumb(path string, size int) (*ui.Bitmap, error) {
-	img, err := sysThumbImage(path, size)
+	img, err := sysThumbHook(path, size)
 	if err != nil {
 		return nil, err
 	}

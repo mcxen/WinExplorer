@@ -4,7 +4,7 @@ name: Release
 #
 #   git tag v0.1.0 && git push origin v0.1.0
 #
-# The tag creates a draft release, each platform job builds its installers with
+# The tag creates a draft release and runs the tests in parallel; each platform job builds its installers with
 # the MyGo CLI and attaches them to it, and the last job publishes it. When the
 # UPDATE_PRIVATE_KEY secret is set, the builds also sign the update files and
 # attach them: the update-<platform>.json manifests must reach the published
@@ -33,11 +33,12 @@ jobs:
           # that added it; dropping it, go.sum needs the released module's hashes
           go mod edit -dropreplace github.com/oneo-me/onevra/source
           GOFLAGS=-mod=mod go build ./...
-      - run: go test ./...
+      # -short skips the slow and system-tool tests (TestRunBashTimeout 30s,
+      # LibreOffice/pdftoppm conversion); -timeout fails fast instead of hanging.
+      - run: go test -short -timeout 5m ./...
 
   draft:
     name: Draft the release
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -130,7 +131,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: build
+    needs: [test, build] # publish only when tests and every build succeeded
     runs-on: ubuntu-latest
     steps:
       - env:

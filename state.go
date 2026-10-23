@@ -217,6 +217,11 @@ type App struct {
 	quickLook bool
 	// imgQV is zoom/pan for the image Space viewer (imageview.go).
 	imgQV imgQuickView
+	// vidQV is scrub/keyframe state for the video Space viewer (videoview.go).
+	vidQV vidQuickView
+	// vidFrameGen tags in-flight scrub extracts so a slow ffmpeg cannot
+	// overwrite a newer scrub position.
+	vidFrameGen uint64
 	// propsOpen is the 属性 dialog modal (propsdialog.go).
 	propsOpen bool
 	// share is the 分享 dialog's state (sharedialog.go).

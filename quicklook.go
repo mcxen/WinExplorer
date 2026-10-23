@@ -136,7 +136,7 @@ func (a *App) quickLookBody(c *ui.Context) {
 		}
 		a.quickLookContent(c, st)
 		a.quickLookFacts(c, st)
-		if st.kind != previewImage {
+		if st.kind != previewImage && st.kind != previewVideo {
 			ui.Text(c, "空格 或 Esc 关闭 · ←/→ 上一张/下一张（音频为快退快进）").FontSize(11).TextColor(colorMuted())
 		}
 	})
@@ -182,6 +182,10 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 				FillWidth().MaxLines(1).Padding(0, 0, 0, 6)
 			a.previewAudio(c, st)
 		})
+		return
+	case previewVideo:
+		// Keyframe + scrub + system-open CTA (videoview.go). No embedded player.
+		a.videoQuickContent(c, st, maxW, maxH)
 		return
 	case previewDoc:
 		if st.bitmap != nil {

@@ -197,14 +197,15 @@ func (a *App) buildPreview(path string) *previewState {
 		}
 	case previewVideo:
 		st.media = loadVideo(path)
-		st.kind = previewDoc // render as a poster with a play affordance
 		if st.media.poster != nil {
 			st.bitmap = st.media.poster
 		} else if b, e := quickLookThumb(path, 1024); e == nil {
-			// No ffmpeg on this machine: Quick Look renders a movie frame
-			// by itself, so the pane keeps its poster.
+			// No ffmpeg on this machine: Quick Look / system thumb may
+			// still render a movie frame, so the pane keeps a poster.
 			st.bitmap = b
 		}
+		// Keep previewVideo (do not collapse to previewDoc) so Space can
+		// show scrub chrome and the sidebar can label the system-open CTA.
 	case previewDoc:
 		if b, e := pdfPoster(path); e == nil {
 			st.bitmap = b

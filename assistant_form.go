@@ -23,7 +23,7 @@ type presentFormArgs struct {
 	FieldsJSON  string `json:"fields_json,omitempty" jsonschema:"fields 数组的 JSON 字符串，每项含 id/kind/label，可选 placeholder/required/options/path_mode/value"`
 	SubmitLabel string `json:"submit_label,omitempty" jsonschema:"提交按钮文字，默认「提交」"`
 	SubmitMsg   string `json:"submit_message,omitempty" jsonschema:"提交后发给助手的一句中文，默认与按钮文字相同"`
-	Preset      string `json:"preset,omitempty" jsonschema:"可选预设：schedule|rename|share|search|classify|backup，忽略 fields_json"`
+	Preset      string `json:"preset,omitempty" jsonschema:"可选预设：schedule|rename|share|search|classify|backup|filelist|image|video，忽略 fields_json"`
 	PrefillJSON string `json:"prefill_json,omitempty" jsonschema:"预设预填值的 JSON 对象，如 {\"time\":\"19:00\"}"`
 }
 

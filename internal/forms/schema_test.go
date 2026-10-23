@@ -126,3 +126,73 @@ func TestNewKindsNormalize(t *testing.T) {
 		}
 	}
 }
+
+func TestMediaKindsNormalize(t *testing.T) {
+	raw := `{
+  "title": "media",
+  "fields": [
+    {"id": "files", "kind": "list", "label": "文件", "path_mode": "single", "options": ["a.png|1 KB|/tmp/a.png", "b.md|2 B"]},
+    {"id": "pic", "kind": "image", "label": "图", "value": "/tmp/x.png"},
+    {"id": "vid", "kind": "video", "label": "视频", "value": "/tmp/x.mp4"},
+    {"id": "empty", "kind": "checklist", "label": "空"}
+  ]
+}`
+	f, err := ParseJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, field := range f.Fields {
+		kinds[field.ID] = field.Kind
+	}
+	for id, want := range map[string]string{
+		"files": KindList, "pic": KindImage, "vid": KindVideo, "empty": KindList,
+	} {
+		if kinds[id] != want {
+			t.Fatalf("%s: %q want %q in %v", id, kinds[id], want, kinds)
+		}
+	}
+	var list Field
+	for _, field := range f.Fields {
+		if field.ID == "files" {
+			list = field
+		}
+	}
+	if list.PathMode != ListSingle {
+		t.Fatalf("list mode %q", list.PathMode)
+	}
+	prog := f.ToOpenUI()
+	for _, needle := range []string{"ListField(", "ImageField(", "VideoField("} {
+		if !strings.Contains(prog, needle) {
+			t.Fatalf("missing %s in\n%s", needle, prog)
+		}
+	}
+}
+
+func TestParseListItem(t *testing.T) {
+	it := ParseListItem("photo.png|2.4 MB|/tmp/photo.png")
+	if it.Name != "photo.png" || it.Size != "2.4 MB" || it.Thumb != "/tmp/photo.png" {
+		t.Fatalf("%+v", it)
+	}
+	if FormatListItem(it) != "photo.png|2.4 MB|/tmp/photo.png" {
+		t.Fatal(FormatListItem(it))
+	}
+	if ParseListItem("alone").Name != "alone" {
+		t.Fatal(ParseListItem("alone"))
+	}
+}
+
+func TestMediaScenes(t *testing.T) {
+	EnsureDemoSandbox()
+	for _, id := range []string{SceneFileList, SceneImage, SceneVideo} {
+		f, ok := Scene(id, nil)
+		if !ok {
+			t.Fatalf("scene %s", id)
+		}
+		f.Normalize()
+		prog := f.ToOpenUI()
+		if !strings.Contains(prog, "Form(") {
+			t.Fatalf("%s:\n%s", id, prog)
+		}
+	}
+}

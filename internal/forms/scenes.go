@@ -12,6 +12,9 @@ const (
 	SceneSearch   = "search"
 	SceneClassify = "classify"
 	SceneBackup   = "backup"
+	SceneFileList = "filelist"
+	SceneImage    = "image"
+	SceneVideo    = "video"
 )
 
 // SceneNames is the ordered demo catalog (Chinese labels for slash / docs).
@@ -23,6 +26,9 @@ func SceneNames() []struct{ ID, Label, Detail string } {
 		{SceneSearch, "高级搜索过滤", "类型 chips + 标签 + 滑块"},
 		{SceneClassify, "AI 分类确认", "目标文件夹多选"},
 		{SceneBackup, "备份任务向导", "源目标 + 进度 + 确认按钮组"},
+		{SceneFileList, "批量文件清单", "可勾选列表：文件名/大小/缩略图"},
+		{SceneImage, "图片预览确认", "表单内嵌图片缩放预览"},
+		{SceneVideo, "视频关键帧预览", "关键帧 + 系统打开播放"},
 	}
 }
 
@@ -143,6 +149,65 @@ func Scene(id string, prefill map[string]string) (Form, bool) {
 				{ID: "abort", Label: "放弃", Variant: "destructive", Message: "放弃备份向导"},
 			},
 		}, true
+	case SceneFileList, "批量文件", "file_list", "batch_files":
+		photo := PreferPath(filepath.Join("Downloads", "demo-photo.png"))
+		thumb := PreferPath(filepath.Join("Downloads", "demo-thumb.png"))
+		clip := PreferPath(filepath.Join("Movies", "demo-clip.mp4"))
+		return Form{
+			ID:          "file_list",
+			Title:       "批量文件清单",
+			Description: "勾选要处理的文件；可单选或空列表演示空状态。",
+			Fields: []Field{
+				{ID: "mode", Kind: KindSegmented, Label: "选择方式", Options: []string{"多选", "单选"}, Value: get("mode", "多选")},
+				{ID: "files", Kind: KindList, Label: "文件", PathMode: ListMulti, Required: true, Options: []string{
+					FormatListItem(ListItem{Name: "demo-photo.png", Size: "1.7 KB", Thumb: photo}),
+					FormatListItem(ListItem{Name: "demo-thumb.png", Size: "1.8 KB", Thumb: thumb}),
+					FormatListItem(ListItem{Name: "会议纪要.md", Size: "32 B"}),
+					FormatListItem(ListItem{Name: "demo-clip.mp4", Size: "12 KB", Thumb: clip}),
+					FormatListItem(ListItem{Name: "资料.zip", Size: "14 B"}),
+				}, Value: get("files", "demo-photo.png,会议纪要.md")},
+				{ID: "empty_demo", Kind: KindList, Label: "空列表（演示）", PathMode: ListMulti, Placeholder: "暂无匹配文件", Options: nil, Value: ""},
+				{ID: "action", Kind: KindSegmented, Label: "操作", Options: []string{"移动", "复制", "压缩"}, Value: get("action", "移动")},
+				{ID: "dest", Kind: KindPath, Label: "目标文件夹", PathMode: PathFolder, Value: get("dest", PreferPath("Documents"))},
+			},
+			Actions: []Action{
+				{ID: "run", Label: "处理所选", Variant: "primary", Message: "按清单处理所选文件"},
+				{ID: "cancel", Label: "取消", Variant: "secondary", Message: "取消批量文件清单"},
+			},
+		}, true
+	case SceneImage, "图片预览", "image_preview", "photo":
+		photo := PreferPath(filepath.Join("Downloads", "demo-photo.png"))
+		return Form{
+			ID:          "image_preview",
+			Title:       "图片预览确认",
+			Description: "表单内嵌缩放适配预览；坏图显示占位。",
+			Fields: []Field{
+				{ID: "preview", Kind: KindImage, Label: "预览", Value: get("preview", photo)},
+				{ID: "broken", Kind: KindImage, Label: "坏图占位", Value: get("broken", PreferPath(filepath.Join("Downloads", "broken-note.txt")))},
+				{ID: "caption", Kind: KindText, Label: "说明", Placeholder: "封面 / 旅行 / 截图…", Value: get("caption", "演示封面")},
+				{ID: "keep", Kind: KindSwitch, Label: "保留原文件", Value: get("keep", "true")},
+			},
+			Actions: []Action{
+				{ID: "ok", Label: "确认使用", Variant: "primary", Message: "确认使用该图片"},
+				{ID: "pick", Label: "换一张", Variant: "secondary", Message: "换一张图片"},
+			},
+		}, true
+	case SceneVideo, "视频预览", "video_preview", "movie":
+		clip := PreferPath(filepath.Join("Movies", "demo-clip.mp4"))
+		return Form{
+			ID:          "video_preview",
+			Title:       "视频关键帧预览",
+			Description: "mygo/Onevra 无内嵌播放器：显示关键帧，播放交给系统播放器。",
+			Fields: []Field{
+				{ID: "clip", Kind: KindVideo, Label: "视频", Value: get("clip", clip)},
+				{ID: "title", Kind: KindText, Label: "标题", Placeholder: "片段名称", Required: true, Value: get("title", "demo-clip")},
+				{ID: "note", Kind: KindTextArea, Label: "备注", Placeholder: "给剪辑或归档留一句说明", Value: get("note", "")},
+			},
+			Actions: []Action{
+				{ID: "archive", Label: "归档此片段", Variant: "primary", Message: "归档所选视频片段"},
+				{ID: "cancel", Label: "取消", Variant: "secondary", Message: "取消视频预览"},
+			},
+		}, true
 	default:
 		return Form{}, false
 	}
@@ -150,5 +215,8 @@ func Scene(id string, prefill map[string]string) (Form, bool) {
 
 // ScenePresetIDs lists machine ids for docs and present_form help text.
 func ScenePresetIDs() []string {
-	return []string{SceneSchedule, SceneRename, SceneShare, SceneSearch, SceneClassify, SceneBackup}
+	return []string{
+		SceneSchedule, SceneRename, SceneShare, SceneSearch, SceneClassify, SceneBackup,
+		SceneFileList, SceneImage, SceneVideo,
+	}
 }

@@ -664,6 +664,12 @@ func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 		return openProgressBar(env, e, stack)
 	case "TableSelect":
 		return openOptsField(env, e, stack, "table_select")
+	case "ListField", "FileList":
+		return openListField(env, e, stack)
+	case "ImageField", "Image":
+		return openMediaField(env, e, stack, "image")
+	case "VideoField", "Video":
+		return openMediaField(env, e, stack, "video")
 	default:
 		return nil
 	}
@@ -722,7 +728,8 @@ func openTreeSize(v *OUIView) int {
 func OpenIsField(kind string) bool {
 	switch kind {
 	case "input", "select", "number", "path", "time", "date", "days", "switch", "segmented",
-		"multi_select", "filetypes", "tags", "slider", "progress", "table_select":
+		"multi_select", "filetypes", "tags", "slider", "progress", "table_select",
+		"list", "image", "video":
 		return true
 	default:
 		return false

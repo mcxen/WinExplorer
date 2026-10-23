@@ -25,12 +25,17 @@ const (
 	KindSlider      = "slider"
 	KindProgress    = "progress"
 	KindTableSelect = "table_select"
+	KindList        = "list"
+	KindImage       = "image"
+	KindVideo       = "video"
 )
 
 // PathMode selects what a path field's browse button opens.
 const (
 	PathFolder = "folder"
 	PathFile   = "file"
+	ListMulti  = "multi"
+	ListSingle = "single"
 )
 
 // Field is one control in a Form.
@@ -43,7 +48,7 @@ type Field struct {
 	Pattern     string   `json:"pattern,omitempty"`
 	Value       string   `json:"value,omitempty"`
 	Options     []string `json:"options,omitempty"`
-	PathMode    string   `json:"path_mode,omitempty"` // folder | file
+	PathMode    string   `json:"path_mode,omitempty"` // path: folder|file; list: single|multi
 	Description string   `json:"description,omitempty"`
 	// Min/Max/Step drive slider (and optional progress scale). Zero Max
 	// means the painter picks a default (0–100 for slider, 0–1 for progress).
@@ -112,6 +117,9 @@ func (f *Form) Normalize() {
 		if field.Kind == KindPath && field.PathMode == "" {
 			field.PathMode = PathFolder
 		}
+		if field.Kind == KindList && field.PathMode == "" {
+			field.PathMode = ListMulti
+		}
 		if field.Kind == KindDays && len(field.Options) == 0 {
 			field.Options = []string{"每天", "工作日", "周末"}
 		}
@@ -171,6 +179,12 @@ func normalizeKind(k string) string {
 		return KindProgress
 	case KindTableSelect, "table", "rows":
 		return KindTableSelect
+	case KindList, "file_list", "checklist", "item_list":
+		return KindList
+	case KindImage, "img", "picture", "photo":
+		return KindImage
+	case KindVideo, "movie", "clip":
+		return KindVideo
 	default:
 		return ""
 	}
@@ -205,5 +219,6 @@ func KnownKinds() []string {
 		KindText, KindTextArea, KindPassword, KindNumber, KindPath,
 		KindSelect, KindMultiSelect, KindSwitch, KindTime, KindDate, KindDays,
 		KindSegmented, KindFileTypes, KindTags, KindSlider, KindProgress, KindTableSelect,
+		KindList, KindImage, KindVideo,
 	}
 }

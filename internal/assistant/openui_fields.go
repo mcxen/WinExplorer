@@ -7,7 +7,8 @@ import (
 
 // openui_fields.go realizes the extended OpenUI form controls (TimeField,
 // PathField, DayChips, Number, SwitchField, Segmented, MultiSelect, DateField,
-// FileTypeChips, TagsField, SliderField, ProgressBar, TableSelect) so the
+// FileTypeChips, TagsField, SliderField, ProgressBar, TableSelect,
+// ListField, ImageField, VideoField) so the
 // AI and Settings share one vocabulary.
 
 // openFieldName reads a control's name: the spec's first positional
@@ -251,4 +252,41 @@ func openFloatArg(env map[string]OUIExpr, e OUIExpr, stack map[string]bool, def 
 		return f
 	}
 	return def
+}
+
+func openListField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
+	name := openFieldName(env, e, stack)
+	opts := openFieldOpts(env, e, stack)
+	if name == "" {
+		return nil
+	}
+	mode, _ := openText(env, openArg(e.args, 2), stack)
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "single", "radio", "one":
+		mode = "single"
+	case "required", "必填":
+		mode = "multi"
+	default:
+		if mode != "multi" {
+			mode = "multi"
+		}
+	}
+	hint, _ := openText(env, openArg(e.args, 3), stack)
+	hint = strings.TrimSpace(hint)
+	if hint == "required" || hint == "必填" {
+		hint = ""
+	}
+	v := &OUIView{Kind: "list", Name: name, Options: opts, PathMode: mode, Placeholder: hint}
+	openMarkRequired(v, e.args, 2)
+	return v
+}
+
+func openMediaField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool, kind string) *OUIView {
+	name := openFieldName(env, e, stack)
+	if name == "" {
+		return nil
+	}
+	src, _ := openText(env, openArg(e.args, 1), stack)
+	return &OUIView{Kind: kind, Name: name, Placeholder: strings.TrimSpace(src)}
 }

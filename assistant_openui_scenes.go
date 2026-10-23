@@ -92,6 +92,12 @@ func openUIDemoMatch(text string) string {
 		return forms.SceneClassify
 	case strings.Contains(text, "备份") || strings.Contains(text, "backup"):
 		return forms.SceneBackup
+	case strings.Contains(text, "清单") || strings.Contains(text, "filelist") || strings.Contains(text, "批量文件"):
+		return forms.SceneFileList
+	case strings.Contains(text, "图片预览") || strings.Contains(text, "image"):
+		return forms.SceneImage
+	case strings.Contains(text, "视频") || strings.Contains(text, "video") || strings.Contains(text, "关键帧"):
+		return forms.SceneVideo
 	}
 	return ""
 }

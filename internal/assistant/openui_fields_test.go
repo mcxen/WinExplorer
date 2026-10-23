@@ -105,3 +105,40 @@ ok = Button("提交", @ToAssistant("提交"), "primary")
 		t.Fatalf("slider %+v", sl)
 	}
 }
+
+func TestParseOpenUIMediaFields(t *testing.T) {
+	src := `
+root = Card([form])
+form = Form("media", actions, [listCtl, imgCtl, vidCtl])
+listCtl = FormControl("文件", ListField("files", ["a.png|1 KB", "b.md|2 B"], "multi", "required"))
+imgCtl = FormControl("预览", ImageField("pic", "/tmp/demo.png"))
+vidCtl = FormControl("视频", VideoField("clip", "/tmp/demo.mp4"))
+actions = Buttons([ok], "row")
+ok = Button("提交", @ToAssistant("提交"), "primary")
+`
+	view := ParseOpenUI(src)
+	form := findOpen(view, "form")
+	if form == nil {
+		t.Fatalf("no form: %s", dumpOpen(view))
+	}
+	kinds := map[string]string{}
+	for _, ch := range form.Children {
+		if OpenIsField(ch.Kind) {
+			kinds[ch.Name] = ch.Kind
+		}
+	}
+	want := map[string]string{"files": "list", "pic": "image", "clip": "video"}
+	for name, kind := range want {
+		if kinds[name] != kind {
+			t.Fatalf("field %s: got %q want %q in %#v", name, kinds[name], kind, kinds)
+		}
+	}
+	list := findOpenName(view, "files")
+	if list == nil || list.PathMode != "multi" || !list.Required || len(list.Options) != 2 {
+		t.Fatalf("list %+v", list)
+	}
+	img := findOpenName(view, "pic")
+	if img == nil || img.Placeholder != "/tmp/demo.png" {
+		t.Fatalf("img %+v", img)
+	}
+}

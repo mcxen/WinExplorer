@@ -248,11 +248,13 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 }
 
 // tileGlyph is a tile's icon area: a picture or video shows its own frame,
-// a folder holding media keeps its folder shape with the pictures inside
-// it, and everything else is the drawn file or folder glyph. The drawn
-// glyphs stay under thumbMinBox, where 16 px of picture says less than the
-// file-type colour. eager false leaves the picture undecoded — the network
-// tile's rule — and the drawn glyph stands in until the tile is looked at.
+// a PDF shows its first page when a renderer is available, an HTML file
+// shows its favicon when one is local, a folder holding media keeps its
+// folder shape with the pictures inside it, and everything else is the
+// drawn file or folder glyph. The drawn glyphs stay under thumbMinBox,
+// where 16 px of picture says less than the file-type colour. eager false
+// leaves the picture undecoded — the network tile's rule — and the drawn
+// glyph stands in until the tile is looked at.
 func (a *App) tileGlyph(c *ui.Context, e Entry, box float32, eager bool) {
 	if box >= thumbMinBox && eager {
 		if e.IsDir {

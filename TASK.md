@@ -80,6 +80,7 @@
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
 | IMAGE1 | 图片快速查看：侧栏大图 + 空格缩放/平移/同目录翻页 | 高 | 进行中 | 本文 / `docs/UI.md` IMAGE1 | — | `feat/image-quickview` |
+| DOC1 | 文档图标：PDF/HTML 配色字形 + 大图标 PDF 首页 / HTML favicon | 中 | 已完成 | 本文 | — | `feat/doc-icons` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
@@ -234,6 +235,12 @@
 - 暂不执行；R5、R6 完成后由方案维护者补规格。
 
 ---
+
+
+### DOC1 — 文档图标（PDF / HTML）
+- **目标**：列表里 PDF/HTML 更好认；大图标下 PDF 尽量有首屏、HTML 尽量有 favicon；失败有手绘回退。
+- **范围**：`icons.go`、`thumb.go`、`pdfthumb.go`、`htmlfavicon.go`、`preview.go`、`files_icon.go`；`docs/UI.md`、本文。
+- **验收**：`go test -count=1 -run 'TestFileTintDocTypes|TestHtmlFavicon|TestPdfPoster|TestMediaThumbStarts' .`；详情 16px 自绘；中等及以上可出 PDF/favicon 缩略图。
 
 ## 已完成（main）
 

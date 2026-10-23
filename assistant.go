@@ -849,17 +849,10 @@ func (a *App) assistantTurn(c *ui.Context, i int) {
 }
 
 func (a *App) assistantPickFiles() {
-	if a.assist.picking {
-		return
-	}
-	a.assist.picking = true
 	win := a.win
-	dir := a.cur().path
-	if dir == "" || specialPath(dir) {
-		dir, _ = os.UserHomeDir()
-	}
-	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+	dir := assistDialogDir(a.cur().path)
+	a.runAssistPick(func() ([]string, error) {
+		return mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:      win,
 			Title:       "指定要读取的文件",
 			DefaultPath: dir,
@@ -867,21 +860,19 @@ func (a *App) assistantPickFiles() {
 			Message:     "可以多选。助手会读这些文件后再回答。",
 			Multiple:    true,
 		})
-		a.postAssist(func() {
-			a.assist.picking = false
-			if err != nil {
-				a.statusMsg = err.Error()
-				return
-			}
-			n := a.assist.addFiles(paths)
-			if n > 0 {
-				a.noteUsedPaths(2, paths...)
-				a.statusMsg = "已加入 " + itoa(n) + " 个项目"
-			} else if len(paths) > 0 {
-				a.statusMsg = "没有新的文件"
-			}
-		})
-	}()
+	}, func(paths []string, err error) {
+		if err != nil {
+			a.statusMsg = err.Error()
+			return
+		}
+		n := a.assist.addFiles(paths)
+		if n > 0 {
+			a.noteUsedPaths(2, paths...)
+			a.statusMsg = "已加入 " + itoa(n) + " 个项目"
+		} else if len(paths) > 0 {
+			a.statusMsg = "没有新的文件"
+		}
+	})
 }
 
 func (a *App) assistantAttachSelection() {

@@ -49,7 +49,7 @@
 
 ### 演示路径沙箱
 
-无 `~/Downloads` / `~/Documents` 的环境（CI、部分 Linux 主机）上，`PreferPath` / `EnsureDemoSandbox`（`internal/forms/sandbox.go`）在 `TempDir/sunvale-openui-demo` 创建真实目录与样例文件，定时任务与场景表单默认路径指向它们。`formPickPath` 用 `ExistingDir` 避免原生对话框对缺失 DefaultPath 报 `no such file or directory`。
+无 `~/Downloads` / `~/Documents` 的环境（CI、部分 Linux 主机）上，`PreferPath` / `EnsureDemoSandbox`（`internal/forms/sandbox.go`）在 `TempDir/sunvale-openui-demo` 创建真实目录与样例文件，定时任务与场景表单默认路径指向它们。`formPickPath` 与助手「指定文件」(`assistantPickFiles`) 经 `assistDialogDir` → `ExistingDir` 选起始目录，避免原生对话框对缺失 DefaultPath 报 ENOENT 或挂起；`runAssistPick` 在成功/失败/超时后复位 `assist.picking`。
 
 截图：`docs/assets/shots/OPENUI-DEMO/`。
 

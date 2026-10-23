@@ -228,7 +228,8 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 			}
 		})
 		p.form = outer
-	case "input", "select", "number", "path", "time", "days", "switch", "segmented", "multi_select":
+	case "input", "select", "number", "path", "time", "date", "days", "switch", "segmented",
+		"multi_select", "filetypes", "tags", "slider", "progress", "table_select":
 		a.paintOpenField(c, v, p)
 	case "button":
 		a.paintOpenButton(c, v, p)
@@ -347,6 +348,12 @@ func (a *App) paintOpenField(c *ui.Context, v *ouiView, p *openPaint) {
 			kind = "text"
 		}
 	}
+	if strings.TrimSpace(*val) == "" && v.Placeholder != "" {
+		switch kind {
+		case "progress", "slider", "tags", "time", "date", "number", "text", "textarea", "password":
+			*val = v.Placeholder
+		}
+	}
 	ui.Box(c.Key("field-" + v.Name)).FillWidth().MinWidth(0).Children(func() {
 		a.paintFormField(c, kind, label, val, formFieldOpts{
 			Locked:   p.locked,
@@ -354,6 +361,8 @@ func (a *App) paintOpenField(c *ui.Context, v *ouiView, p *openPaint) {
 			Options:  v.Options,
 			Password: v.Password,
 			Hint:     v.Placeholder,
+			Min:      v.Min,
+			Max:      v.Max,
 		})
 	})
 }

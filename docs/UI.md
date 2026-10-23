@@ -183,6 +183,10 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 设置「定时任务」添加/编辑与助手 OpenUI Form / `present_form` 共用 `internal/forms` 字段种类与 `forms_paint.go` 绘制：TextBox、Select、Switch、Segmented、路径浏览。新表单优先声明 schema，不要再手写一排无标签 TextBox。规格见 `docs/specs/08-forms.md`；截图 `docs/assets/shots/FORM1/`。
 
+## OpenUI 场景演示（OPENUI2）
+
+在 FORM1 之上扩展日期、文件类型 chips、标签、滑块、进度、表格多选等控件；`present_form` 提供 rename/share/search/classify/backup 等预设。助手斜杠「表单·…」可离线打开。无家目录下载/文档文件夹时，默认路径落在临时沙箱（见 `docs/specs/08-forms.md` OPENUI2）。截图 `docs/assets/shots/OPENUI-DEMO/`。
+
 ## 设置 · 助手（A4）
 
 设置对话框在「插件」与「更新」之间增加 **助手** 分类（`settingsdialog.go:settingsCategories`，实现见 `settings_assistant.go`）：

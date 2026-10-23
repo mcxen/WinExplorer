@@ -66,3 +66,42 @@ func findOpenName(v *OUIView, name string) *OUIView {
 	}
 	return nil
 }
+
+func TestParseOpenUINewFields(t *testing.T) {
+	src := `
+root = Card([form])
+form = Form("demo", actions, [dateCtl, tagsCtl, ftCtl, slCtl, prCtl, tbCtl])
+dateCtl = FormControl("日期", DateField("expire", "2026-12-31", "required"))
+tagsCtl = FormControl("标签", TagsField("tags", "工作, 紧急"))
+ftCtl = FormControl("类型", FileTypeChips("types", [".pdf", ".md"]))
+slCtl = FormControl("大小", SliderField("max_mb", 0, 500))
+prCtl = FormControl("进度", ProgressBar("step", "0.5"))
+tbCtl = FormControl("行", TableSelect("rows", ["a → 1", "b → 2"], "required"))
+actions = Buttons([ok], "row")
+ok = Button("提交", @ToAssistant("提交"), "primary")
+`
+	view := ParseOpenUI(src)
+	form := findOpen(view, "form")
+	if form == nil {
+		t.Fatalf("no form: %s", dumpOpen(view))
+	}
+	kinds := map[string]string{}
+	for _, ch := range form.Children {
+		if OpenIsField(ch.Kind) {
+			kinds[ch.Name] = ch.Kind
+		}
+	}
+	want := map[string]string{
+		"expire": "date", "tags": "tags", "types": "filetypes",
+		"max_mb": "slider", "step": "progress", "rows": "table_select",
+	}
+	for name, kind := range want {
+		if kinds[name] != kind {
+			t.Fatalf("field %s: got %q want %q in %#v", name, kinds[name], kind, kinds)
+		}
+	}
+	sl := findOpenName(view, "max_mb")
+	if sl == nil || sl.Min != 0 || sl.Max != 500 {
+		t.Fatalf("slider %+v", sl)
+	}
+}

@@ -123,6 +123,7 @@ func (a *App) assistSlashCatalog() []assistSlashItem {
 			Kind: slashFill, Fill: "帮我压缩或解压选中的文件",
 		})
 	}
+	items = append(items, a.assistSlashOpenUIScenes()...)
 	return items
 }
 

@@ -64,6 +64,9 @@ type OUIView struct {
 	// PathMode is folder|file for path fields. Password marks a secret input.
 	PathMode string
 	Password bool
+	// Min/Max are slider bounds (ProgressBar ignores them).
+	Min float64
+	Max float64
 }
 
 // OUICol is one Table column. Cells line up by index with the other columns.
@@ -649,6 +652,18 @@ func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 		return openMultiSelectField(env, e, stack)
 	case "Select":
 		return openSelectField(env, e, stack)
+	case "DateField":
+		return openNamedField(env, e, stack, "date")
+	case "FileTypeChips":
+		return openOptsField(env, e, stack, "filetypes")
+	case "TagsField":
+		return openNamedField(env, e, stack, "tags")
+	case "SliderField":
+		return openSliderField(env, e, stack)
+	case "ProgressBar":
+		return openProgressBar(env, e, stack)
+	case "TableSelect":
+		return openOptsField(env, e, stack, "table_select")
 	default:
 		return nil
 	}
@@ -706,7 +721,8 @@ func openTreeSize(v *OUIView) int {
 
 func OpenIsField(kind string) bool {
 	switch kind {
-	case "input", "select", "number", "path", "time", "days", "switch", "segmented", "multi_select":
+	case "input", "select", "number", "path", "time", "date", "days", "switch", "segmented",
+		"multi_select", "filetypes", "tags", "slider", "progress", "table_select":
 		return true
 	default:
 		return false

@@ -1,9 +1,13 @@
 package assistant
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // openui_fields.go realizes the extended OpenUI form controls (TimeField,
-// PathField, DayChips, Number, SwitchField, Segmented, MultiSelect) so the
+// PathField, DayChips, Number, SwitchField, Segmented, MultiSelect, DateField,
+// FileTypeChips, TagsField, SliderField, ProgressBar, TableSelect) so the
 // AI and Settings share one vocabulary.
 
 // openFieldName reads a control's name: the spec's first positional
@@ -195,4 +199,56 @@ func openMarkRequired(v *OUIView, args []OUIExpr, from int) {
 			v.Required = true
 		}
 	}
+}
+
+func openOptsField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool, kind string) *OUIView {
+	name := openFieldName(env, e, stack)
+	opts := openFieldOpts(env, e, stack)
+	if name == "" || len(opts) == 0 {
+		return nil
+	}
+	v := &OUIView{Kind: kind, Name: name, Options: opts}
+	openMarkRequired(v, e.args, 1)
+	return v
+}
+
+func openSliderField(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
+	name := openFieldName(env, e, stack)
+	if name == "" {
+		return nil
+	}
+	lo := openFloatArg(env, openArg(e.args, 1), stack, 0)
+	hi := openFloatArg(env, openArg(e.args, 2), stack, 100)
+	if hi <= lo {
+		hi = lo + 1
+	}
+	def, _ := openText(env, openArg(e.args, 3), stack)
+	v := &OUIView{Kind: "slider", Name: name, Min: lo, Max: hi, Placeholder: strings.TrimSpace(def)}
+	openMarkRequired(v, e.args, 2)
+	return v
+}
+
+func openProgressBar(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
+	name := openFieldName(env, e, stack)
+	if name == "" {
+		return nil
+	}
+	val, _ := openText(env, openArg(e.args, 1), stack)
+	return &OUIView{Kind: "progress", Name: name, Placeholder: strings.TrimSpace(val)}
+}
+
+func openFloatArg(env map[string]OUIExpr, e OUIExpr, stack map[string]bool, def float64) float64 {
+	if e.kind == "number" {
+		return e.n
+	}
+	text, _ := openText(env, e, stack)
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return def
+	}
+	var f float64
+	if _, err := fmt.Sscanf(text, "%f", &f); err == nil {
+		return f
+	}
+	return def
 }

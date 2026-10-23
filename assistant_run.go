@@ -85,6 +85,9 @@ func (a *App) assistantSubmit() {
 	if (text == "" && len(files) == 0) || a.assist.running {
 		return
 	}
+	if a.assistOpenUIDemoSubmit() {
+		return
+	}
 	if text == "" {
 		text = "请阅读这些文件"
 	}

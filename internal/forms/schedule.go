@@ -1,16 +1,14 @@
 package forms
 
 import (
-	"os"
 	"path/filepath"
 )
 
 // ScheduleAdd builds the Settings「添加任务」schema. Prefill overrides empty
 // defaults (edit mode). The painter keeps values in a map keyed by Field.ID.
 func ScheduleAdd(prefill map[string]string) Form {
-	home, _ := os.UserHomeDir()
-	src := filepath.Join(home, "Downloads")
-	dest := filepath.Join(home, "Documents")
+	src := PreferPath("Downloads")
+	dest := PreferPath("Documents")
 	get := func(id, def string) string {
 		if prefill != nil {
 			if v, ok := prefill[id]; ok && v != "" {
@@ -57,14 +55,13 @@ func ScheduleAdd(prefill map[string]string) Form {
 
 // ScheduleExampleFill returns values for「每晚整理下载文档」.
 func ScheduleExampleFill() map[string]string {
-	home, _ := os.UserHomeDir()
 	return map[string]string{
 		"name":   "每晚整理下载文档",
 		"time":   "19:00",
 		"days":   "每天",
 		"action": "文件规则",
-		"source": filepath.Join(home, "Downloads"),
-		"dest":   filepath.Join(home, "Documents", "来自下载"),
+		"source": PreferPath("Downloads"),
+		"dest":   PreferPath(filepath.Join("Documents", "来自下载")),
 		"match":  ".pdf,.docx,.doc,.xlsx,.pptx,.txt,.md",
 		"op":     "移动",
 	}

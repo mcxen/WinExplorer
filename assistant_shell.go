@@ -42,6 +42,16 @@ type bashArgs struct {
 
 // runBash executes script in root with the app's shell.
 func runBash(ctx context.Context, root, script string) (string, error) {
+	info, err := os.Stat(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("工作目录不存在：%s", root)
+		}
+		return "", fmt.Errorf("无法打开工作目录：%v", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("工作目录不是文件夹：%s", root)
+	}
 	out := &cappedWriter{cap: shellOutputMax}
 	var stderr strings.Builder
 	runner, err := interpRunner(root, out, &stderr)

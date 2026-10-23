@@ -203,38 +203,32 @@ func (a *App) paintFormPath(c *ui.Context, value *string, opts formFieldOpts) {
 }
 
 func (a *App) formPickPath(value *string, mode string) {
-	if a.assist.picking {
-		return
-	}
-	a.assist.picking = true
 	win := a.win
 	start := ""
 	if value != nil {
 		start = strings.TrimSpace(*value)
 	}
 	folder := mode != forms.PathFile
-	// Dialog.Open errors with "no such file or directory" when DefaultPath
-	// points at a missing ~/Downloads (common on CI / headless boxes).
-	dir := forms.ExistingDir(start)
-	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+	// Dialog.Open errors or hangs when DefaultPath points at a missing
+	// folder (common on CI and after the tab's folder was deleted).
+	dir := assistDialogDir(start)
+	a.runAssistPick(func() ([]string, error) {
+		return mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:      win,
 			Title:       pathPickerTitle(folder),
 			DefaultPath: dir,
 			ButtonLabel: "选择",
 			Directory:   folder,
 		})
-		a.postAssist(func() {
-			a.assist.picking = false
-			if err != nil {
-				a.statusMsg = err.Error()
-				return
-			}
-			if len(paths) > 0 && value != nil {
-				*value = paths[0]
-			}
-		})
-	}()
+	}, func(paths []string, err error) {
+		if err != nil {
+			a.statusMsg = err.Error()
+			return
+		}
+		if len(paths) > 0 && value != nil {
+			*value = paths[0]
+		}
+	})
 }
 
 func pathPickerTitle(folder bool) string {

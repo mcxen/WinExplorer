@@ -57,12 +57,14 @@ func (a *App) previewHeader(c *ui.Context, st *previewState) {
 func (a *App) previewBody(c *ui.Context, st *previewState) {
 	switch st.kind {
 	case previewImage:
+		// Sidebar stays a simple Contain fit; Space owns zoom/pan
+		// (imageview.go) so the two surfaces do not repeat chrome.
 		if st.bitmap != nil {
-			ui.Box(c).FillWidth().Shrink(0).Children(func() {
+			ui.Box(c).FillWidth().Shrink(0).Radius(4).Clip().Children(func() {
 				ui.Image(c, st.bitmap).Fit(ui.Contain)
 			})
 		} else {
-			a.previewNote(c, st.err)
+			a.paintImageBroken(c, st.err)
 		}
 	case previewText:
 		if st.text != "" {

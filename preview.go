@@ -167,8 +167,10 @@ func (a *App) buildPreview(path string) *previewState {
 		if b, e := decodeImage(path); e == nil {
 			st.bitmap = b
 		} else {
+			// Keep previewImage so the Space viewer and the sidebar both
+			// render the shared broken-image placeholder instead of falling
+			// through to a generic file icon.
 			st.err = "无法预览图片：" + e.Error()
-			st.kind = previewMeta
 		}
 	case previewText:
 		txt, full, e := readTextPreview(path, 64*1024)

@@ -85,6 +85,17 @@ func (a *App) quickLookKeys(c *ui.Context) {
 		}
 		return
 	}
+	// Pictures step among same-folder images; everything else keeps the
+	// generic neighbour walk (including audio seek handled above).
+	st := a.preview.Load()
+	if st != nil && st.kind == previewImage {
+		if left {
+			a.quickLookStepImage(-1)
+		} else {
+			a.quickLookStepImage(1)
+		}
+		return
+	}
 	if left {
 		a.quickLookStep(-1)
 	} else {
@@ -125,7 +136,9 @@ func (a *App) quickLookBody(c *ui.Context) {
 		}
 		a.quickLookContent(c, st)
 		a.quickLookFacts(c, st)
-		ui.Text(c, "空格 或 Esc 关闭 · ←/→ 快退快进").FontSize(11).TextColor(colorMuted())
+		if st.kind != previewImage {
+			ui.Text(c, "空格 或 Esc 关闭 · ←/→ 上一张/下一张（音频为快退快进）").FontSize(11).TextColor(colorMuted())
+		}
 	})
 }
 
@@ -137,24 +150,10 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 	maxH := max(h-200, 200)
 	switch st.kind {
 	case previewImage:
-		if isGifPath(st.path) {
-			if bm := a.gifFor(st.path); bm != nil {
-				// Animated: the gif player keeps one bitmap it uploads
-				// frame by frame; stills fall through to the decode.
-				box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0)
-				box.Children(func() {
-					ui.Image(c, bm).Fit(ui.Contain)
-				})
-				return
-			}
-		}
-		if st.bitmap != nil {
-			box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0)
-			box.Children(func() {
-				ui.Image(c, st.bitmap).Fit(ui.Contain)
-			})
-			return
-		}
+		// Interactive viewer: fit, wheel zoom, drag pan, same-folder strip.
+		// GIF animation still feeds through gifFor inside imageQuickViewport.
+		a.imageQuickContent(c, st, maxW, maxH)
+		return
 	case previewText:
 		if st.text != "" {
 			body := ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Radius(8).

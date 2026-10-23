@@ -215,6 +215,8 @@ type App struct {
 	fieldFocused bool
 	// quickLook is the 空格 quick preview modal (quicklook.go).
 	quickLook bool
+	// imgQV is zoom/pan for the image Space viewer (imageview.go).
+	imgQV imgQuickView
 	// propsOpen is the 属性 dialog modal (propsdialog.go).
 	propsOpen bool
 	// share is the 分享 dialog's state (sharedialog.go).

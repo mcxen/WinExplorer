@@ -98,14 +98,19 @@ func (a *App) assistMarkdownOptions(md *assistMD) *markdown.Options {
 				return
 			}
 			src := strings.TrimSpace(b.Code())
-			a.paintOpenBlock(c.Key("oui-"+openBlockKey(src)), src, a.openTurnFor(md.turns, src))
+			key := openBlockKey(src)
+			assistOpenReveal(c.Key("oui-"+key), func() {
+				a.paintOpenBlock(c, src, a.openTurnFor(md.turns, src))
+			})
 		},
 		"form": func(c *ui.Context, b *markdown.CodeBlockView) {
 			if b.Open {
 				assistOpenPlaceholder(c)
 				return
 			}
-			a.paintFormFence(c, strings.TrimSpace(b.Code()), md.turns)
+			assistOpenReveal(c.Key("form-ready"), func() {
+				a.paintFormFence(c, strings.TrimSpace(b.Code()), md.turns)
+			})
 		},
 	}
 	return o
@@ -133,16 +138,57 @@ func openBlockKey(src string) string {
 	return strconv.FormatUint(h.Sum64(), 36)
 }
 
-// assistOpenPlaceholder stands for an OpenUI program still being written.
-// Its 64-DIP floor is the height of the smallest card, so closing the fence
-// swaps the placeholder for a card without moving the reply below it.
+const (
+	// assistOpenSkelMinH matches the shortest OpenUI card so the reply
+	// below does not jump when the fence closes.
+	assistOpenSkelMinH   float32 = 64
+	assistOpenSkelRadius float32 = 8
+	// assistOpenSkelFade is the cross-fade between the dashed skeleton and
+	// the finished card (Exit on the placeholder, Enter on the reveal).
+	assistOpenSkelFade = 180 * time.Millisecond
+)
+
+// assistOpenPlaceholder stands for an OpenUI / form fence still being written:
+// a dashed rounded frame (mygo BorderDashed, as the gallery drop-zone) with
+// GPT-like skeleton bars that breathe on the same Loop+Bounce pulse mygo
+// documents for placeholders. ReduceMotion holds the bars at a calm mid tint.
 func assistOpenPlaceholder(c *ui.Context) {
-	ui.Row(c).FillWidth().MinHeight(64).Padding(10).Gap(8).Radius(8).Border(1, colorDivider()).
-		Background(colorSurface()).AlignItems(ui.Center).Label("OpenUI placeholder").
+	calm := c.Preferences().ReduceMotion
+	ui.Column(c.Key("openui-skel")).FillWidth().MinWidth(0).MinHeight(assistOpenSkelMinH).
+		Padding(10, 12).Gap(8).Radius(assistOpenSkelRadius).
+		Border(1, colorDivider()).BorderStyle(ui.BorderDashed).
+		Background(colorSurface()).Label("OpenUI placeholder").
+		Transition(ui.ElementTransition{Duration: assistOpenSkelFade, Exit: &ui.Motion{}}).
 		Children(func() {
-			components.Spinner(c, components.SpinnerRing)
-			ui.Text(c, "正在生成界面…").FontSize(12).TextColor(colorMuted())
+			assistOpenSkelBar(c, "s1", 1.00, calm)
+			assistOpenSkelBar(c, "s2", 0.68, calm)
+			assistOpenSkelBar(c, "s3", 0.42, calm)
 		})
+}
+
+// assistOpenSkelBar is one skeleton stripe: widthFrac of the row, muted fill
+// pulsing 0.5–1 via Loop("pulse", aiFxPulse, Bounce(EaseInOut)) — the rhythm
+// mygo's widgets.go cites for placeholders, shared with the file-row breath.
+func assistOpenSkelBar(c *ui.Context, key string, widthFrac float32, calm bool) {
+	ui.Row(c.Key(key)).FillWidth().Height(8).Children(func() {
+		bar := ui.Box(c).Height(8).Radius(4).Grow(widthFrac)
+		pulse := float32(0.65)
+		if !calm {
+			pulse = 0.50 + 0.50*bar.Loop("pulse", aiFxPulse, ui.Bounce(ui.EaseInOut))
+		}
+		bar.Background(colorMuted().Alpha(0.10 + 0.14*pulse))
+		if widthFrac < 0.999 {
+			ui.Box(c).Grow(1 - widthFrac)
+		}
+	})
+}
+
+// assistOpenReveal fades the finished OpenUI / form card in over the same
+// duration the skeleton exits, so the swap is a cross-fade rather than a cut.
+func assistOpenReveal(c *ui.Context, body func()) {
+	ui.Column(c).FillWidth().MinWidth(0).
+		Transition(ui.ElementTransition{Duration: assistOpenSkelFade, Enter: &ui.Motion{}}).
+		Children(body)
 }
 
 // assistQuoteBlock gives quote blocks the same raised surface and divider as

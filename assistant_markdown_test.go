@@ -52,11 +52,11 @@ func TestAssistantStreamingHoldsTheCardsPlace(t *testing.T) {
 	tt := assistTester(a, 600)
 	tt.Frame()
 	tt.Advance(2 * time.Second)
-	if !tt.HasText("正在生成界面") {
+	if _, ok := tt.Find("OpenUI placeholder"); !ok {
 		t.Fatalf("no placeholder: %v", tt.Texts())
 	}
-	if tt.HasText("CardHea") {
-		t.Fatalf("the half program shows: %v", tt.Texts())
+	if tt.HasText("正在生成界面") || tt.HasText("CardHea") {
+		t.Fatalf("spinner copy or half program shows: %v", tt.Texts())
 	}
 	if got := streamLive("前文\n<<<choices\n- a"); got != "前文" {
 		t.Fatalf("a half choice block shows: %q", got)
@@ -79,7 +79,7 @@ func TestAssistantOpenPlaceholderMatchesCardHeight(t *testing.T) {
 
 	a.assist.running = false
 	a.assist.turns[1].Text = text
-	tt.Advance(time.Second)
+	tt.Advance(assistOpenSkelFade + 50*time.Millisecond)
 	after, ok := tt.Find("OpenUI card")
 	if !ok {
 		t.Fatalf("no card: %v", tt.Texts())

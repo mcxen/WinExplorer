@@ -94,7 +94,13 @@ func (a *App) previewBody(c *ui.Context, st *previewState) {
 		}
 		a.previewOpenButton(c, st)
 		if st.bitmap == nil {
-			a.previewNote(c, "无法生成预览，可点击“打开”用系统应用查看")
+			msg := "无法生成预览，可点击“打开”用系统应用查看"
+			if st.err != "" {
+				msg = st.err + "；可点击“打开”用系统应用查看"
+			}
+			a.previewNote(c, msg)
+		} else {
+			ui.Text(c, "首页缩略图 · 空格翻页预览").FontSize(11).TextColor(colorMuted()).FillWidth()
 		}
 	default:
 		if st.err != "" {
@@ -131,8 +137,8 @@ func (a *App) previewText(c *ui.Context, st *previewState) {
 	body := ui.Box(c).FillWidth().Shrink(0).Radius(4).
 		Background(colorAddress()).Border(1, colorFieldBorder()).Padding(8, 6).MinHeight(120)
 	body.Children(func() {
-		value := st.text
-		ui.TextArea(c, &value).ReadOnly(true).FontSize(12).TextColor(colorText())
+		value := expandTabs(st.text)
+		ui.TextArea(c, &value).ReadOnly(true).Font(monoFont).FontSize(12).TextColor(colorText())
 	})
 	if st.textFull > len(st.text) {
 		ui.Text(c, fmt.Sprintf("约 %s · 已显示前 %s", formatBytes(int64(st.textFull)), formatBytes(int64(len(st.text))))).

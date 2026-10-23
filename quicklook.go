@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -66,6 +67,17 @@ func isGifPath(path string) bool {
 // selection to the neighbouring file, whose preview loads in place.
 func (a *App) quickLookKeys(c *ui.Context) {
 	if c.Shortcut(0, ui.KeySpace) {
+		a.quickLook = false
+		return
+	}
+	// Enter keeps its list meaning inside the overlay: open with the
+	// system default app (DOCPREV1), then close the preview.
+	if c.Shortcut(0, ui.KeyEnter) {
+		if e := a.singleSelected(); e.Path != "" {
+			if err := openWithOS(e.Path); err != nil {
+				a.statusMsg = "无法打开：" + err.Error()
+			}
+		}
 		a.quickLook = false
 		return
 	}
@@ -136,7 +148,7 @@ func (a *App) quickLookBody(c *ui.Context) {
 		}
 		a.quickLookContent(c, st)
 		a.quickLookFacts(c, st)
-		if st.kind != previewImage && st.kind != previewVideo {
+		if st.kind != previewImage && st.kind != previewVideo && st.kind != previewDoc {
 			ui.Text(c, "空格 或 Esc 关闭 · ←/→ 上一张/下一张（音频为快退快进）").FontSize(11).TextColor(colorMuted())
 		}
 	})
@@ -159,9 +171,14 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 			body := ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Radius(8).
 				Background(colorAddress()).Border(1, colorDivider()).Padding(12, 10).Clip()
 			body.Children(func() {
-				value := st.text
-				ui.TextArea(c, &value).ReadOnly(true).FontSize(13).TextColor(colorText())
+				value := expandTabs(st.text)
+				ui.TextArea(c, &value).ReadOnly(true).Font(monoFont).FontSize(13).TextColor(colorText())
 			})
+			if st.textFull > len(st.text) {
+				ui.Text(c, fmt.Sprintf("文件较大（约 %s），仅显示前 %s · 回车用系统默认应用打开",
+					formatBytes(int64(st.textFull)), formatBytes(int64(len(st.text))))).
+					FontSize(11).TextColor(colorMuted())
+			}
 			return
 		}
 	case previewHex:
@@ -169,8 +186,8 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 			body := ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Radius(8).
 				Background(colorAddress()).Border(1, colorDivider()).Padding(12, 10).Clip()
 			body.Children(func() {
-				value := st.text
-				ui.TextArea(c, &value).ReadOnly(true).FontSize(12).TextColor(colorText())
+				value := expandTabs(st.text)
+				ui.TextArea(c, &value).ReadOnly(true).Font(monoFont).FontSize(12).TextColor(colorText())
 			})
 			return
 		}
@@ -188,14 +205,9 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 		a.videoQuickContent(c, st, maxW, maxH)
 		return
 	case previewDoc:
-		if st.bitmap != nil {
-			poster := ui.Box(c).Width(maxW).Height(maxH * 0.8).Shrink(0)
-			poster.Children(func() {
-				ui.Image(c, st.bitmap).Fit(ui.Contain)
-			})
-			a.quickLookOpenButton(c, st)
-			return
-		}
+		// Paged raster of PDF / Office (docview.go); degrades in place.
+		a.docQuickContent(c, st, maxW, maxH)
+		return
 	}
 	// No renderer: an icon and the type stand in.
 	col := ui.Column(c).Gap(12).AlignItems(ui.Center).Padding(24, 16)

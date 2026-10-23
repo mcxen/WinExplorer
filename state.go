@@ -222,6 +222,10 @@ type App struct {
 	// vidFrameGen tags in-flight scrub extracts so a slow ffmpeg cannot
 	// overwrite a newer scrub position.
 	vidFrameGen uint64
+	// docQV is the paged raster state of the document Space viewer (docview.go).
+	docQV docQuickView
+	// docGen tags in-flight page rasterising so a stale flip is dropped.
+	docGen uint64
 	// propsOpen is the 属性 dialog modal (propsdialog.go).
 	propsOpen bool
 	// share is the 分享 dialog's state (sharedialog.go).

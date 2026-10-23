@@ -149,7 +149,7 @@ func TestStarterCardsFillTheBox(t *testing.T) {
 	tt := ui.NewTester(func(c *ui.Context) { a.assistantTranscript(c) }, 520, 720)
 	tt.Frame()
 	for _, s := range assistStarters {
-		if !tt.HasText(s.title) || !tt.HasText(s.hint) {
+		if !tt.HasText(s.title) || !tt.HasText("“"+s.fill+"”") {
 			t.Fatalf("starter %q missing: %v", s.title, tt.Texts())
 		}
 	}

@@ -135,6 +135,9 @@ type assistantUI struct {
 	// the menu closed after Esc until the draft is no longer a slash query.
 	slashIdx  int
 	slashHide bool
+
+	// ops holds the file-operation cards' undo and timing (assistant_opcard.go).
+	assistOps
 }
 
 // toggleAssistant opens or closes the pane. Opening onto a blank session
@@ -199,7 +202,7 @@ func (a *App) assistantPane(c *ui.Context) {
 				// The column, not the card, takes a drag from this window and a
 				// native file list. The card only sees DroppedFiles, so a drop
 				// on the composer would otherwise miss both.
-				conv := ui.Column(c).Grow(1).FillWidth().MinHeight(0).MinWidth(0)
+				conv := ui.Column(c).Grow(1).FillHeight().MinHeight(0).MinWidth(0)
 				conv.Children(func() {
 					chat.FloatingConversation(c, &a.assist.floatLay, &a.assist.scroll, "回到底部",
 						func(*ui.Context) { a.assistantTranscript(c) },
@@ -247,6 +250,7 @@ func (a *App) assistantComposer(c *ui.Context) {
 				a.assist.queued = ""
 			}
 		}
+		a.assistContextBar(c)
 		comp := chat.GlassComposer(c, &a.assist.floatLay, &a.assist.draft, chat.ComposerOptions{
 			Label:        "给助手的消息",
 			Placeholder:  "让助手整理这个文件夹…",
@@ -445,42 +449,17 @@ type assistStarter struct {
 }
 
 var assistStarters = []assistStarter{
-	{lucide.Sparkles, "按拍摄日期重命名照片", "按拍摄日期重命名照片", "读取每张照片的日期，改名并去掉重名"},
-	{lucide.FolderInput, "把安装包和压缩包归档", "把安装包和压缩包归档到“归档”文件夹", "识别安装包和压缩包，归档并报告"},
-	{lucide.Search, "找出重复或临时文件", "找出重复或临时文件", "扫描当前文件夹，汇总可清理的项"},
+	{lucide.FilePlus, "新建文件", "新建一个周报草稿", "写好标题和小节，先预览再落盘"},
+	{lucide.FilePen, "修改文件内容", "把会议纪要里的时间修改为周五下午三点", "改动以对比形式列出，可撤销"},
+	{lucide.FolderInput, "重命名并归类", "把 IMG_0001.jpg 按拍摄日期重命名并归类到图片文件夹", "多步计划逐项执行"},
+	{lucide.Trash, "删除临时文件", "删除所有临时文件", "删除前先确认，移到回收站后仍可撤销"},
+	{lucide.Layers, "批量操作", "批量给所有 txt 笔记加上日期前缀", "显示进度，整批一次撤销"},
+	{lucide.FileText, "读内容做总结", "总结一下这个文件夹里的文档", "读取文档后给出要点"},
 }
 
 func (a *App) assistantTranscript(c *ui.Context) {
 	if len(a.assist.turns) == 0 {
-		ui.Column(c).FillWidth().Padding(48, 8, 12, 8).Gap(8).AlignItems(ui.Center).Children(func() {
-			components.Icon(c, lucide.Bot).Size(28, 28).TextColor(colorMuted())
-			ui.Text(c, "晴谷助手").FontSize(18).FontWeight(600).TextColor(colorText())
-			ui.Text(c, "整理、重命名、归档当前文件夹里的文件。文件、文件夹都可以拖进来。").
-				FontSize(13).TextColor(colorMuted()).Wrap().TextAlign(ui.Center)
-			// Starter cards put a request in the box rather than sending it:
-			// the user still reads it, picks the model and presses 发送.
-			ui.Column(c).FillWidth().Gap(8).Padding(12, 0, 0, 0).Children(func() {
-				for _, s := range assistStarters {
-					card := ui.ButtonBase(c.Key("starter-"+s.title)).FillWidth().Radius(8).
-						Padding(10, 12).Gap(10).AlignItems(ui.Center).Label(s.title)
-					card.Border(1, colorDivider()).Background(c.Theme().Surface)
-					if card.Hovered() {
-						card.Background(colorHover())
-					}
-					card.Children(func() {
-						components.Icon(c, s.icon).Size(16, 16).TextColor(colorAccent()).Shrink(0)
-						ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-							ui.Text(c, s.title).FontSize(12.5).FontWeight(600).TextColor(colorText()).SingleLine()
-							ui.Text(c, s.hint).FontSize(11).TextColor(colorMuted()).SingleLine()
-						})
-						components.Icon(c, lucide.CornerDownLeft).Size(14, 14).TextColor(colorMuted()).Shrink(0)
-					})
-					if card.Clicked() {
-						a.assist.draft = s.fill
-					}
-				}
-			})
-		})
+		a.assistantEmpty(c)
 		return
 	}
 	a.assist.open.keys = nil
@@ -540,6 +519,9 @@ func (u *assistantUI) resetPaint() { u.paint = nil }
 // applyLive appends a transcript line, or replaces the one still streaming
 // under the same id. partial keeps that slot open for the next token.
 func (u *assistantUI) applyLive(id int, turn aiTurn, partial bool) {
+	if turn.At.IsZero() {
+		turn.At = time.Now()
+	}
 	if u.liveOn && u.liveID == id && u.liveAt >= 0 && u.liveAt < len(u.turns) {
 		u.turns[u.liveAt] = turn
 	} else {
@@ -564,13 +546,16 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		key = ex.Rest[0]
 	}
 	paint := a.assist.paintFor(key)
-	var tools []int
+	var tools, cards []int
 	var answer strings.Builder
 	var replies []int
 	for _, i := range ex.Rest {
 		t := turns[i]
-		switch t.Role {
-		case "tool":
+		switch {
+		case t.Role == "tool" && (t.Op != nil || len(t.Steps) > 0):
+			// File work and plans are cards in the reply, not tool log rows.
+			cards = append(cards, i)
+		case t.Role == "tool":
 			tools = append(tools, i)
 		default:
 			text := t.Text
@@ -629,7 +614,13 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 						})
 					}
 				})
-			}
+			} // The user's side of the meta row: time and a copy of the request.
+			ui.Row(c).Key("meta").FillWidth().Height(20).Gap(2).Justify(ui.End).AlignItems(ui.Center).Children(func() {
+				if s := assistClock(user.At); s != "" {
+					ui.Text(c, s).FontSize(11).TextColor(colorMuted()).Padding(0, 4)
+				}
+				a.assistCopyButton(c, "copy-u-"+itoa(ex.User), user.Text)
+			})
 		}
 	}
 	var steps []chat.Step
@@ -683,13 +674,45 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			ID: "tools", Title: title, Activities: activities, Group: &paint.group,
 		}}
 	}
+	// With cards the reply owns its working line, under the cards, so the
+	// dots do not sit above the work they describe.
+	ownWorking := ""
+	if len(cards) > 0 && status == chat.Running {
+		ownWorking, status, working = working, chat.Completed, ""
+	}
 	var finalView chat.View
-	if final != "" {
+	var actions chat.View
+	if final != "" || len(cards) > 0 {
 		streaming := last && a.assist.running
+		var at time.Time
+		if len(ex.Rest) > 0 {
+			at = turns[ex.Rest[0]].At
+		}
 		finalView = func(c *ui.Context) {
-			ui.Column(c.Key("md")).FillWidth().MinWidth(0).Children(func() {
-				a.assistMarkdown(c, paint, final, replies, streaming)
+			ui.Column(c.Key("reply")).FillWidth().MinWidth(0).Gap(8).Children(func() {
+				a.assistSpeaker(c, at)
+				for _, i := range cards {
+					if t := turns[i]; len(t.Steps) > 0 {
+						assistPlanCard(c, "plan-steps-"+itoa(i), t.Steps)
+					} else {
+						a.assistOpCard(c, i, t.Op)
+					}
+				}
+				if final != "" {
+					ui.Column(c.Key("md")).FillWidth().MinWidth(0).Children(func() {
+						a.assistMarkdown(c, paint, final, replies, streaming)
+					})
+				}
+				if ownWorking != "" {
+					ui.Row(c.Key("own-working")).Height(22).Gap(8).AlignItems(ui.Center).Children(func() {
+						breathDot(c, 8)
+						ui.Text(c, ownWorking).FontSize(12.5).TextColor(colorMuted())
+					})
+				}
 			})
+		}
+		if final != "" && !streaming {
+			actions = func(c *ui.Context) { a.assistCopyButton(c, "copy-a-"+itoa(key), final) }
 		}
 	}
 	summary := assistSummary(len(tools))
@@ -701,7 +724,7 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 	}
 	chat.Turn(c, &paint.turn, chat.TurnOptions{
 		ID: itoa(key), Status: status, Summary: summary, Working: working,
-		Prompt: prompt, Steps: steps, Final: finalView,
+		Prompt: prompt, Steps: steps, Final: finalView, Actions: actions,
 		HoldOpen: !a.assist.scroll.AtLatest(),
 		Footer: func(c *ui.Context) {
 			if stopped && status == chat.Cancelled {

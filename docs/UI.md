@@ -197,3 +197,19 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 助手窗格顶栏用「助手设置」打开本分类；不再提供供应商 / 解压密码抽屉。会话抽屉保留；记忆区在 Skills 关闭 memory 时隐藏。
 
 截图：`docs/assets/shots/A4/`。
+
+## 助手对话窗口（CHAT1）
+
+实现：`assistant.go:assistantExchange`、`assistant_opcard.go`；离线演示 `assistant_demo.go`（`SUNVALE_ASSIST_DEMO=1`）。截图 `docs/assets/shots/CHAT-DEMO/`（`before-*` 为改版前）。
+
+- **层次**：用户消息沿用 Onevra `chat.Bubble`（右对齐、圆角 12、`Background.Mix(Text,.06)`），气泡底部一行 11 号 `colorMuted()` 时间 + 复制按钮（`chat.IconAction`，复制后 1.5s 内显示对勾）。助手回复不加气泡，左对齐，首行为发言人行：20×20 圆形头像（强调色 α0.14 底、`lucide.Bot` 12）、「晴谷助手」12/600、时间 11；演示模式加 10.5 号「演示」标签。回复完成后 Turn 的 Actions 槽放复制按钮。
+- **时间**：`Turn.At`；当天显示 `15:04`，更早显示 `1/2 15:04`（`assistClock`）。
+- **文件操作卡片**（`assistOpCard`）：圆角 8，`colorAddress()` 底，1px `colorDivider()` 边框；执行中边框强调色 α0.5 且整卡呼吸（`breathOverlay`，与文件行同一节拍），待确认的危险操作与失败为 Danger α0.6。头部：24×24 圆角 6 的图标块（强调色 α0.12，删除为 Danger），标题 12.5/600（新建文件 / 修改内容 / 重命名 / 移动 / 删除到回收站 / 批量操作 / 读取内容，多项时加「· n 项」），路径 11 号相对当前文件夹显示、超长中间省略；右侧状态胶囊高 20、圆角 10、对应色 α0.12 底：待确认（Warning）、执行中（强调色呼吸点）、完成（Success）、失败（Danger）、已撤销 / 已取消（`colorMuted()`）。
+- **卡片正文**：新建给前 8 行内容预览；修改给行级对比（`internal/assistant.DiffLines` + 1 行上下文，最多 12 行，删除行 Danger α0.1 底、新增行 Success α0.1 底）；重命名/移动给「旧名 → 新位置」（新位置强调色 600）；批量/删除/读取给逐项列表（最多 6 项，其余「…以及另外 n 项」），执行中上方是 `components.Progress` 与「已完成 / 总数」。
+- **确认与撤销**：危险操作待确认时正文下方是 Danger α0.08 的提示条（`TriangleAlert` + 说明），底部右对齐「取消」（`uikitSecondaryButton`）与 Danger 底的主按钮（删除为「移到回收站」）。完成且本窗口持有撤销记录时底部为「已记录，可撤销」+ 26 高「撤销」按钮（`lucide.Undo2`）；撤销后状态变「已撤销」，逐项图标变撤销箭头。
+- **执行计划**（`assistPlanCard`）：同卡片外观，标题「执行计划」与「完成数 / 总数」；每行 22 高：完成 `CircleCheck`（Success）、进行中呼吸点且文字 600、未开始 `Circle`（muted）、失败 `CircleX`（Danger）。
+- **进行中提示**：有卡片的一轮把「正在…」行放在卡片下方（呼吸点 + 12.5 号 muted 文字），而不是 Turn 默认的卡片上方。
+- **当前目录条**（`assistContextBar`）：输入框正上方，高 22：文件夹图标（`colorFolder()`）、「当前目录」11 muted、目录名 11.5/600、「n 个项目 · 已选择 m 个」；悬停提示完整路径。特殊页不显示。
+- **空状态**（`assistantEmpty`）：左对齐头像 + 「晴谷助手」18/600 + 一句能力说明；「试试这样问」11/600 小标题下六张示例卡（新建、修改、重命名并归类、删除临时文件、批量、总结），卡片 `colorAddress()` 底、图标块 26×26、第二行是会填入输入框的原话；点击只填入不发送，悬停提示说明。
+- **与文件列表动效对应**：卡片执行中 ↔ 行右缘呼吸光（`aiFx.markBusy`）；重命名完成 ↔ 新名称强调色高亮（`markRenamed`）；移动/删除完成 ↔ 行滑出收起（`markLeaving`）；一轮结束 ↔ `aiFx.endRun()` + `reloadAfterFx`。
+- **布局修复**：对话列在横向 Row 中需 `FillHeight()`，否则长对话把顶栏覆盖、输入框挤出窗格（`assistantPane` 的 `conv`）。

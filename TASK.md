@@ -76,6 +76,7 @@
 | FORM1 | 规范表单组件：共享 schema + OpenUI 扩展 + present_form + 定时任务表单 v2 | 高 | 已完成 | [08](docs/specs/08-forms.md) | SCH1、A5 | `feat/form-components` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
+| CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 进行中 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
@@ -259,3 +260,9 @@
 - **范围**：见 `docs/specs/07-scheduled-tasks.md` SCH2。按内容分类仅走助手预设，不扩展 `file_rule`。
 - **验收**：预设单测；`TestPromptListsAllTools` 含 `assistant_task_run`；斜杠测试；截图 `docs/assets/shots/SCH2/`。
 
+
+### CHAT1 助手对话窗口改版 + 离线演示
+- **目标**：分清用户与助手消息；助手的文件操作做成卡片（类型、路径、diff 或新文件预览、待确认/执行中/完成/失败/已撤销、撤销按钮）；危险操作确认卡；批量进度；多步计划列表；空状态示例；输入框上方当前目录；时间戳与复制。与文件列表 AI 动效（呼吸光、改名高亮、滑出）对应。
+- **范围**：`internal/assistant/fileop.go`（`FileOp`、`PlanStep`、行级 diff）、`types.go`（`Turn.At/Op/Steps`）、`assistant_opcard.go`、`assistant_demo.go`（`SUNVALE_ASSIST_DEMO=1` 离线脚本，在临时文件夹 `sunvale-demo-*` 中真实执行）、`assistant.go`（交换渲染、空状态、目录条、对话列 `FillHeight` 修复）、`assistant_run.go`（演示入口、时间戳）；截图 `docs/assets/shots/CHAT-DEMO/`；更新 `README.md`、`docs/UI.md`。
+- **验收**：`go test -count=1 -run 'TestAssistDemo|TestDiffHunks' ./...`（六个场景改动磁盘与卡片一致、删除先确认、各卡撤销复原、取消不改动）；全量测试与 `GOOS=windows/js/darwin` 编译通过。
+- **未完成**：真实模型的工具调用尚未产出 `Turn.Op`（卡片目前只由演示脚本生成）；撤销记录只在本窗口内存中，重开会话后卡片不再显示撤销。

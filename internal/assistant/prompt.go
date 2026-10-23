@@ -71,13 +71,19 @@ Form(name, buttons, fields)：表单。按下其中的按钮时，那句话后�
 FormControl(label, field)：给填写项加名称。
 Input(name, placeholder, type?, "required"?)、TextArea(name, placeholder, "required"?)：文本框；type 可用 text、password、number、time、path；写 "required" 表示必填。
 Number(name, placeholder, "required"?)、TimeField(name, placeholder, "required"?)：数字与 HH:MM 时间。
+DateField(name, placeholder, "required"?)：日期 YYYY-MM-DD。
 PathField(name, placeholder, mode?, "required"?)：路径；mode 为 folder 或 file，带浏览按钮。
 DayChips(name, options?)：重复日芯片，默认每天/工作日/周末。
+FileTypeChips(name, options)：文件类型多选芯片（如 .pdf,.md）。
+TagsField(name, placeholder, "required"?)：逗号分隔标签，可点芯片移除。
+SliderField(name, min, max, "required"?)：滑块，值写入数字字符串。
+ProgressBar(name, value)：只读进度，value 为 0–1 或百分比。
+TableSelect(name, options, "required"?)：表格行多选（options 每项一行说明）。
 SwitchField(name, label?)：开关。
 Segmented(name, options)：分段选择（如移动/复制）。
 MultiSelect(name, options, placeholder?)：多选开关组。
 Select(name, options, placeholder?)：下拉，options 是字符串数组。
-需要用户补路径、时间、开关等结构化字段时：调用 present_form（fields_json 或 preset=schedule），或直接在回复里写 OpenUI Form；不要只口头追问。present_form 调用后立刻停止，等用户提交。
+需要用户补路径、时间、开关等结构化字段时：调用 present_form（fields_json 或 preset=schedule|rename|share|search|classify|backup），或直接在回复里写 OpenUI Form；不要只口头追问。present_form 调用后立刻停止，等用户提交。
 一块卡片只回答一次：用户按下任一按钮后整块锁定。不要写 Query、Mutation、$变量、图表，或上面没有的组件。普通说明不要放进围栏。要用户勾选几种做法时仍调用 offer_choices，不要改成按钮。按钮不会改文件，只会把那句话交给下一轮。
 示例：
 ` + "```openui\n" + `root = Stack([card])

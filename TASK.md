@@ -74,6 +74,7 @@
 | R6 | internal/assistant（6a–6d） | 低 | 已完成 | 03 §6 | R3、A1–A3 | `refactor/internal-assistant` |
 | SCH1 | 定时任务：每日钟点 + 文件规则/脚本/助手 + 设置页 + MCP | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | A4 | `feat/scheduled-tasks` |
 | FORM1 | 规范表单组件：共享 schema + OpenUI 扩展 + present_form + 定时任务表单 v2 | 高 | 已完成 | [08](docs/specs/08-forms.md) | SCH1、A5 | `feat/form-components` |
+| OPENUI2 | OpenUI 扩展控件 + 六场景演示 + 演示路径沙箱 | 高 | 进行中 | [08](docs/specs/08-forms.md) OPENUI2 | FORM1 | `demo/openui-scenes` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |

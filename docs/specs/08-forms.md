@@ -39,3 +39,16 @@
 ## 非目标
 
 不引入外部 MCP 表单服务器；不做完整可视化表单设计器。
+
+
+## OPENUI2 — 扩展控件与演示场景
+
+新增 field kind：`date`、`filetypes`、`tags`、`slider`、`progress`、`table_select`（绘制见 `forms_paint.go`，OpenUI 组件见 `internal/assistant/openui_fields.go`）。
+
+`present_form` 预设：`schedule` | `rename` | `share` | `search` | `classify` | `backup`（`internal/forms/scenes.go`）。助手斜杠 `/表单-…` 与 `SUNVALE_OPENUI_DEMO=1` 关键词可离线注入同一套表单。
+
+### 演示路径沙箱
+
+无 `~/Downloads` / `~/Documents` 的环境（CI、部分 Linux 主机）上，`PreferPath` / `EnsureDemoSandbox`（`internal/forms/sandbox.go`）在 `TempDir/sunvale-openui-demo` 创建真实目录与样例文件，定时任务与场景表单默认路径指向它们。`formPickPath` 用 `ExistingDir` 避免原生对话框对缺失 DefaultPath 报 `no such file or directory`。
+
+截图：`docs/assets/shots/OPENUI-DEMO/`。

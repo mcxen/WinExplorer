@@ -231,8 +231,15 @@ func TestAssistSlashClassifyAndRunNow(t *testing.T) {
 		t.Fatalf("classify %+v", classify)
 	}
 	got := assistSlashFilter(all, "分类")
-	if len(got) != 1 || got[0].ID != "classify" {
-		t.Fatalf("filter 分类: %+v", got)
+	var hit *assistSlashItem
+	for i := range got {
+		if got[i].ID == "classify" {
+			hit = &got[i]
+			break
+		}
+	}
+	if hit == nil {
+		t.Fatalf("filter 分类 missing classify: %+v", got)
 	}
 	got = assistSlashFilter(all, "立即")
 	if len(got) != 1 || got[0].ID != "run-now" {

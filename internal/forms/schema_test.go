@@ -70,3 +70,59 @@ func TestVisibleForActionAssistantPreset(t *testing.T) {
 		t.Fatal(PresetLabelFromID("inbox_triage"))
 	}
 }
+
+func TestScenePresetsOpenUI(t *testing.T) {
+	for _, id := range ScenePresetIDs() {
+		f, ok := Scene(id, nil)
+		if !ok {
+			t.Fatalf("scene %s missing", id)
+		}
+		f.Normalize()
+		if len(f.Fields) == 0 || f.Title == "" {
+			t.Fatalf("%s empty: %+v", id, f)
+		}
+		prog := f.ToOpenUI()
+		if !strings.Contains(prog, "Form(") {
+			t.Fatalf("%s OpenUI:\n%s", id, prog)
+		}
+	}
+	if _, ok := Scene("nope", nil); ok {
+		t.Fatal("unknown scene should fail")
+	}
+}
+
+func TestNewKindsNormalize(t *testing.T) {
+	raw := `{
+  "title": "x",
+  "fields": [
+    {"id": "d", "kind": "date", "label": "日"},
+    {"id": "t", "kind": "tags", "label": "标签"},
+    {"id": "ft", "kind": "filetypes", "label": "类型", "options": [".pdf"]},
+    {"id": "s", "kind": "slider", "label": "滑", "min": 0, "max": 10, "value": "3"},
+    {"id": "p", "kind": "progress", "label": "进度", "value": "0.5"},
+    {"id": "r", "kind": "table_select", "label": "行", "options": ["a", "b"]}
+  ]
+}`
+	f, err := ParseJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, field := range f.Fields {
+		kinds[field.ID] = field.Kind
+	}
+	for id, want := range map[string]string{
+		"d": KindDate, "t": KindTags, "ft": KindFileTypes,
+		"s": KindSlider, "p": KindProgress, "r": KindTableSelect,
+	} {
+		if kinds[id] != want {
+			t.Fatalf("%s: %q want %q in %v", id, kinds[id], want, kinds)
+		}
+	}
+	prog := f.ToOpenUI()
+	for _, needle := range []string{"DateField(", "TagsField(", "FileTypeChips(", "SliderField(", "ProgressBar(", "TableSelect("} {
+		if !strings.Contains(prog, needle) {
+			t.Fatalf("missing %s in\n%s", needle, prog)
+		}
+	}
+}

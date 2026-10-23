@@ -82,6 +82,25 @@ func fieldOpenUI(ref string, field Field) string {
 		return fmt.Sprintf("%s = DayChips(%q, [%s]%s)\n", ref, field.ID, quoteList(opts), req)
 	case KindSegmented:
 		return fmt.Sprintf("%s = Segmented(%q, [%s])\n", ref, field.ID, quoteList(field.Options))
+	case KindDate:
+		return fmt.Sprintf("%s = DateField(%q, %q%s)\n", ref, field.ID, ph, req)
+	case KindFileTypes:
+		return fmt.Sprintf("%s = FileTypeChips(%q, [%s]%s)\n", ref, field.ID, quoteList(field.Options), req)
+	case KindTags:
+		return fmt.Sprintf("%s = TagsField(%q, %q%s)\n", ref, field.ID, ph, req)
+	case KindSlider:
+		lo, hi := field.Min, field.Max
+		if hi == 0 && lo == 0 {
+			hi = 100
+		}
+		if field.Value != "" {
+			return fmt.Sprintf("%s = SliderField(%q, %g, %g, %q%s)\n", ref, field.ID, lo, hi, field.Value, req)
+		}
+		return fmt.Sprintf("%s = SliderField(%q, %g, %g%s)\n", ref, field.ID, lo, hi, req)
+	case KindProgress:
+		return fmt.Sprintf("%s = ProgressBar(%q, %q)\n", ref, field.ID, field.Value)
+	case KindTableSelect:
+		return fmt.Sprintf("%s = TableSelect(%q, [%s]%s)\n", ref, field.ID, quoteList(field.Options), req)
 	default:
 		return fmt.Sprintf("%s = Input(%q, %q, \"text\"%s)\n", ref, field.ID, ph, req)
 	}

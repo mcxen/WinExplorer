@@ -17,8 +17,14 @@ const (
 	KindMultiSelect = "multi_select"
 	KindSwitch      = "switch"
 	KindTime        = "time"
+	KindDate        = "date"
 	KindDays        = "days"
 	KindSegmented   = "segmented"
+	KindFileTypes   = "filetypes"
+	KindTags        = "tags"
+	KindSlider      = "slider"
+	KindProgress    = "progress"
+	KindTableSelect = "table_select"
 )
 
 // PathMode selects what a path field's browse button opens.
@@ -39,6 +45,11 @@ type Field struct {
 	Options     []string `json:"options,omitempty"`
 	PathMode    string   `json:"path_mode,omitempty"` // folder | file
 	Description string   `json:"description,omitempty"`
+	// Min/Max/Step drive slider (and optional progress scale). Zero Max
+	// means the painter picks a default (0–100 for slider, 0–1 for progress).
+	Min  float64 `json:"min,omitempty"`
+	Max  float64 `json:"max,omitempty"`
+	Step float64 `json:"step,omitempty"`
 }
 
 // Action is a submit button. Message is what the assistant receives
@@ -148,6 +159,18 @@ func normalizeKind(k string) string {
 		return KindDays
 	case KindSegmented, "segment", "chips":
 		return KindSegmented
+	case KindDate, "day", "calendar":
+		return KindDate
+	case KindFileTypes, "filetype", "ext", "extensions":
+		return KindFileTypes
+	case KindTags, "tag", "labels":
+		return KindTags
+	case KindSlider, "range":
+		return KindSlider
+	case KindProgress, "progress_bar", "bar":
+		return KindProgress
+	case KindTableSelect, "table", "rows":
+		return KindTableSelect
 	default:
 		return ""
 	}
@@ -180,6 +203,7 @@ func (f *Form) FormatSubmit(values map[string]string) (body, missing string) {
 func KnownKinds() []string {
 	return []string{
 		KindText, KindTextArea, KindPassword, KindNumber, KindPath,
-		KindSelect, KindMultiSelect, KindSwitch, KindTime, KindDays, KindSegmented,
+		KindSelect, KindMultiSelect, KindSwitch, KindTime, KindDate, KindDays,
+		KindSegmented, KindFileTypes, KindTags, KindSlider, KindProgress, KindTableSelect,
 	}
 }

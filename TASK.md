@@ -79,6 +79,7 @@
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
+| IMAGE1 | 图片快速查看：侧栏大图 + 空格缩放/平移/同目录翻页 | 高 | 进行中 | 本文 / `docs/UI.md` IMAGE1 | — | `feat/image-quickview` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
@@ -90,6 +91,13 @@
 ## 任务详情
 
 通用交付要求（每个任务都适用，下文不再重复）：代码 + 测试、通过工作方式第 6 条、UI 任务附截图到 `docs/assets/shots/<ID>/`、更新本表状态、必要时更新 `README.md` 与 `docs/UI.md`。
+
+### IMAGE1 — 图片快速查看
+
+- **目标**：选中图片时快速预览——侧栏/详情区大图（Contain）+ 空格轻量预览层（缩放、平移、同目录上一张/下一张）；不做视频内嵌播放。
+- **范围**：`imageview.go`、`quicklook.go`、`preview_pane.go`、`state.go`；复用 `decodeBytesScaled` / OpenUI `formDecodeBitmap` 解码路径；`docs/UI.md`、本文；截图 `docs/assets/shots/IMAGE1/`。
+- **验收**：JPEG/PNG/GIF/WebP/BMP 可预览；坏图占位；大图异步解码不卡列表；滚轮缩放与拖拽平移；`←`/`→` 仅在同目录图片间步进；`gofmt`/`go build`/`vet`/`test` 与 Windows 交叉编译通过；仅推 `feat/image-quickview`。
+- **已知限制**：HEIC/AVIF/TIFF 依赖系统缩略图；缩放基于已解码位图（最长边约 2048），不是原图像素级；视频快速查看不在本任务。
 
 ### OPENUI3 — 列表 / 图片 / 视频
 

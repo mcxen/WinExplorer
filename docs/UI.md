@@ -108,6 +108,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 快速搜索（`searchbox.go:searchBoxKeys`）：↑↓、PageUp/PageDown、Enter 打开、Ctrl+Enter 定位、Esc 关闭。
 - 助手输入框（Onevra `chat.GlassComposer`，`assistant.go:assistantComposer` / `assistant_slash.go`）：Enter 发送、Shift+Enter 换行；草稿为单行 `/…` 时上方弹出命令菜单（含 `/分类` `/立即执行`），`↑`/`↓` 选择、`Enter` 选用、`Esc` 关闭（关闭后同一草稿不再弹出，直到离开斜杠查询）。回答中且草稿非空时 Trailing 提供停止。
 - 侧栏方向键导航（`navkeys.go`）：点击侧栏后 `↑`/`↓`、`Home`/`End` 移动焦点，`→` 展开或进入子级，`←` 折叠或回到父级，`Enter`/空格导航，`Tab` 交还焦点；移动不改变当前标签（`docs/specs/02-tree-polish.md` C）。
+- 空格快速预览（`quicklook.go`、图片见 `imageview.go`）：`空格` 打开/关闭；`Esc` 或点外部关闭。图片：滚轮缩放（1×–8×，适配为 1×）、拖拽平移、`←`/`→` 或顶栏按钮切换**同目录图片**；坏图显示 `ImageOff` 占位。非图片：`←`/`→` 步进可见项；音频打开时为快退/快进 5 秒。侧栏预览窗格（`preview_pane.go`）选中图片时只做 Contain 适配大图，不重复缩放控件。
 
 ## 4. 中文文案
 
@@ -213,6 +214,14 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **空状态**（`assistantEmpty`）：左对齐头像 + 「晴谷助手」18/600 + 一句能力说明；「试试这样问」11/600 小标题下六张示例卡（新建、修改、重命名并归类、删除临时文件、批量、总结），卡片 `colorAddress()` 底、图标块 26×26、第二行是会填入输入框的原话；点击只填入不发送，悬停提示说明。
 - **与文件列表动效对应**：卡片执行中 ↔ 行右缘呼吸光（`aiFx.markBusy`）；重命名完成 ↔ 新名称强调色高亮（`markRenamed`）；移动/删除完成 ↔ 行滑出收起（`markLeaving`）；一轮结束 ↔ `aiFx.endRun()` + `reloadAfterFx`。
 - **布局修复**：对话列在横向 Row 中需 `FillHeight()`，否则长对话把顶栏覆盖、输入框挤出窗格（`assistantPane` 的 `conv`）。
+
+## 图片快速查看（IMAGE1）
+
+交互分工：侧栏预览窗格选中即显大图（Contain）；`空格` 弹出轻量层做缩放/平移/同目录翻页，二者不重复同一套控件。
+
+- **格式**：JPEG/PNG/GIF/WebP/BMP（`decodeBytesScaled`，与 OpenUI `ImageField`/`formDecodeBitmap` 同路径）；HEIC/TIFF/AVIF/ICO 等走系统缩略图兜底（非 macOS 可能仅占位）。
+- **快捷键**：见 §3「空格快速预览」。
+- **截图**：`docs/assets/shots/IMAGE1/`。
 
 ## OpenUI 媒体控件（OPENUI3）
 

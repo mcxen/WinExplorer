@@ -76,7 +76,7 @@
 | FORM1 | 规范表单组件：共享 schema + OpenUI 扩展 + present_form + 定时任务表单 v2 | 高 | 已完成 | [08](docs/specs/08-forms.md) | SCH1、A5 | `feat/form-components` |
 | OPENUI2 | OpenUI 扩展控件 + 六场景演示 + 演示路径沙箱 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI2 | FORM1 | `demo/openui-scenes` → `main` |
 | OPENUI3 | OpenUI 列表/图片/视频控件 + 媒体演示场景 | 高 | 进行中 | [08](docs/specs/08-forms.md) OPENUI3 | OPENUI2 | `feat/openui-media` |
-| OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 进行中 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` |
+| OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |

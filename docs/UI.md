@@ -234,6 +234,17 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **侧栏**：Contain 海报 +「用系统播放器打开」提示时长；不重复 scrub。
 - **截图**：`docs/assets/shots/VIDEO1/`；方案示意亦见 `docs/assets/shots/PREVIEW-DEMO/preview-video.png`。
 
+## 文档快速预览（DOCPREV1）
+
+与 NOTE 和 `PREVIEW-DEMO/preview-doc.png` 一致：空格看几页、侧栏看首页、回车/双击交给系统默认应用。
+
+- **格式**：pdf；doc/docx/xls/xlsx/ppt/pptx/odt/ods/odp/rtf（`previewDoc`）。PDF 直接栅格化（`pdfthumb.go` 的 pdftoppm，macOS 首页可走 Quick Look）；Office 先用 `soffice --headless --convert-to pdf` 转 PDF，按路径+大小+修改时间缓存在临时目录。
+- **空格层**（`docview.go`）：每屏 3 页白底页卡，左右圆形 ‹ › 按钮或 PageUp/PageDown 翻页，最多预览前 30 页；下方「第 a–b 页 / 共 N 页」、「打开」按钮与提示「首页栅格预览 · PageUp/PageDown 翻页 · ←/→ 相邻文件 · 回车 系统默认打开 · 空格/Esc 关闭」。叠层内回车用系统默认应用打开并关闭叠层。
+- **降级**：无 LibreOffice 时显示文件图标 +「未安装 LibreOffice，无法在应用内预览 Office 文档」+「打开」；单页渲染失败显示「此页无法渲染」。
+- **文本/代码**：等宽字体（`monoFont`），制表符展开为 4 空格；超过 64 KB 截断并提示「文件较大（约 X），仅显示前 64 KB」。html/htm 按文本显示。
+- **侧栏**：首页缩略图 +「打开」+「首页缩略图 · 空格翻页预览」；生成失败时写明原因。
+- **截图**：`docs/assets/shots/DOCPREV1/`（01 PDF 首屏、02 PageDown 翻页、03 docx 经 LibreOffice、04 代码等宽、05 侧栏首页、06 无 LibreOffice 降级）。
+
 ## OpenUI 媒体控件（OPENUI3）
 
 在 OPENUI2 之上增加：

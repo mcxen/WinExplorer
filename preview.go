@@ -207,10 +207,10 @@ func (a *App) buildPreview(path string) *previewState {
 		// Keep previewVideo (do not collapse to previewDoc) so Space can
 		// show scrub chrome and the sidebar can label the system-open CTA.
 	case previewDoc:
-		if b, e := pdfPoster(path); e == nil {
+		if b, e := docPoster(path); e == nil {
 			st.bitmap = b
-		} else if b, e := quickLookThumb(path, 512); e == nil {
-			st.bitmap = b
+		} else {
+			st.err = e.Error()
 		}
 	}
 	return st
@@ -249,15 +249,16 @@ func kindByExt(isDir bool, ext string) previewKind {
 	switch ext {
 	case "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "tif", "tiff", "svg", "avif", "ico":
 		return previewImage
-	case "txt", "md", "log", "csv", "rtf", "go", "py", "js", "ts", "tsx", "jsx", "rs", "java",
+	case "txt", "md", "log", "csv", "go", "py", "js", "ts", "tsx", "jsx", "rs", "java",
 		"c", "h", "cpp", "cc", "cs", "rb", "php", "swift", "kt", "json", "xml", "yml", "yaml",
-		"html", "css", "sh", "toml", "ini", "plist", "env", "gitignore":
+		"html", "htm", "css", "sh", "bat", "ps1", "sql", "vue", "lua", "toml", "ini", "plist", "env", "gitignore":
 		return previewText
 	case "wav", "aiff", "aif", "mp3", "ogg", "oga", "m4a", "flac", "opus":
 		return previewAudio
 	case "mp4", "m4v", "mov", "mkv", "avi", "webm", "wmv", "flv":
 		return previewVideo
-	case "pdf", "pages", "key", "numbers", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "rtfd":
+	case "pdf", "pages", "key", "numbers", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "rtfd", "rtf",
+		"odt", "ods", "odp":
 		return previewDoc
 	default:
 		return previewMeta

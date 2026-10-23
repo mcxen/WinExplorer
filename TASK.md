@@ -82,6 +82,7 @@
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
 | IMAGE1 | 图片快速查看：侧栏大图 + 空格缩放/平移/同目录翻页 | 高 | 已完成 | 本文 / `docs/UI.md` IMAGE1 | — | `feat/image-quickview` → `main` |
 | VIDEO1 | 视频关键帧预览：空格 scrub 抽帧 + 系统播放器打开 | 高 | 已完成 | 本文 / `docs/UI.md` VIDEO1 | IMAGE1 | `feat/video-quickview` → `main` |
+| DOCPREV1 | 文档快速预览：空格叠层 PDF/Office 栅格翻页 + 文本等宽 + 侧栏首页缩略图 | 高 | 已完成 | 本文 / `docs/UI.md` DOCPREV1 | VIDEO1、DOC1 | `feat/doc-preview` → `main` |
 | DOC1 | 文档图标：PDF/HTML 配色字形 + 大图标 PDF 首页 / HTML favicon | 中 | 已完成 | 本文 | — | `feat/doc-icons` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
@@ -109,6 +110,15 @@
 - **范围**：`videoview.go`、`media.go`（`videoFrameAt`）、`quicklook.go`、`preview.go`（保持 `previewVideo`）、`preview_pane.go`、`state.go`；`docs/UI.md`、本文；截图 `docs/assets/shots/VIDEO1/`；参考 `PREVIEW-DEMO/preview-video.png` 与 mockup NOTE。
 - **验收**：空格对视频可 scrub 看帧；按钮文案「用系统播放器打开」；无 ffmpeg 时优雅降级；`gofmt`/`go build`/`vet`/`test` 与 Windows 交叉编译通过；合入 `main` 并 push（禁止 force-push）。
 - **已知限制**：抽帧依赖本机 `ffmpeg`/`ffprobe`；scrub 防抖约 120ms，拖动极快时帧会略滞后。
+- **状态**：本提交合入 `main`。
+
+### DOCPREV1 — 文档快速预览
+
+- **目标**：空格打开应用内叠层：PDF 与 Office 栅格化前几页（每屏 3 页，最多 30 页），可翻页；文本/代码等宽字体预览，大文件截断（64 KB）并提示；html 按文本显示。侧栏显示首页缩略图。回车与双击仍用系统默认应用打开（叠层内回车同样交给系统并关闭叠层）。
+- **范围**：新增 `docview.go`（`docPDFSource` LibreOffice 转 PDF 并按路径+大小+mtime 缓存、`pdfPageCount`/`pdfPageImage`、`docQuickView` 翻页状态、`docPoster`、`monoFont`/`expandTabs`）、`docview_test.go`；`quicklook.go`（`previewDoc` 走 `docQuickContent`、文本等宽与截断提示、叠层内回车）、`preview.go`（`kindByExt` 增 odt/ods/odp/rtf/htm 等，`previewDoc` 用 `docPoster`）、`preview_pane.go`（首页缩略图说明、降级原因、等宽）、`state.go`；复用 `pdfthumb.go`（pdftoppm / Quick Look）。参考 `PREVIEW-DEMO/preview-doc.png`。
+- **降级**：无 LibreOffice 时 Office 显示占位文案「未安装 LibreOffice，无法在应用内预览 Office 文档」+「打开」；无 pdftoppm 时仅首页（macOS Quick Look），翻页页卡显示「此页无法渲染」。
+- **验收**：`go build`/`vet`/`test ./...` 与 `GOOS=windows`/`darwin` 交叉编译通过；`TestDocPageWindow`、`TestKindByExtDocs`、`TestDocPDFSourceNoOffice`、`TestDocOfficeConvertAndPages`（有 soffice 时）；截图 `docs/assets/shots/DOCPREV1/`。
+- **已知限制**：首次预览 Office 需等待 LibreOffice 转换（数秒，超时 40 秒）；html 不渲染；页卡比例按 3:4 估计。Linux 下截图环境中 `mygo.Clipboard.Read` 可能阻塞主线程（与本任务无关，截图时临时绕过，未提交）。
 - **状态**：本提交合入 `main`。
 
 ### OPENUI-SKEL — OpenUI 加载骨架占位

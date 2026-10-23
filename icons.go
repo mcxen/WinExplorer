@@ -21,7 +21,14 @@ func (a *App) fileIcon(c *ui.Context, e Entry, px float32) {
 			drawFolder(p, r, colorFolder())
 			return
 		}
-		drawFileSheet(p, r, fileTint(e.Ext), colorText())
+		switch e.Ext {
+		case "pdf":
+			drawPDFSheet(p, r)
+		case "html", "htm":
+			drawHTMLSheet(p, r)
+		default:
+			drawFileSheet(p, r, fileTint(e.Ext), colorText())
+		}
 	})
 }
 
@@ -97,9 +104,21 @@ func fileTint(ext string) ui.Color {
 		return ui.Hex("#DB2777")
 	case "zip", "rar", "7z", "tar", "gz", "bz2", "xz":
 		return ui.Hex("#B45309")
-	case "go", "py", "js", "ts", "tsx", "jsx", "rs", "java", "c", "h", "cpp", "cc", "cs", "rb", "php", "swift", "kt", "json", "xml", "yml", "yaml", "html", "css", "sh":
+	case "pdf":
+		// Adobe-red so a PDF reads apart from the grey default sheet.
+		return ui.Hex("#DC2626")
+	case "html", "htm":
+		// Browser orange — distinct from the teal code family html used to share.
+		return ui.Hex("#EA580C")
+	case "doc", "docx", "rtfd", "odt":
+		return ui.Hex("#2563EB")
+	case "xls", "xlsx", "ods", "csv":
+		return ui.Hex("#15803D")
+	case "ppt", "pptx", "odp", "key":
+		return ui.Hex("#C2410C")
+	case "go", "py", "js", "ts", "tsx", "jsx", "rs", "java", "c", "h", "cpp", "cc", "cs", "rb", "php", "swift", "kt", "json", "xml", "yml", "yaml", "css", "sh":
 		return ui.Hex("#0F766E")
-	case "txt", "md", "rtf", "log", "csv":
+	case "txt", "md", "rtf", "log":
 		return ui.Hex("#4B5563")
 	default:
 		return ui.Hex("#6B7280")
@@ -145,6 +164,46 @@ func drawFileSheet(p *ui.Painter, r ui.Rect, tint, ink ui.Color) {
 			ly := y + s*(0.50+float32(i)*0.12)
 			p.Fill(ui.Rect{X: x + s*0.28, Y: ly, W: s * w * 0.55, H: s * 0.04}, line, s*0.02)
 		}
+	}
+}
+
+// drawPDFSheet is the list/large-icon glyph for PDFs: a white folded sheet
+// edged in Adobe red, with a red label strip that reads as a type badge even
+// at 16 px where lettering would not fit.
+func drawPDFSheet(p *ui.Painter, r ui.Rect) {
+	tint := fileTint("pdf")
+	drawFileSheet(p, r, tint, colorText())
+	x, y, s := r.X, r.Y, r.W
+	badge := ui.Rect{X: x + s*0.28, Y: y + s*0.62, W: s * 0.44, H: s * 0.18}
+	p.Fill(badge, tint, s*0.03)
+	if s >= 28 {
+		// Three short white ticks stand in for the "PDF" mark without text.
+		ink := ui.RGB(255, 255, 255)
+		for i, w := range []float32{0.28, 0.22, 0.26} {
+			lx := x + s*(0.34+float32(i)*0.10)
+			p.Fill(ui.Rect{X: lx, Y: y + s*0.67, W: s * 0.055, H: s * w * 0.35}, ink, s*0.01)
+		}
+	}
+}
+
+// drawHTMLSheet is the glyph for .html/.htm: the same folded sheet in
+// browser orange, topped with a three-dot chrome bar so it reads as a page
+// in a browser rather than a code file.
+func drawHTMLSheet(p *ui.Painter, r ui.Rect) {
+	tint := fileTint("html")
+	drawFileSheet(p, r, tint, colorText())
+	x, y, s := r.X, r.Y, r.W
+	bar := ui.Rect{X: x + s*0.22, Y: y + s*0.42, W: s * 0.48, H: s * 0.12}
+	p.Fill(bar, tint.Alpha(0.85), s*0.02)
+	dot := ui.RGB(255, 255, 255)
+	for _, f := range []float32{0.28, 0.38, 0.48} {
+		var c ui.Path
+		c.Circle(x+s*f, y+s*0.48, s*0.025)
+		p.FillPath(&c, dot)
+	}
+	if s >= 28 {
+		p.Fill(ui.Rect{X: x + s*0.28, Y: y + s*0.60, W: s * 0.36, H: s * 0.04}, tint.Alpha(0.45), s*0.02)
+		p.Fill(ui.Rect{X: x + s*0.28, Y: y + s*0.70, W: s * 0.28, H: s * 0.04}, tint.Alpha(0.35), s*0.02)
 	}
 }
 

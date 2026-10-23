@@ -127,22 +127,41 @@ func thumbSide(box float32) int {
 	}
 }
 
-// mediaThumb returns the thumbnail of a picture or video, or nil while it
-// is still being decoded or when the file is neither. box is the tile's
-// side in DIPs.
+// mediaThumb returns the thumbnail of a picture, video, PDF first page, or
+// HTML favicon — or nil while it is still being decoded or when the file
+// has none. box is the tile's side in DIPs. Below thumbMinBox the caller
+// keeps the hand-drawn glyph; PDF/HTML decoding is only asked for there.
 func mediaThumb(path string, box float32) *ui.Bitmap {
 	ext := lowerExt(path)
-	if !isMediaExt(ext) {
+	side := thumbSide(box)
+	switch {
+	case isMediaExt(ext):
+		return cachedThumb("f:"+thumbCacheKey(path), side, func() image.Image {
+			img, err := decodeThumbImage(path, side)
+			if err != nil {
+				return nil
+			}
+			return img
+		})
+	case ext == "pdf":
+		return cachedThumb("f:"+thumbCacheKey(path), side, func() image.Image {
+			img, err := pdfPosterImage(path, side)
+			if err != nil {
+				return nil
+			}
+			return img
+		})
+	case ext == "html", ext == "htm":
+		return cachedThumb("f:"+thumbCacheKey(path), side, func() image.Image {
+			img, err := htmlFaviconImage(path, side)
+			if err != nil {
+				return nil
+			}
+			return img
+		})
+	default:
 		return nil
 	}
-	side := thumbSide(box)
-	return cachedThumb("f:"+thumbCacheKey(path), side, func() image.Image {
-		img, err := decodeThumbImage(path, side)
-		if err != nil {
-			return nil
-		}
-		return img
-	})
 }
 
 // folderCoverThumb returns the pictures a media folder shows, tiled into

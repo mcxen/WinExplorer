@@ -375,9 +375,15 @@ func quickLookImage(path string, size int) (image.Image, error) {
 	return sysThumbImage(path, size)
 }
 
-// pdfPoster renders the first page of a PDF to an image via Quick Look.
+// pdfPoster renders the first page of a PDF to an image: Quick Look on
+// macOS, pdftoppm when poppler is installed, else an error so the pane
+// can fall back.
 func pdfPoster(path string) (*ui.Bitmap, error) {
-	return quickLookThumb(path, 768)
+	img, err := pdfPosterImage(path, 768)
+	if err != nil {
+		return nil, err
+	}
+	return ui.NewBitmap(img), nil
 }
 
 // readTextPreview reads up to max bytes of a text file, returning the text

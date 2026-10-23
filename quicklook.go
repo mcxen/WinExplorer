@@ -148,9 +148,6 @@ func (a *App) quickLookBody(c *ui.Context) {
 		}
 		a.quickLookContent(c, st)
 		a.quickLookFacts(c, st)
-		if st.kind != previewImage && st.kind != previewVideo && st.kind != previewDoc {
-			ui.Text(c, "空格 或 Esc 关闭 · ←/→ 上一张/下一张（音频为快退快进）").FontSize(11).TextColor(colorMuted())
-		}
 	})
 }
 
@@ -175,7 +172,7 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 				ui.TextArea(c, &value).ReadOnly(true).Font(monoFont).FontSize(13).TextColor(colorText())
 			})
 			if st.textFull > len(st.text) {
-				ui.Text(c, fmt.Sprintf("文件较大（约 %s），仅显示前 %s · 回车用系统默认应用打开",
+				ui.Text(c, fmt.Sprintf("仅显示前 %[2]s / 共 %[1]s",
 					formatBytes(int64(st.textFull)), formatBytes(int64(len(st.text))))).
 					FontSize(11).TextColor(colorMuted())
 			}

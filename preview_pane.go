@@ -94,13 +94,11 @@ func (a *App) previewBody(c *ui.Context, st *previewState) {
 		}
 		a.previewOpenButton(c, st)
 		if st.bitmap == nil {
-			msg := "无法生成预览，可点击“打开”用系统应用查看"
+			msg := "无法生成预览"
 			if st.err != "" {
-				msg = st.err + "；可点击“打开”用系统应用查看"
+				msg = st.err
 			}
 			a.previewNote(c, msg)
-		} else {
-			ui.Text(c, "首页缩略图 · 空格翻页预览").FontSize(11).TextColor(colorMuted()).FillWidth()
 		}
 	default:
 		if st.err != "" {

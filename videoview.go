@@ -155,13 +155,15 @@ func (a *App) videoQuickContent(c *ui.Context, st *previewState, maxW, maxH floa
 	a.videoQuickViewport(c, st, maxW, maxH-100)
 	a.videoQuickScrub(c, maxW)
 	a.videoQuickOpenButton(c, st)
-	hint := "拖动进度条 scrub 抽帧 · ←/→ 相邻文件 · 空格/Esc 关闭"
+	hint := ""
 	if a.vidQV.loading {
-		hint = "正在抽帧… · " + hint
+		hint = "正在抽帧…"
 	} else if a.vidQV.err != "" && a.vidQV.frame == nil {
-		hint = a.vidQV.err + " · " + hint
+		hint = a.vidQV.err
 	}
-	ui.Text(c, hint).FontSize(11).TextColor(colorMuted())
+	if hint != "" {
+		ui.Text(c, hint).FontSize(11).TextColor(colorMuted())
+	}
 }
 
 // videoQuickViewport draws the current keyframe (or a broken placeholder)
@@ -272,7 +274,7 @@ func (a *App) videoQuickScrub(c *ui.Context, maxW float32) {
 func (a *App) videoQuickOpenButton(c *ui.Context, st *previewState) {
 	btn := ui.ButtonBase(c).Height(32).FillWidth().MaxWidth(240).Radius(6).
 		Background(colorAccent()).Label("用系统播放器打开").
-		Tooltip("用系统默认播放器打开（不在应用内播放）")
+		Tooltip("用系统默认播放器打开")
 	btn.Children(func() {
 		ui.Text(c, "用系统播放器打开").FontSize(13).TextColor(ui.RGBA(255, 255, 255, 1))
 	})
@@ -311,13 +313,10 @@ func (a *App) videoSidebarBody(c *ui.Context, st *previewState) {
 		a.openVideoWithSystem(st.path)
 	}
 	if st.bitmap == nil {
-		a.previewNote(c, "无法生成预览，可点击按钮用系统播放器查看")
+		a.previewNote(c, "无法生成预览")
 	} else if st.media.duration > 0 {
-		ui.Text(c, fmt.Sprintf("时长 %s · 空格可 scrub 抽帧",
+		ui.Text(c, fmt.Sprintf("时长 %s",
 			formatDuration(time.Duration(st.media.duration*float64(time.Second))))).
-			FontSize(11).TextColor(colorMuted()).FillWidth()
-	} else {
-		ui.Text(c, "空格可 scrub 抽帧；播放交给系统播放器").
 			FontSize(11).TextColor(colorMuted()).FillWidth()
 	}
 }

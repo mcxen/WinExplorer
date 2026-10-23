@@ -319,3 +319,9 @@
 - **范围**：`internal/assistant/fileop.go`（`FileOp`、`PlanStep`、行级 diff）、`types.go`（`Turn.At/Op/Steps`）、`assistant_opcard.go`、`assistant_demo.go`（`SUNVALE_ASSIST_DEMO=1` 离线脚本，在临时文件夹 `sunvale-demo-*` 中真实执行）、`assistant.go`（交换渲染、空状态、目录条、对话列 `FillHeight` 修复）、`assistant_run.go`（演示入口、时间戳）；截图 `docs/assets/shots/CHAT-DEMO/`；更新 `README.md`、`docs/UI.md`。
 - **验收**：`go test -count=1 -run 'TestAssistDemo|TestDiffHunks' ./...`（六个场景改动磁盘与卡片一致、删除先确认、各卡撤销复原、取消不改动）；全量测试与 `GOOS=windows/js/darwin` 编译通过。
 - **未完成**：真实模型的工具调用尚未产出 `Turn.Op`（卡片目前只由演示脚本生成）；撤销记录只在本窗口内存中，重开会话后卡片不再显示撤销。
+
+## 快速预览文案精简
+
+- **状态**：已合入 `main`，随 v0.2.0 发布。
+- **范围**：`quicklook.go`、`preview_pane.go`、`videoview.go`、`docview.go`：删除快捷键提示与解释性文案，错误/降级原因缩为一句，截断提示缩短；`mygo.json` 版本升至 0.2.0。
+- **验收**：`go build`、`go vet`、`go test ./...` 通过；截图未重拍。

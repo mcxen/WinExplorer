@@ -69,7 +69,7 @@ var sofficeBin = func() string {
 }
 
 // errNoOffice is the soft miss when an Office file cannot be converted.
-var errNoOffice = fmt.Errorf("未安装 LibreOffice，无法在应用内预览 Office 文档")
+var errNoOffice = fmt.Errorf("未安装 LibreOffice")
 
 var officeConvMu sync.Mutex
 
@@ -382,7 +382,7 @@ func (a *App) docQuickContent(c *ui.Context, st *previewState, maxW, maxH float3
 		end := idx[len(idx)-1] + 1
 		info = fmt.Sprintf("第 %d–%d 页 / 共 %d 页", idx[0]+1, end, q.total)
 		if q.total > docMaxPages {
-			info += fmt.Sprintf("（应用内预览前 %d 页）", docMaxPages)
+			info += fmt.Sprintf("（仅前 %d 页）", docMaxPages)
 		}
 	}
 	if q.err != "" {
@@ -390,8 +390,6 @@ func (a *App) docQuickContent(c *ui.Context, st *previewState, maxW, maxH float3
 	}
 	ui.Text(c, info).FontSize(12).TextColor(colorMuted())
 	a.quickLookOpenButton(c, st)
-	ui.Text(c, "首页栅格预览 · PageUp/PageDown 翻页 · ←/→ 相邻文件 · 回车 系统默认打开 · 空格/Esc 关闭").
-		FontSize(11).TextColor(colorMuted())
 }
 
 func (a *App) docFlipButton(c *ui.Context, glyph, tip string, enabled bool, on func()) {
@@ -433,7 +431,6 @@ func (a *App) docUnavailable(c *ui.Context, st *previewState, msg string) {
 			a.fileIcon(c, Entry{Ext: stExt(st)}, 96)
 		})
 		ui.Text(c, msg).FontSize(13).TextColor(colorMuted()).TextAlign(ui.Center)
-		ui.Text(c, "可点击下方按钮或按回车，用系统默认应用打开").FontSize(12).TextColor(colorMuted())
 		a.quickLookOpenButton(c, st)
 	})
 }

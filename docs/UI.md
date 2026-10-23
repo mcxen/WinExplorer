@@ -234,6 +234,10 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **侧栏**：Contain 海报 +「用系统播放器打开」提示时长；不重复 scrub。
 - **截图**：`docs/assets/shots/VIDEO1/`；方案示意亦见 `docs/assets/shots/PREVIEW-DEMO/preview-video.png`。
 
+## 快速预览文案精简
+
+- IMAGE1/VIDEO1/DOCPREV1 叠层与侧栏去掉快捷键提示与自我说明（如「首页缩略图 · 空格翻页预览」）；保留页码、时长、「打开」/「用系统播放器打开」按钮、一句话错误或降级原因、截断提示（「仅显示前 X / 共 Y」）。截图未重拍，文案可能与截图略有出入。
+
 ## 文档快速预览（DOCPREV1）
 
 与 NOTE 和 `PREVIEW-DEMO/preview-doc.png` 一致：空格看几页、侧栏看首页、回车/双击交给系统默认应用。

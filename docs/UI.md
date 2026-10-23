@@ -110,7 +110,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 快速搜索（`searchbox.go:searchBoxKeys`）：↑↓、PageUp/PageDown、Enter 打开、Ctrl+Enter 定位、Esc 关闭。
 - 助手输入框（Onevra `chat.GlassComposer`，`assistant.go:assistantComposer` / `assistant_slash.go`）：Enter 发送、Shift+Enter 换行；草稿为单行 `/…` 时上方弹出命令菜单（含 `/分类` `/立即执行`），`↑`/`↓` 选择、`Enter` 选用、`Esc` 关闭（关闭后同一草稿不再弹出，直到离开斜杠查询）。回答中且草稿非空时 Trailing 提供停止。
 - 侧栏方向键导航（`navkeys.go`）：点击侧栏后 `↑`/`↓`、`Home`/`End` 移动焦点，`→` 展开或进入子级，`←` 折叠或回到父级，`Enter`/空格导航，`Tab` 交还焦点；移动不改变当前标签（`docs/specs/02-tree-polish.md` C）。
-- 空格快速预览（`quicklook.go`、图片见 `imageview.go`）：`空格` 打开/关闭；`Esc` 或点外部关闭。图片：滚轮缩放（1×–8×，适配为 1×）、拖拽平移、`←`/`→` 或顶栏按钮切换**同目录图片**；坏图显示 `ImageOff` 占位。非图片：`←`/`→` 步进可见项；音频打开时为快退/快进 5 秒。侧栏预览窗格（`preview_pane.go`）选中图片时只做 Contain 适配大图，不重复缩放控件。
+- 空格快速预览（`quicklook.go`、图片见 `imageview.go`、视频见 `videoview.go`）：`空格` 打开/关闭；`Esc` 或点外部关闭。图片：滚轮缩放（1×–8×，适配为 1×）、拖拽平移、`←`/`→` 或顶栏按钮切换**同目录图片**；坏图显示 `ImageOff` 占位。视频：关键帧 + 细进度条 scrub 抽帧（`ffmpeg`），按钮「用系统播放器打开」（无内嵌播放器）；点画面播放提示同样走系统播放器。非图片/非视频：`←`/`→` 步进可见项；音频打开时为快退/快进 5 秒。侧栏预览窗格（`preview_pane.go`）选中图片时只做 Contain 适配大图；选中视频时显示关键帧海报 +「用系统播放器打开」，不重复 scrub 控件。
 
 ## 4. 中文文案
 
@@ -224,6 +224,15 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **格式**：JPEG/PNG/GIF/WebP/BMP（`decodeBytesScaled`，与 OpenUI `ImageField`/`formDecodeBitmap` 同路径）；HEIC/TIFF/AVIF/ICO 等走系统缩略图兜底（非 macOS 可能仅占位）。
 - **快捷键**：见 §3「空格快速预览」。
 - **截图**：`docs/assets/shots/IMAGE1/`。
+
+## 视频关键帧预览（VIDEO1）
+
+交互分工与 NOTE（`assistant-float-mockups/preview-demo/NOTE.md`）一致：空格看一眼（关键帧 + scrub）、侧栏看详情海报、回车/双击/「用系统播放器打开」真正播放。不做内嵌完整播放器。
+
+- **格式**：mp4/m4v/mov/mkv/avi/webm/wmv/flv（`kindByExt` → `previewVideo`）；抽帧走 `media.go:videoFrameAt`（`ffmpeg`），无 ffmpeg 时侧栏/空格优雅降级为占位 + 系统打开。
+- **空格层**（`videoview.go`）：海报/当前帧、细进度 scrub（防抖约 120ms 再抽帧）、底部「用系统播放器打开」；`←`/`→` 步进相邻可见项。
+- **侧栏**：Contain 海报 +「用系统播放器打开」提示时长；不重复 scrub。
+- **截图**：`docs/assets/shots/VIDEO1/`；方案示意亦见 `docs/assets/shots/PREVIEW-DEMO/preview-video.png`。
 
 ## OpenUI 媒体控件（OPENUI3）
 

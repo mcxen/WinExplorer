@@ -249,45 +249,54 @@ func videoPoster(path string) *ui.Bitmap {
 	return ui.NewBitmap(img)
 }
 
-// videoPosterImage renders a frame from a video to a PNG with ffmpeg and
-// decodes it. It tries one second in (where a clip has a title card) and
-// falls back to the first frame, scaled to fit side px. Returns an error
-// when ffmpeg is unavailable or the extraction fails.
+// videoPosterImage renders a representative still: one second in (past
+// title cards) then the first frame. Scrubbed moments go through
+// videoFrameAt so Space quick look and OpenUI share one ffmpeg path.
 func videoPosterImage(path string, side int) (image.Image, error) {
+	if img, err := videoFrameAt(path, 1, side); err == nil {
+		return img, nil
+	}
+	return videoFrameAt(path, 0, side)
+}
+
+// videoFrameAt extracts one frame at atSec seconds via ffmpeg, scaled to
+// fit side px. Used by the Space video scrubber and by videoPosterImage.
+// Returns a clear error when ffmpeg is missing so callers can degrade.
+func videoFrameAt(path string, atSec float64, side int) (image.Image, error) {
 	side = max(side, 16)
-	dir, err := os.MkdirTemp("", "we-vp")
+	if atSec < 0 {
+		atSec = 0
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return nil, fmt.Errorf("需要 ffmpeg 才能抽帧")
+	}
+	dir, err := os.MkdirTemp("", "we-vf")
 	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	out := filepath.Join(dir, "poster.png")
+	out := filepath.Join(dir, "frame.png")
 	filter := fmt.Sprintf("scale='min(%d,iw)':-1", side)
-
-	attempts := [][]string{
-		{"-y", "-ss", "00:00:01", "-i", path, "-frames:v", "1", "-update", "1", "-vf", filter, out},
-		{"-y", "-i", path, "-frames:v", "1", "-update", "1", "-vf", filter, out},
-	}
-	var last error
-	for _, args := range attempts {
-		if b, e := exec.Command("ffmpeg", args...).CombinedOutput(); e != nil {
-			last = fmt.Errorf("ffmpeg: %s", strings.TrimSpace(string(b)))
-			continue
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	args := []string{"-y", "-ss", fmt.Sprintf("%.3f", atSec), "-i", path,
+		"-frames:v", "1", "-update", "1", "-vf", filter, out}
+	if b, e := exec.CommandContext(ctx, "ffmpeg", args...).CombinedOutput(); e != nil {
+		// A timestamp past the end (lying container duration) is worth one
+		// retry at the start of the clip.
+		if atSec > 0 {
+			return videoFrameAt(path, 0, side)
 		}
-		f, e := os.Open(out)
-		if e != nil {
-			last = e
-			continue
-		}
-		img, _, e := image.Decode(f)
-		f.Close()
-		if e != nil {
-			last = e
-			continue
-		}
-		return img, nil
+		return nil, fmt.Errorf("ffmpeg: %s", strings.TrimSpace(string(b)))
 	}
-	if last == nil {
-		last = fmt.Errorf("没有提取到画面")
+	f, err := os.Open(out)
+	if err != nil {
+		return nil, err
 	}
-	return nil, last
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
 }

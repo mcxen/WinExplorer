@@ -84,6 +84,8 @@ func (a *App) previewBody(c *ui.Context, st *previewState) {
 		if st.media.player == nil {
 			a.previewOpenButton(c, st)
 		}
+	case previewVideo:
+		a.videoSidebarBody(c, st)
 	case previewDoc:
 		if st.bitmap != nil {
 			ui.Box(c).FillWidth().Shrink(0).Children(func() {

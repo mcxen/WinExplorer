@@ -207,7 +207,7 @@ func openUIMoreDemoProgram() string {
 		"stats = StatCards([StatCard(\"已用空间\", \"412 GB\", \"+12 GB 本周\", \"warning\"), StatCard(\"可释放\", \"3.8 GB\", \"重复 + 安装包\", \"success\"), StatCard(\"文件数\", \"1,284\", \"下载文件夹\")])\n" +
 		"steps = Steps([Step(\"扫描下载文件夹\", \"1,284 个文件\", \"done\", \"22:01\"), Step(\"查找重复文件\", \"按内容哈希比对\", \"done\"), Step(\"移动到分类目录\", \"进行中 3/12\", \"active\"), Step(\"清空回收站\", \"需确认\", \"pending\")], \"整理进度\")\n" +
 		"files = Files([FileCard(" + q("Documents", "报告.pdf") + ", \"与下载中副本重复\"), FileCard(" + q("Downloads", "资料.zip") + ", \"已解压，可删除\"), FileCard(" + q("Downloads", "会议纪要.md") + "), FileCard(" + q("Movies") + ", \"文件夹\")], \"待处理文件\")\n" +
-		"gallery = Gallery([" + strings.Join(gallery, ", ") + "], \"图片与视频\")\n"
+		"gallery = Gallery([" + strings.Join(gallery, ", ") + "], \"图片与视频\", 3)\n"
 }
 
 func (a *App) assistInjectDemoReply(userText, body string) {

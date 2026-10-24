@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
@@ -19,7 +21,58 @@ const (
 	openGalleryTileW float32 = 120
 	openGalleryTileH float32 = 90
 	openStatTileW    float32 = 150
+	openGalleryGap   float32 = 8
+	// openGalleryMinW is the narrowest tile a fixed column count may give;
+	// below it the grid falls back to auto fit.
+	openGalleryMinW float32 = 72
+	// openStatTTL is how long a Files row trusts its cached stat.
+	openStatTTL = 2 * time.Second
+	// openClickDelay holds a Gallery tile's quick preview until a second
+	// click could no longer make it a double click.
+	openClickDelay = 300 * time.Millisecond
 )
+
+// Hooks the tests swap: the system opener, the clock and navigation.
+var (
+	openUISysOpen = openWithOS
+	openUINow     = time.Now
+)
+
+type openStatEntry struct {
+	info os.FileInfo
+	err  error
+	at   time.Time
+}
+
+// openStatCache keeps Files rows from statting every frame.
+var openStatCache struct {
+	sync.Mutex
+	m map[string]openStatEntry
+}
+
+func openStat(path string) (os.FileInfo, error) {
+	now := openUINow()
+	openStatCache.Lock()
+	defer openStatCache.Unlock()
+	if e, ok := openStatCache.m[path]; ok && now.Sub(e.at) < openStatTTL && !e.at.After(now) {
+		return e.info, e.err
+	}
+	if openStatCache.m == nil || len(openStatCache.m) > 512 {
+		openStatCache.m = map[string]openStatEntry{}
+	}
+	info, err := os.Stat(path)
+	openStatCache.m[path] = openStatEntry{info, err, now}
+	return info, err
+}
+
+// openSystemOpen opens local in the system app, recording it as recent.
+func (a *App) openSystemOpen(local, name string) {
+	if err := openUISysOpen(local); err != nil {
+		a.statusMsg = "无法打开：" + name
+		return
+	}
+	a.recordRecent(local)
+}
 
 func (a *App) paintOpenMore(c *ui.Context, v *ouiView) {
 	switch v.Kind {
@@ -50,7 +103,7 @@ func openFileMeta(it *ouiView) (name, size, when string, dir bool) {
 		name = baseName(openMediaURLPath(it.Path))
 	}
 	if local != "" && filepath.IsAbs(local) {
-		if st, err := os.Stat(local); err == nil {
+		if st, err := openStat(local); err == nil {
 			dir = st.IsDir()
 			if size == "" && !dir {
 				size = formatBytes(st.Size())
@@ -81,8 +134,12 @@ func (a *App) paintOpenFileRow(c *ui.Context, it *ouiView) {
 	row := ui.ButtonBase(c).FillWidth().MinWidth(0).Radius(6).Padding(6, 6).Label("打开 " + name)
 	row.Children(func() {
 		ui.Row(c).FillWidth().MinWidth(0).Gap(10).AlignItems(ui.Center).Children(func() {
+			verb := "预览 "
+			if dir {
+				verb = "进入 "
+			}
 			icon := ui.ButtonBase(c.Key("icon")).Size(openFileIconBox, openFileIconBox).Shrink(0).Radius(6).Clip().
-				Label("预览 " + name)
+				Label(verb + name)
 			icon.Children(func() {
 				var bm *ui.Bitmap
 				if local != "" && !dir && (isImageExt(lowerExt(local)) || isVideoExt(lowerExt(local))) {
@@ -96,8 +153,15 @@ func (a *App) paintOpenFileRow(c *ui.Context, it *ouiView) {
 					})
 				}
 			})
-			if icon.Clicked() && local != "" && !dir {
-				a.openQuickLookPath(local)
+			if icon.Hovered() {
+				icon.Background(colorHover())
+			}
+			if icon.Clicked() && local != "" {
+				if dir {
+					a.navigate(local)
+				} else {
+					a.openQuickLookPath(local)
+				}
 			}
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				ui.Text(c.Key("n"), name).FontSize(13).FontWeight(600).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0)
@@ -120,10 +184,8 @@ func (a *App) paintOpenFileRow(c *ui.Context, it *ouiView) {
 	if row.DoubleClicked() && local != "" {
 		if dir {
 			a.navigate(local)
-		} else if err := openWithOS(local); err != nil {
-			a.statusMsg = "无法打开：" + name
 		} else {
-			a.recordRecent(local)
+			a.openSystemOpen(local, name)
 		}
 	}
 }
@@ -196,8 +258,14 @@ func (a *App) paintOpenStats(c *ui.Context, v *ouiView) {
 	ui.Row(c).FillWidth().MinWidth(0).Wrap().Gap(8).Label("OpenUI stats").Children(func() {
 		for i, it := range v.Items {
 			cc := c.Key("st" + itoa(i))
-			ui.Column(cc).Width(openStatTileW).Grow(1).MinWidth(0).Gap(3).Padding(10, 12).Radius(8).
-				Border(1, colorDivider()).Background(colorSurface()).Children(func() {
+			tile := ui.Column(cc).Width(openStatTileW).Grow(1).MinWidth(0).Gap(3).Padding(10, 12).Radius(8).
+				Border(1, colorDivider()).Background(colorSurface())
+			tip := it.Label + "  " + it.Text
+			if it.Sub != "" {
+				tip += "  " + it.Sub
+			}
+			components.Tooltip(cc, tile, tip)
+			tile.Children(func() {
 				ui.Text(cc.Key("l"), it.Label).FontSize(12).TextColor(colorMuted()).SingleLine().Ellipsis("…").MinWidth(0)
 				val := ui.Text(cc.Key("v"), it.Text).FontSize(20).FontWeight(600).SingleLine().Ellipsis("…").MinWidth(0).Selectable()
 				if it.Tone != "" {
@@ -218,48 +286,112 @@ func (a *App) paintOpenStats(c *ui.Context, v *ouiView) {
 	})
 }
 
+// openGalleryLayout returns the column count and tile width for a grid w
+// wide. want > 0 is the program's count; it falls back to auto fit when
+// that would leave tiles narrower than openGalleryMinW.
+func openGalleryLayout(w float32, want, n int) (int, float32) {
+	if w <= 0 {
+		w = 4*openGalleryTileW + 3*openGalleryGap
+	}
+	cols := want
+	if cols > 0 && (w-openGalleryGap*float32(cols-1))/float32(cols) < openGalleryMinW {
+		cols = 0
+	}
+	if cols <= 0 {
+		cols = int((w + openGalleryGap) / (openGalleryTileW + openGalleryGap))
+		if cols < 1 {
+			cols = 1
+		}
+		if n > 0 && cols > n {
+			// Few items keep the default tile instead of stretching.
+			return cols, openGalleryTileW
+		}
+	}
+	tw := (w - openGalleryGap*float32(cols-1)) / float32(cols)
+	return cols, float32(int(tw))
+}
+
+// openGalleryPending is a tile click waiting out the double-click window.
+type openGalleryPending struct {
+	path string
+	at   time.Time
+	// opened marks a double click already handled: the release that ends
+	// it reports a click too, which must not queue a preview.
+	opened bool
+}
+
+var openGalleryClick openGalleryPending
+
 func (a *App) paintOpenGallery(c *ui.Context, v *ouiView) {
 	ui.Column(c).FillWidth().MinWidth(0).Label("OpenUI gallery").Children(func() {
 		openMoreTitle(c, v.Text)
-		ui.Row(c.Key("grid")).FillWidth().MinWidth(0).Wrap().Gap(8).Children(func() {
+		grid := ui.Row(c.Key("grid")).FillWidth().MinWidth(0).Wrap().Gap(openGalleryGap)
+		_, tw := openGalleryLayout(grid.Bounds().W, v.Extra, len(v.Items))
+		grid.Children(func() {
 			for i, it := range v.Items {
-				a.paintOpenGalleryTile(c.Key("g"+itoa(i)), it)
+				a.paintOpenGalleryTile(c.Key("g"+itoa(i)), it, tw)
 			}
 		})
 	})
+	if p := openGalleryClick; p.path != "" && !p.opened {
+		if left := openClickDelay - openUINow().Sub(p.at); left <= 0 {
+			openGalleryClick = openGalleryPending{}
+			a.openQuickLookPath(p.path)
+		} else {
+			c.After(left)
+		}
+	}
 }
 
-func (a *App) paintOpenGalleryTile(c *ui.Context, it *ouiView) {
-	ui.Column(c).Width(openGalleryTileW).Shrink(0).Gap(3).Children(func() {
+func (a *App) paintOpenGalleryTile(c *ui.Context, it *ouiView, tw float32) {
+	th := float32(int(tw * openGalleryTileH / openGalleryTileW))
+	box := float32(256)
+	if tw > 180 {
+		box = 512
+	}
+	ui.Column(c).Width(tw).Shrink(0).Gap(3).Children(func() {
 		local := openMediaLocal(it.Path)
 		name := baseName(openMediaURLPath(it.Path))
-		tile := ui.ButtonBase(c.Key("tile")).Size(openGalleryTileW, openGalleryTileH).Radius(8).Clip().
+		tile := ui.ButtonBase(c.Key("tile")).Size(tw, th).Radius(8).Clip().
 			Border(1, colorDivider()).Background(colorAddress()).Label("预览 " + name)
 		tile.Children(func() {
 			var bm *ui.Bitmap
 			switch {
 			case strings.HasPrefix(it.Path, "data:image/"):
-				bm, _ = formLoadBitmap(it.Path, 256)
+				bm, _ = formLoadBitmap(it.Path, int(box))
 			case local != "":
-				bm = mediaThumb(local, 256)
+				bm = mediaThumb(local, box)
 			}
 			if bm != nil {
-				ui.Image(c, bm).Fit(ui.Cover).Size(openGalleryTileW, openGalleryTileH)
+				ui.Image(c, bm).Fit(ui.Cover).Size(tw, th)
 			} else {
-				ui.Box(c).Size(openGalleryTileW, openGalleryTileH).Center().Children(func() {
-					a.fileIcon(c, Entry{Name: name, Ext: lowerExt(name)}, 36)
+				ui.Box(c).Size(tw, th).Center().Children(func() {
+					a.fileIcon(c, Entry{Name: name, Ext: lowerExt(name)}, min(36, th/2))
 				})
 			}
 			if it.Variant == "video" {
-				a.videoBadge(c, openGalleryTileH)
+				a.videoBadge(c, th)
 			}
 		})
-		if tile.Hovered() {
-			tile.Border(1, colorAccent().Alpha(0.6))
+		if tile.Hovered() || tile.Focused() {
+			tile.Border(1.5, colorAccent().Alpha(0.7))
 		}
-		components.Tooltip(c, tile, name)
-		if tile.Clicked() && local != "" {
-			a.openQuickLookPath(local)
+		tip := name
+		if it.Text != "" {
+			tip = it.Text + "\n" + name
+		}
+		components.Tooltip(c, tile, tip)
+		switch {
+		case tile.DoubleClicked() && local != "":
+			openGalleryClick = openGalleryPending{path: local, at: openUINow(), opened: true}
+			a.openSystemOpen(local, name)
+		case tile.Clicked() && local != "":
+			if p := openGalleryClick; p.opened && p.path == local && openUINow().Sub(p.at) < openClickDelay {
+				openGalleryClick = openGalleryPending{}
+				break
+			}
+			openGalleryClick = openGalleryPending{path: local, at: openUINow()}
+			c.After(openClickDelay)
 		}
 		if it.Text != "" {
 			ui.Text(c.Key("cap"), it.Text).FontSize(11).TextColor(colorMuted()).SingleLine().Ellipsis("…").MinWidth(0)

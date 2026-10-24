@@ -163,7 +163,42 @@ func openStatCards(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OU
 	return &OUIView{Kind: "stats", Items: items}
 }
 
-// openGallery is Gallery(items, title?): Items of kind "mediaitem" (Path,
+// OpenGalleryMaxCols caps Gallery's cols.
+const OpenGalleryMaxCols = 8
+
+// openGalleryCols reads Gallery's column count: a number at arg 1 or 2, or
+// {cols: n} anywhere after the items. 0 means auto fit.
+func openGalleryCols(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) int {
+	n := 0.0
+	for i := 1; i < len(e.args); i++ {
+		a := openDeref(env, e.args[i], stack)
+		switch a.kind {
+		case "number":
+			n = a.n
+		case "object":
+			for _, f := range a.items {
+				if k := strings.ToLower(f.name); k == "cols" || k == "columns" {
+					val := f
+					if f.kind == "field" && len(f.items) > 0 {
+						val = openDeref(env, f.items[0], stack)
+					}
+					if val.kind == "number" {
+						n = val.n
+					}
+				}
+			}
+		}
+	}
+	if n < 1 {
+		return 0
+	}
+	if n > OpenGalleryMaxCols {
+		return OpenGalleryMaxCols
+	}
+	return int(n)
+}
+
+// openGallery is Gallery(items, title?, cols?): Items of kind "mediaitem" (Path,
 // Text caption, Variant kind); a bare string is a path.
 func openGallery(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
 	items := openMoreItems(env, openArg(e.args, 0), stack, func(it OUIExpr) *OUIView {
@@ -183,6 +218,9 @@ func openGallery(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 	if len(items) == 0 {
 		return nil
 	}
-	title, _ := openText(env, openArg(e.args, 1), stack)
-	return &OUIView{Kind: "gallery", Text: strings.TrimSpace(title), Items: items}
+	title := ""
+	if t := openDeref(env, openArg(e.args, 1), stack); t.kind == "string" {
+		title, _ = openText(env, t, stack)
+	}
+	return &OUIView{Kind: "gallery", Text: strings.TrimSpace(title), Items: items, Extra: openGalleryCols(env, e, stack)}
 }

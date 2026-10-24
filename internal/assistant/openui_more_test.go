@@ -22,3 +22,17 @@ func TestParseOpenUIMore(t *testing.T) {
 		t.Fatalf("gallery %+v", g)
 	}
 }
+
+func TestOpenGalleryCols(t *testing.T) {
+	for src, want := range map[string]int{
+		`root = Gallery(["/a.jpg"], "相册", 3)`:         3,
+		`root = Gallery(["/a.jpg"], {cols: 4})`:       4,
+		`root = Gallery(["/a.jpg"], "t", {cols: 99})`: OpenGalleryMaxCols,
+		`root = Gallery(["/a.jpg"], "t")`:             0,
+	} {
+		v := ParseOpenUI(src)
+		if v == nil || v.Kind != "gallery" || v.Extra != want {
+			t.Fatalf("%s: %+v", src, v)
+		}
+	}
+}

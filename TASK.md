@@ -79,6 +79,7 @@
 | OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
 | OPENUI-MEDIA | OpenUI 图文列表 MediaList：左缩略图卡 + 右标题正文 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MEDIA | OPENUI3 | `main` |
 | OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
+| OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
@@ -134,7 +135,15 @@
 - **范围**：`internal/assistant/openui_more.go`（解析、别名、状态归一）、`openui.go` 分派、`prompt.go`；`assistant_openui_more.go`（绘制，复用 `mediaThumb`/`fileIcon`/`videoBadge`/`openQuickLookPath`/`openWithOS`）；离线演示 `assistant_openui_scenes.go`（「更多组件」/`openui-more`）；`docs/specs/08-forms.md`、`docs/UI.md`。
 - **交付**：`Files`/`FileCard`、`Steps`/`Step`、`StatCards`/`StatCard`、`Gallery`，均支持位置参数与对象形式；系统提示写明何时用；截图 `docs/assets/shots/OPENUI-MORE/01-stats-steps.png`、`02-files-gallery.png`、`03-narrow-pane.png`、`04-gallery-quicklook.png`。
 - **验收**：解析与绘制单测通过（含点图标打开快速预览）；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
-- **已知限制**：Gallery 固定 120×90 瓦片，无列数参数；Gallery 瓦片单击即快速预览，无双击系统打开（快速预览内可打开）；Files 每帧 `os.Stat` 本地路径（≤60 项）；远程路径不读大小/时间。
+- **已知限制**：~~Gallery 无列数参数、无双击系统打开；Files 每帧 stat；文件夹图标单击无反应~~（OPENUI-MORE2 已解决）；远程路径不读大小/时间。
+- **状态**：已完成，合入 `main`。
+
+### OPENUI-MORE2 — 图库列数 / 双击打开 / 文件夹进入 / stat 缓存
+- **目标**：消除 OPENUI-MORE 的已知限制，交互与 Files、MediaList 一致。
+- **范围**：`internal/assistant/openui_more.go`（`openGalleryCols`，Extra 存列数）、`prompt.go`；`assistant_openui_more.go`（`openGalleryLayout`、双击判定、`openStat` 缓存、`openUISysOpen`/`openUINow` 钩子）；演示 `Gallery(…, 3)`；`docs/specs/08-forms.md`、`docs/UI.md`。
+- **交付**：`Gallery(items, title?, cols?)` / `{cols}`（1–8，窄于 72 DIP 退回自动排，缩略图 256/512 随瓦片宽）；Gallery 单击延迟 300ms 快速预览、双击系统打开；Files 文件夹图标单击进入；本地 stat 按路径缓存 2s；瓦片悬停/聚焦描边、提示含说明；截图 `docs/assets/shots/OPENUI-MORE/05-gallery-cols.png`、`06-gallery-narrow.png`。
+- **验收**：单测覆盖列数解析、布局回退、单击预览/双击系统打开（注入打开钩子）、文件夹进入、stat 缓存 TTL；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
+- **已知限制**：单击预览有 300ms 延迟；stat 缓存不监听文件系统，靠 TTL 过期；首帧按默认宽度排版，第二帧起按实测宽度。
 - **状态**：已完成，合入 `main`。
 
 ### OPENUI-MEDIA — 图文列表 MediaList

@@ -116,9 +116,9 @@ m3 = {media: "https://example.com/a.png", kind: "image", title: "参考", text: 
 
 | 组件 | 别名 | 语法 | 说明 |
 |---|---|---|---|
-| `Files` | `FileCards` | `Files(items, title?)`；项 `FileCard(path, note?, size?, mtime?, name?)` / `{path, name, size, mtime, note}` / 路径字符串 | 行：36px 图标或缩略图 + 名称 + 「大小 · 修改时间 · 备注」；本地文件缺省的大小、时间自动读取。点图标快速预览，双击行系统打开（文件夹进入）。 |
+| `Files` | `FileCards` | `Files(items, title?)`；项 `FileCard(path, note?, size?, mtime?, name?)` / `{path, name, size, mtime, note}` / 路径字符串 | 行：36px 图标或缩略图 + 名称 + 「大小 · 修改时间 · 备注」；本地文件缺省的大小、时间自动读取。点图标快速预览（文件夹图标单击即进入），双击行系统打开（文件夹进入）。本地 stat 结果按路径缓存 2 秒。 |
 | `Steps` | `Timeline` | `Steps(items, title?)`；项 `Step(title, text?, status?, time?)` / `{title, text, status, time}` | 竖向时间线；status `done`/`active`/`pending`/`error`（complete、doing、failed 等同义词归一）。 |
 | `StatCards` | `Stats`、`Metrics` | `StatCards(items)`；项 `StatCard(label, value, delta?, tone?)` / `{label, value, delta, tone}` | 自动换行的指标卡；tone 着色数值与 delta。 |
-| `Gallery` | `ImageGrid` | `Gallery(items, title?)`；项为路径字符串、`MediaItem(media, caption)` 或 `{media, title}` | 120×90 缩略图网格，视频带播放角标；点开快速预览。 |
+| `Gallery` | `ImageGrid` | `Gallery(items, title?, cols?)`，或 `{cols: n}`；项为路径字符串、`MediaItem(media, caption)` 或 `{media, title}` | 缩略图网格（4:3，默认 120×90），视频带播放角标；`cols` 1–8 列平分宽度，瓦片窄于 72 时退回自动排；单击快速预览（延迟 300ms 判双击），双击系统打开；悬停/聚焦描边，提示显示说明与文件名。 |
 
-每组最多 60 项；空项丢弃，全空则整条语句不画。流式时沿用 OPENUI-SKEL 骨架。离线演示：`SUNVALE_OPENUI_DEMO=1` 下发送含「更多组件」或 `openui-more` 的消息。截图：`docs/assets/shots/OPENUI-MORE/`。
+每组最多 60 项；空项丢弃，全空则整条语句不画。流式时沿用 OPENUI-SKEL 骨架。离线演示：`SUNVALE_OPENUI_DEMO=1` 下发送含「更多组件」或 `openui-more` 的消息。截图：`docs/assets/shots/OPENUI-MORE/`（OPENUI-MORE2 续 `05-gallery-cols.png`、`06-gallery-narrow.png`）。

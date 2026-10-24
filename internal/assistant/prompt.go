@@ -83,10 +83,10 @@ ListField(name, options, mode?, "required"?)：文件清单；options 每项为�
 ImageField(name, src)：表单内嵌图片预览，src 为本地路径或 data:image/…;base64,…；坏图显示占位。
 VideoField(name, path)：关键帧预览 +「打开播放」（系统播放器；无内嵌解码器）。
 MediaList(items, title?, "numbered"?)：图文步骤列表，每行左侧缩略图卡片、右侧粗体标题+正文，行间细分隔线；点缩略图打开快速预览。items 是 MediaItem(media, title, text, kind?) 或 {media, kind, title, text, n}；media 为完整本地路径或 http(s) 图片地址；kind 为 image、video 或 doc（省略按扩展名推断）；写 "numbered" 自动编号。讲解多个图片/视频/文档时用它，正文简短不重复标题。
-Files(items, title?)：文件行列表（图标/缩略图、名称、大小·修改时间·备注）；点图标快速预览，双击行用系统应用打开。items 是 FileCard(path, note?, size?, mtime?, name?)、{path, name, size, mtime, note} 或完整路径字符串；本地文件的大小和时间可省（自动读取）。列举搜索结果、大文件、重复文件时用它，而不是 Table。
+Files(items, title?)：文件行列表（图标/缩略图、名称、大小·修改时间·备注）；点图标快速预览（文件夹则进入），双击行用系统应用打开。items 是 FileCard(path, note?, size?, mtime?, name?)、{path, name, size, mtime, note} 或完整路径字符串；本地文件的大小和时间可省（自动读取）。列举搜索结果、大文件、重复文件时用它，而不是 Table。
 Steps(items, title?)：竖向步骤时间线。items 是 Step(title, text?, status?, time?) 或 {title, text, status, time}；status 为 done、active、pending 或 error。讲执行计划、多步操作进度时用。
 StatCards(items)：指标卡片网格。items 是 StatCard(label, value, delta?, tone?) 或 {label, value, delta, tone}；value 短（如 412 GB、85%），delta 写变化或说明。看板开头放 2–4 个关键数字。
-Gallery(items, title?)：缩略图网格（图片/视频关键帧），点开快速预览。items 是完整路径字符串、MediaItem(media, caption) 或 {media, title}。只需看图不需每张说明时用它，需要说明时用 MediaList。
+Gallery(items, title?, cols?)：缩略图网格（图片/视频关键帧），单击快速预览，双击系统应用打开。cols 为 1–8 列（也可写 {cols: 3}），省略则按宽度自动排；窄栏自动退回自动排。items 是完整路径字符串、MediaItem(media, caption) 或 {media, title}。只需看图不需每张说明时用它，需要说明时用 MediaList。
 SwitchField(name, label?)：开关。
 Segmented(name, options)：分段选择（如移动/复制）。
 MultiSelect(name, options, placeholder?)：多选开关组。

@@ -87,6 +87,7 @@ Files(items, title?)：文件行列表（图标/缩略图、名称、大小·修
 Steps(items, title?)：竖向步骤时间线。items 是 Step(title, text?, status?, time?) 或 {title, text, status, time}；status 为 done、active、pending 或 error。讲执行计划、多步操作进度时用。
 StatCards(items)：指标卡片网格。items 是 StatCard(label, value, delta?, tone?) 或 {label, value, delta, tone}；value 短（如 412 GB、85%），delta 写变化或说明。看板开头放 2–4 个关键数字。
 Gallery(items, title?, cols?)：缩略图网格（图片/视频关键帧），单击快速预览，双击系统应用打开。cols 为 1–8 列（也可写 {cols: 3}），省略则按宽度自动排；窄栏自动退回自动排。items 是完整路径字符串、MediaItem(media, caption) 或 {media, title}。只需看图不需每张说明时用它，需要说明时用 MediaList。
+TaskProgress(title, value?, meta?, file?, status?)：一行任务进度（标题、数字行、细进度条、当前文件或错误）。value 为 0–1 或 42%，省略为不确定；status 为 done、active、error。zip_files / unzip 运行时界面已自动显示实时进度卡，不必再画；仅在总结多个任务的结果时用。
 SwitchField(name, label?)：开关。
 Segmented(name, options)：分段选择（如移动/复制）。
 MultiSelect(name, options, placeholder?)：多选开关组。

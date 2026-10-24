@@ -62,6 +62,9 @@ func extractArchiveNested(archive, dstDir string, passwords []string) (string, n
 	queue := []string{dstDir}
 	opened := 0
 	for depth := 0; len(queue) > 0 && depth < nestedMaxDepth && opened < nestedMaxCount; depth++ {
+		if archiveTaskFor(archive).isCanceled() {
+			return "", r, errArchiveCanceled
+		}
 		var next []string
 		for _, dir := range queue {
 			entries, err := os.ReadDir(dir)

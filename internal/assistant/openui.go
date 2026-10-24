@@ -729,6 +729,8 @@ func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 		return openMediaList(env, e, stack)
 	case "Files", "FileCards":
 		return openFiles(env, e, stack)
+	case "TaskProgress", "ArchiveProgress":
+		return openTaskProgress(env, e, stack)
 	case "Steps", "Timeline":
 		return openSteps(env, e, stack)
 	case "StatCards", "Stats", "Metrics":

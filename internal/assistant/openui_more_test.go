@@ -36,3 +36,14 @@ func TestOpenGalleryCols(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenTaskProgress(t *testing.T) {
+	v := ParseOpenUI(`root = TaskProgress("解压 a.zip", "42%", "8 MB/s", "x.pdf", "running")`)
+	if v == nil || v.Kind != "taskprogress" || v.Min != 0.42 || v.Variant != "active" || v.Sub != "x.pdf" {
+		t.Fatalf("%+v", v)
+	}
+	v = ParseOpenUI(`root = ArchiveProgress({title: "压缩", status: "failed", error: "磁盘已满"})`)
+	if v == nil || v.Min != -1 || v.Variant != "error" || v.Sub != "磁盘已满" {
+		t.Fatalf("%+v", v)
+	}
+}

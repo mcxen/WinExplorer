@@ -731,6 +731,9 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		Prompt: prompt, Steps: steps, Final: finalView, Actions: actions,
 		HoldOpen: !a.assist.scroll.AtLatest(),
 		Footer: func(c *ui.Context) {
+			if last && ex.User >= 0 {
+				a.paintAssistArchiveTasks(c, turns[ex.User].At)
+			}
 			if stopped && status == chat.Cancelled {
 				ui.Text(c, "已停止").FontSize(12).TextColor(colorMuted())
 			}

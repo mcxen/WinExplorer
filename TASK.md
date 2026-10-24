@@ -79,6 +79,7 @@
 | OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
 | OPENUI-MEDIA | OpenUI 图文列表 MediaList：左缩略图卡 + 右标题正文 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MEDIA | OPENUI3 | `main` |
 | OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
+| ARCHIVE-PROG | 压缩 / 解压按字节进度：百分比、速度、当前文件、剩余时间、取消；助手实时进度卡 | 高 | 已完成 | [09](docs/specs/09-archive-progress.md) | OPENUI-MORE | `main` |
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
@@ -373,3 +374,11 @@
 - **根因（推断）**：`main.go` 从未调用单实例锁。关闭窗口只是藏进托盘，进程常驻；再点快捷方式、NSIS 完成页「运行」叠加开机自启、文件关联打开压缩包，都会再起一个进程并新建窗口（再加上会话恢复，每个进程各开一扇）。mygo 本身不会建两个窗口。
 - **范围**：`singleinstance.go`（先走 mygo 的单实例 socket，第二个实例把命令行交给第一个后退出；第一个在 `OnSecondInstance` 里从托盘唤起并聚焦窗口）、`singleinstance_windows.go`（`Local\com.mcxen.sunvale.single-instance` 命名 mutex 兜底：socket 不可用时仍判定为第二实例，按标题找窗口 `SW_RESTORE`+`SetForegroundWindow`；更新重启时旧进程尚未退出，mutex 最多重试 3 秒）、`singleinstance_other.go`、`main.go`。
 - **验收**：`TestAcquireSingleInstance`（首个实例、socket 交接、更新重启竞态、socket 失效四种情况）。
+
+### ARCHIVE-PROG — 压缩 / 解压进度
+- **目标**：压缩、解压（含助手 zip_files / unzip）可见按字节的进度、速度、当前文件、剩余时间，并可取消。
+- **范围**：`archive_progress.go`（任务登记、计数 reader、快照）、`archive_progress_paint.go`（状态栏条、任务卡）、`archive.go`（zip/tar 计数与取消、`doCompress` 后台化）、`archive_nested.go`、`assistant_mcp.go`、`status.go`、`assistant.go` Footer；OpenUI `TaskProgress`（`internal/assistant/openui_more.go`、`prompt.go`）；`docs/specs/09-archive-progress.md`、`docs/UI.md`。
+- **交付**：状态栏进度条 + 数字行 + ×；助手本轮任务卡实时刷新至完成 / 失败 / 取消；`TaskProgress` 组件；截图 `docs/assets/shots/ARCHIVE-PROG/01-assistant-live.png`、`02-assistant-done-error.png`、`03-status-bar.png`。
+- **验收**：单测覆盖 zip 压缩 / 解压与 tar.gz 字节计数、取消、速度与剩余时间、状态栏 × 取消、助手卡只显示 ai 任务且显示错误、`TaskProgress` 解析与绘制；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
+- **已知限制**：txz / 7z / rar 及加密 ZIP 走外部程序，只有不确定进度条，且不能中途取消；内层归档连解不单独计数；助手任务卡只在最后一轮显示；tar 家族按压缩字节计数，当前成员按 tar 顺序。
+- **状态**：已完成，合入 `main`。

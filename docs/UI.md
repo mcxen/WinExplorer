@@ -271,3 +271,9 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **`StatCards`**：150 宽起自动换行的指标卡，标签 12 号灰、数值 20 号粗体、delta 11 号，按 tone 着色。
 - **`Gallery`**：4:3 圆角缩略图网格（默认 120×90），`cols` 指定列数时平分宽度、缩略图分辨率随瓦片放大，窄栏退回自动排；视频角标，可选说明一行；单击快速预览，双击系统打开；悬停/聚焦强调色描边。
 - 语法见 `docs/specs/08-forms.md` OPENUI-MORE；截图 `docs/assets/shots/OPENUI-MORE/`。
+
+## 压缩 / 解压进度（ARCHIVE-PROG）
+
+- **状态栏**：进行中时替代「处理中 N 项」：90 DIP 细进度条 + 「动词 名称  百分比 · 已完成 / 总量 · 速度 · 剩余 m:ss」+ 「+N」+ 20px ×；悬停提示当前成员。
+- **助手任务卡**：1px 分隔色描边、8px 圆角；首行 15px 状态图标（进行中强调色归档 / 完成绿勾 / 失败红叹号 / 取消灰禁止）+ 13 号粗体标题 + 11.5 号灰数字行 + ×；次行 4px 进度条；末行 11 号当前成员或错误，超长省略并带提示。
+- **OpenUI `TaskProgress`**：同一卡片的静态版。语法见 `docs/specs/09-archive-progress.md`。

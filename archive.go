@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/egoist/mygo"
+
 	"sunvale/internal/fsops"
 )
 
@@ -67,14 +69,37 @@ func (a *App) doCompress() {
 		return
 	}
 	dst := filepath.Join(a.cur().path, name)
-	if err := makeZip(dst, sel); err != nil {
-		_ = os.Remove(dst)
-		a.statusMsg = "压缩失败：" + err.Error()
+	t := startArchiveTask("compress", dst, "user", 0)
+	archiveGo(func() {
+		t.reset(entriesSize(sel))
+		err := makeZip(dst, sel)
+		if err != nil {
+			_ = os.Remove(dst)
+		}
+		t.finish(err)
+		a.postAssist(func() {
+			switch {
+			case errors.Is(err, errArchiveCanceled):
+				a.statusMsg = "已取消压缩 " + name
+			case err != nil:
+				a.statusMsg = "压缩失败：" + err.Error()
+			default:
+				a.reload()
+				a.selectOnly(dst)
+				a.statusMsg = "已创建 " + name
+			}
+		})
+	})
+}
+
+// archiveGo runs fn off the UI thread once the app runs; headless tests
+// run it inline so they see its result.
+func archiveGo(fn func()) {
+	if !mygo.App.IsReady() {
+		fn()
 		return
 	}
-	a.reload()
-	a.selectOnly(dst)
-	a.statusMsg = "已创建 " + name
+	go fn()
 }
 
 // doExtract 解压选中的每个归档到以其基础名命名的子文件夹。加密归档
@@ -127,6 +152,7 @@ func (a *App) extractArchives(dir string, archives []Entry, candidates []string)
 	var extracted []string
 	var inner int
 	var locked []string
+	var canceled []string
 	lastPw := ""
 	for _, e := range archives {
 		base, err := uniqueFreeName(dir, archiveExtName(e.Name), true)
@@ -136,7 +162,15 @@ func (a *App) extractArchives(dir string, archives []Entry, candidates []string)
 			continue
 		}
 		dst := filepath.Join(dir, base)
+		t := startArchiveTask("extract", e.Path, "user", 0)
 		password, nested, err := extractArchiveNested(e.Path, dst, candidates)
+		t.finish(err)
+		if errors.Is(err, errArchiveCanceled) {
+			_ = os.RemoveAll(dst)
+			canceled = append(canceled, e.Name)
+			aiFx.clearBusy(e.Path)
+			continue
+		}
 		if err != nil {
 			_ = os.RemoveAll(dst)
 			failed = append(failed, e.Name)
@@ -170,6 +204,8 @@ func (a *App) extractArchives(dir string, archives []Entry, candidates []string)
 			a.requestPreview()
 		}
 		switch {
+		case len(canceled) > 0 && len(failed) == 0:
+			a.statusMsg = "已取消解压：" + strings.Join(canceled, "、")
 		case len(failed) > 0:
 			a.statusMsg = "解压失败：" + strings.Join(failed, "、")
 		case len(locked) > 0:
@@ -199,16 +235,20 @@ func extractArchive(archive, dstDir string) error {
 			return err
 		}
 		defer f.Close()
-		var r io.Reader = f
+		t := archiveTaskFor(archive)
+		if st, err := f.Stat(); err == nil {
+			t.reset(st.Size())
+		}
+		var r io.Reader = withProgress(f, t)
 		switch archiveKind(filepath.Base(archive)) {
 		case "tgz", "tar.gz":
-			if r, err = gzip.NewReader(f); err != nil {
+			if r, err = gzip.NewReader(r); err != nil {
 				return err
 			}
 		case "tbz2", "tar.bz2":
-			r = bzip2.NewReader(f)
+			r = bzip2.NewReader(r)
 		}
-		return extractTar(r, dstDir)
+		return extractTarTask(r, dstDir, t)
 	case "txz", "tar.xz":
 		// bsdtar（macOS/Linux 自带，Windows 10+ 的 System32 里也有）原生读 xz。
 		return runExtract(exec.Command("tar", "-xf", archive, "-C", dstDir))
@@ -270,7 +310,18 @@ func extractZip(archive, dstDir string) error {
 		return err
 	}
 	defer zr.Close()
+	t := archiveTaskFor(archive)
+	if t != nil {
+		var total int64
+		for _, f := range zr.File {
+			total += int64(f.UncompressedSize64)
+		}
+		t.reset(total)
+	}
 	for _, f := range zr.File {
+		if t.isCanceled() {
+			return errArchiveCanceled
+		}
 		target, err := safeMember(dstDir, f.Name)
 		if err != nil {
 			return err
@@ -287,14 +338,15 @@ func extractZip(archive, dstDir string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		if err := copyZipMember(f, target); err != nil {
+		t.setFile(f.Name)
+		if err := copyZipMember(f, target, t); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func copyZipMember(f *zip.File, target string) error {
+func copyZipMember(f *zip.File, target string, t *archiveTask) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -304,7 +356,7 @@ func copyZipMember(f *zip.File, target string) error {
 	if err != nil {
 		return err
 	}
-	_, copyErr := io.Copy(out, rc)
+	_, copyErr := io.Copy(out, withProgress(rc, t))
 	closeErr := out.Close()
 	if copyErr != nil {
 		return copyErr
@@ -317,9 +369,16 @@ func copyZipMember(f *zip.File, target string) error {
 
 // extractTar 解压 tar 流。目录与常规文件之外（符号链接、硬链接、设
 // 备等）的成员一律跳过，越出 dstDir 的路径拒绝。
-func extractTar(r io.Reader, dstDir string) error {
+func extractTar(r io.Reader, dstDir string) error { return extractTarTask(r, dstDir, nil) }
+
+// extractTarTask is extractTar naming each member on t; the bytes are
+// counted on the archive file under r.
+func extractTarTask(r io.Reader, dstDir string, t *archiveTask) error {
 	tr := tar.NewReader(r)
 	for {
+		if t.isCanceled() {
+			return errArchiveCanceled
+		}
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			return nil
@@ -343,6 +402,7 @@ func extractTar(r io.Reader, dstDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
+			t.setFile(h.Name)
 			out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, h.FileInfo().Mode().Perm())
 			if err != nil {
 				return err
@@ -386,12 +446,16 @@ func makeZip(dst string, entries []Entry) error {
 		return err
 	}
 	zw := zip.NewWriter(out)
+	t := archiveTaskFor(dst)
+	if t != nil && t.total.Load() <= 0 {
+		t.reset(entriesSize(entries))
+	}
 	var addErr error
 	for _, e := range entries {
 		if addErr != nil {
 			break
 		}
-		addErr = addTree(zw, e.Path, e.Name, e.IsDir)
+		addErr = addTree(zw, e.Path, e.Name, e.IsDir, t)
 	}
 	if addErr == nil {
 		addErr = zw.Close()
@@ -406,9 +470,9 @@ func makeZip(dst string, entries []Entry) error {
 }
 
 // addTree 把 path（prefix 为归档内路径名）写入 zw，目录递归。
-func addTree(zw *zip.Writer, path, prefix string, isDir bool) error {
+func addTree(zw *zip.Writer, path, prefix string, isDir bool, t *archiveTask) error {
 	if !isDir {
-		return addFile(zw, path, prefix)
+		return addFile(zw, path, prefix, t)
 	}
 	hdr := &zip.FileHeader{Name: prefix + "/", Method: zip.Deflate}
 	hdr.SetMode(0o755 | os.ModeDir)
@@ -442,11 +506,15 @@ func addTree(zw *zip.Writer, path, prefix string, isDir bool) error {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil // 跳过符号链接
 		}
-		return addFile(zw, p, name)
+		return addFile(zw, p, name, t)
 	})
 }
 
-func addFile(zw *zip.Writer, path, name string) error {
+func addFile(zw *zip.Writer, path, name string, t *archiveTask) error {
+	if t.isCanceled() {
+		return errArchiveCanceled
+	}
+	t.setFile(name)
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -462,8 +530,26 @@ func addFile(zw *zip.Writer, path, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(w, f)
+	_, err = io.Copy(w, withProgress(f, t))
 	return err
+}
+
+// entriesSize is the bytes makeZip will read: regular files, folders
+// walked, symlinks skipped.
+func entriesSize(entries []Entry) int64 {
+	var n int64
+	for _, e := range entries {
+		_ = filepath.WalkDir(e.Path, func(_ string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			if info, err := d.Info(); err == nil && info.Mode().IsRegular() {
+				n += info.Size()
+			}
+			return nil
+		})
+	}
+	return n
 }
 
 // uniqueFreeName 返回 dir 下不冲突的名字：优先原名，占用时按

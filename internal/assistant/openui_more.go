@@ -1,6 +1,9 @@
 package assistant
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // openui_more.go realizes the OPENUI-MORE components: Files (file rows with
 // icon, size and time), Steps (vertical status timeline), StatCards (metric
@@ -223,4 +226,44 @@ func openGallery(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 		title, _ = openText(env, t, stack)
 	}
 	return &OUIView{Kind: "gallery", Text: strings.TrimSpace(title), Items: items, Extra: openGalleryCols(env, e, stack)}
+}
+
+// openTaskProgress is TaskProgress(title, value?, meta?, file?, status?) or
+// {title, value, meta, file, status}: one compact task row. value is 0–1,
+// a percent (42 or "42%"), or empty for indeterminate (Min = -1). Text is
+// the title, Label the numbers line, Sub the current file or error, and
+// Variant the status (done|active|pending|error).
+func openTaskProgress(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIView {
+	m, ok := openMoreFields(env, e, stack, []string{"TaskProgress", "ArchiveProgress"},
+		[]string{"title", "value", "meta", "file", "status"}, map[string]string{
+			"title": "title", "label": "title", "name": "title",
+			"value": "value", "percent": "value", "progress": "value",
+			"meta": "meta", "detail": "meta", "speed": "meta",
+			"file": "file", "current": "file", "error": "file",
+			"status": "status", "state": "status",
+		})
+	if !ok || m["title"] == "" {
+		return nil
+	}
+	return &OUIView{Kind: "taskprogress", Text: OpenShort(m["title"], 80), Label: OpenShort(m["meta"], 80),
+		Sub: m["file"], Variant: OpenStepStatus(m["status"]), Min: OpenFraction(m["value"])}
+}
+
+// OpenFraction reads 0–1, 0–100 or "42%" as a fraction; empty or junk is -1.
+func OpenFraction(s string) float64 {
+	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "%"))
+	if s == "" {
+		return -1
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v < 0 {
+		return -1
+	}
+	if v > 1 {
+		v /= 100
+	}
+	if v > 1 {
+		v = 1
+	}
+	return v
 }

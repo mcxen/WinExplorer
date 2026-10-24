@@ -84,6 +84,8 @@ func (a *App) paintOpenMore(c *ui.Context, v *ouiView) {
 		a.paintOpenStats(c, v)
 	case "gallery":
 		a.paintOpenGallery(c, v)
+	case "taskprogress":
+		paintArchiveTaskCard(c, openTaskSnap(v))
 	}
 }
 

@@ -351,7 +351,12 @@ func (s *sunvaleTools) zipFiles(_ context.Context, _ *mcp.CallToolRequest, args 
 	if len(entries) == 0 {
 		return mcpErr(fmt.Errorf("没有要打包的项目")), nil, nil
 	}
-	if err := makeZip(dst, entries); err != nil {
+	t := startArchiveTask("compress", dst, "ai", entriesSize(entries))
+	archiveChanged()
+	err = makeZip(dst, entries)
+	t.finish(err)
+	if err != nil {
+		_ = os.Remove(dst)
 		return mcpErr(err), nil, nil
 	}
 	return mcpText("已压缩到 " + dst), nil, nil
@@ -382,7 +387,10 @@ func (s *sunvaleTools) unzip(_ context.Context, _ *mcp.CallToolRequest, args unz
 	}
 	passwords := archivePasswordCandidates(s.archivePasswordBook())
 	aiFx.markBusy(src)
+	t := startArchiveTask("extract", src, "ai", 0)
+	archiveChanged()
 	_, nested, err := extractArchiveNested(src, dst, passwords)
+	t.finish(err)
 	if err != nil {
 		_ = os.RemoveAll(dst)
 		return mcpErr(err), nil, nil

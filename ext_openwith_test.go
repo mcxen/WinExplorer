@@ -238,6 +238,29 @@ func TestAppDeclaredExtsBundle(t *testing.T) {
 	}
 }
 
+// TestOpenWithDefaultPersist covers the 始终使用 map in the state store:
+// recording, replacing, clearing, and reading back case-insensitively.
+func TestOpenWithDefaultPersist(t *testing.T) {
+	st := &persistedState{}
+	if got := st.openWithDefault("png"); got != "" {
+		t.Fatalf("empty store default = %q", got)
+	}
+	st.setOpenWithDefault("PNG", "Preview")
+	if got := st.openWithDefault("png"); got != "Preview" {
+		t.Fatalf("recorded default = %q", got)
+	}
+	// A replace lands; the lookup is case-insensitive both ways.
+	st.setOpenWithDefault("png", "Pixelmator")
+	if got := st.openWithDefault("PNG"); got != "Pixelmator" {
+		t.Fatalf("replaced default = %q", got)
+	}
+	// Clearing drops the entry and empties the map.
+	st.setOpenWithDefault("png", "")
+	if got := st.openWithDefaults(); len(got) != 0 {
+		t.Fatalf("defaults after clear = %v", got)
+	}
+}
+
 func TestQuickLookGating(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "we-ql")
 	defer os.RemoveAll(dir)

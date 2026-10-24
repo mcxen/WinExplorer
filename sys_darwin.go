@@ -248,22 +248,10 @@ func sysKnownFolders() map[string]string { return nil }
 
 func sysOpenWithScan() { scanOpenWithAppsMac() }
 
-func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
-	shown := 0
-	for _, app := range openWithApps(e.Ext) {
-		if shown >= 8 {
-			break
-		}
-		if m.Item(app).Chosen() {
-			if err := sysOpenWith(app, e.Path); err != nil {
-				a.statusMsg = "无法用 " + app + " 打开：" + err.Error()
-			}
-		}
-		shown++
-	}
-	if shown > 0 {
-		m.Separator()
-	}
+// sysOpenWithMenuTail is openWithMenu's macOS tail: a browse entry into
+// the Applications folder, for picking an app by hand when the registry
+// has not listed it.
+func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {
 	if m.Item("在 /Applications 中查看…").Chosen() {
 		a.navigate("/Applications")
 	}

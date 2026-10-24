@@ -50,6 +50,11 @@ type persistedState struct {
 	// read, so the model can be told what the user actually works with.
 	Freq map[string]pathFreq `json:"freq,omitempty"`
 
+	// OpenWith is the 打开方式 registry's user half (openwith.go): each
+	// extension mapped to the application 始终使用 picked for it, riding
+	// above the OS's own default. A nil map is no override anywhere.
+	OpenWith map[string]string `json:"openWith,omitempty"`
+
 	// path is the state file the store reads and writes, set by loadState
 	// and never serialized. A store built in memory — the tests' and the
 	// remote plugin's — has none and keeps its state in memory, instead
@@ -593,6 +598,56 @@ func (st *persistedState) shareAll() []remoteShare {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return append([]remoteShare(nil), st.Shares...)
+}
+
+// openWithDefault returns the application 始终使用 recorded for the
+// extension, empty when none is. Extensions are stored lower-case; a nil
+// map (a state file from before the field existed) reads as none.
+func (st *persistedState) openWithDefault(ext string) string {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.OpenWith[strings.ToLower(ext)]
+}
+
+// setOpenWithDefault records app as the extension's 打开方式 default, or
+// clears the record when app is empty — 去掉始终使用. Writing the same
+// value again skips the save, as setPlugin does.
+func (st *persistedState) setOpenWithDefault(ext, app string) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	ext = strings.ToLower(ext)
+	if st.OpenWith == nil {
+		if app == "" {
+			return
+		}
+		st.OpenWith = map[string]string{}
+	}
+	if app == "" {
+		if _, ok := st.OpenWith[ext]; !ok {
+			return
+		}
+		delete(st.OpenWith, ext)
+		if len(st.OpenWith) == 0 {
+			st.OpenWith = nil
+		}
+	} else if st.OpenWith[ext] == app {
+		return
+	} else {
+		st.OpenWith[ext] = app
+	}
+	st.saveLocked()
+}
+
+// openWithDefaults returns a copy of the recorded extension→app map, for
+// the settings dialog's 打开方式 section.
+func (st *persistedState) openWithDefaults() map[string]string {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	out := make(map[string]string, len(st.OpenWith))
+	for ext, app := range st.OpenWith {
+		out[ext] = app
+	}
+	return out
 }
 
 // shareSaveAll replaces the saved shares.

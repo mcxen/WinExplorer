@@ -10,12 +10,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
-// openwith.go is Explorer's 打开方式 (Open with) submenu: applications
-// that declare support for the file's extension in their Info.plist, run
-// with `open -a`. The registry is scanned once in the background at
-// startup; until it lands the submenu simply shows the default-open item.
+// openwith.go is Explorer's 打开方式 (Open with) submenu, built here in
+// platform-neutral code so every platform shows the same shape: the
+// 始终使用 default first, the apps claiming the extension next, then the
+// per-entry overrides. The registry scan is per platform
+// (sysOpenWithScan); launching a named app is sysOpenWith.
 
 // openWithRegistry maps extensions to the app names that claim them.
 type openWithRegistry struct {
@@ -41,6 +44,61 @@ func openWithApps(ext string) []string {
 	return nil
 }
 
+// openWithMenu is the 打开方式 submenu's whole body, shared by every
+// platform: the recorded 始终使用 app first (chosen opens, a leading item
+// marks it), the registry's apps next, then 始终使用 ▸ to record one and
+// the platform's chooser entry. a.store may be nil — the bare test app —
+// in which case no override is shown or recorded.
+func openWithMenu(a *App, m *ui.Menu, e Entry) {
+	ensureOpenWithScan()
+	shown := 0
+	var userDefault string
+	if a.store != nil {
+		userDefault = a.store.openWithDefault(e.Ext)
+		if userDefault != "" {
+			if m.Item("始终使用 " + userDefault).Chosen() {
+				if err := sysOpenWith(userDefault, e.Path); err != nil {
+					a.statusMsg = "无法用 " + userDefault + " 打开：" + err.Error()
+				}
+			}
+			shown++
+		}
+	}
+	for _, app := range openWithApps(e.Ext) {
+		if app == userDefault || shown >= 9 {
+			continue
+		}
+		if m.Item(app).Chosen() {
+			if err := sysOpenWith(app, e.Path); err != nil {
+				a.statusMsg = "无法用 " + app + " 打开：" + err.Error()
+			}
+		}
+		shown++
+	}
+	if a.store != nil && e.Ext != "" {
+		if shown > 0 {
+			m.Separator()
+		}
+		m.Submenu("始终使用…", func(n *ui.Menu) {
+			for _, app := range openWithApps(e.Ext) {
+				app := app
+				cur := a.store.openWithDefault(e.Ext) == app
+				if n.Item(app).Checked(cur).Chosen() {
+					a.store.setOpenWithDefault(e.Ext, app)
+					a.statusMsg = "以后 ." + e.Ext + " 文件将用 " + app + " 打开"
+				}
+			}
+			if a.store.openWithDefault(e.Ext) != "" {
+				if n.Item("去掉始终使用").Chosen() {
+					a.store.setOpenWithDefault(e.Ext, "")
+					a.statusMsg = "已去掉 ." + e.Ext + " 的默认应用"
+				}
+			}
+		})
+	}
+	sysOpenWithMenuTail(a, m, e)
+}
+
 // scanOpenWithApps walks the system and user Applications folders, asking
 // plutil for each app's Info.plist as XML, and collects the extensions its
 // document types claim. The plutil calls run eight at a time — a few
@@ -49,7 +107,8 @@ func openWithApps(ext string) []string {
 // within a second of launch even though the scan continues behind it.
 func scanOpenWithAppsMac() {
 	var bundles []string
-	for _, dir := range []string{"/Applications", "/System/Applications"} {
+	for _, dir := range []string{"/Applications", "/System/Applications",
+		os.Getenv("HOME") + "/Applications"} {
 		apps, err := os.ReadDir(dir)
 		if err != nil {
 			continue

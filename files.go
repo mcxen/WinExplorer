@@ -575,7 +575,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	}
 	if one && !sel[0].IsDir && !onSpecial {
 		m.Submenu("打开方式", func(n *ui.Menu) {
-			sysOpenWithMenu(a, n, sel[0])
+			openWithMenu(a, n, sel[0])
 		})
 	}
 	if one && !onSpecial {

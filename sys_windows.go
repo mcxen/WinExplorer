@@ -8,11 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 	"unsafe"
 
+	"golang.org/x/sys/windows/registry"
 	"sunvale/internal/fsops"
 
 	"github.com/egoist/mygo/ui"
@@ -188,11 +190,6 @@ func sysKnownFolders() map[string]string {
 
 func sysOpen(path string) error {
 	return exec.Command("rundll32", "url.dll,FileProtocolHandler", path).Start()
-}
-
-// sysOpenWith is not the Windows way: applications are not named.
-func sysOpenWith(app, path string) error {
-	return sysOpen(path)
 }
 
 // sysOpenAs opens the system's Open With dialog for the file.
@@ -495,16 +492,160 @@ func trashEmptyRoot(root string) error {
 	return nil
 }
 
-// The 打开方式 registry: Windows hands the choice to its own dialog.
+// The 打开方式 registry reads the registry's own OpenWithList entries for
+// the extension — the same names Explorer's menu offers — and launches
+// them by their EXE command line, since applications are not named here.
 
-func sysOpenWithScan() {}
+func sysOpenWithScan() { scanOpenWithAppsWindows() }
 
-func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
-	if m.Item("选择应用打开…").Chosen() {
+// sysOpenWithMenuTail is openWithMenu's Windows tail: the system's
+// Open-With dialog, which reaches every installed application.
+func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {
+	if m.Item("选择其他应用…").Chosen() {
 		if err := sysOpenAs(e.Path); err != nil {
 			a.statusMsg = "无法打开选择器：" + err.Error()
 		}
 	}
+}
+
+// scanOpenWithAppsWindows fills the 打开方式 registry from
+// HKCR\.ext\OpenWithList / OpenWithProgids: each key names the programs
+// Explorer itself would offer, and each ProgID's shell\open\command says
+// how to run it. Recorded per extension as the friendly command name —
+// the EXE's own, "notepad" for %SystemRoot%\system32\notepad.exe — since
+// sysOpenWith matches apps by that token.
+func scanOpenWithAppsWindows() {
+	r := &openWithRegistry{byExt: map[string][]string{}}
+	for _, ext := range registeredExtensions() {
+		apps := map[string]bool{}
+		for _, progid := range registrySubkeys(`SOFTWARE\Classes\.` + ext + `\OpenWithList`) {
+			for _, name := range registryValueNames(`SOFTWARE\Classes\.` + ext + `\OpenWithList\` + progid) {
+				// The subkey holds one unnamed value per alternate exe.
+				if name == "" {
+					if cmd := registryStringValue(`SOFTWARE\Classes\`+progid+`\shell\open\command`, ""); cmd != "" {
+						apps[commandToken(cmd)] = true
+					}
+				}
+			}
+			if cmd := registryStringValue(`SOFTWARE\Classes\`+progid+`\shell\open\command`, ""); cmd != "" {
+				apps[commandToken(cmd)] = true
+			}
+		}
+		for _, progid := range registryValueNames(`SOFTWARE\Classes\.` + ext + `\OpenWithProgids`) {
+			if cmd := registryStringValue(`SOFTWARE\Classes\`+progid+`\shell\open\command`, ""); cmd != "" {
+				apps[commandToken(cmd)] = true
+			}
+		}
+		delete(apps, "")
+		list := make([]string, 0, len(apps))
+		for app := range apps {
+			list = append(list, app)
+		}
+		slices.Sort(list)
+		r.byExt[ext] = list
+	}
+	openWith.Store(r)
+}
+
+// registeredExtensions lists the extensions HKCR's Classes tree holds an
+// OpenWithList or OpenWithProgids for.
+func registeredExtensions() []string {
+	var out []string
+	for _, ext := range registrySubkeys(`SOFTWARE\Classes\.`) {
+		if strings.HasPrefix(ext, ".") {
+			out = append(out, strings.TrimPrefix(ext, "."))
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// commandToken is the runnable name inside an open command: the last
+// path segment of the quoted or first bare word, lower-cased without its
+// .exe. sysOpenWith rebuilds a command from it, so this round-trips.
+func commandToken(cmd string) string {
+	cmd = strings.TrimSpace(cmd)
+	if rest, ok := strings.CutPrefix(cmd, `"`); ok {
+		cmd, _, _ = strings.Cut(rest, `"`)
+	} else {
+		cmd, _, _ = strings.Cut(cmd, " ")
+	}
+	base := strings.ToLower(filepath.Base(cmd))
+	return strings.TrimSuffix(base, ".exe")
+}
+
+// sysOpenWith launches app on the file the way Explorer's own menu does:
+// the recorded token is an executable name, run through the shell's
+// association so its arguments — "notepad %1" — still apply.
+func sysOpenWith(app, path string) error {
+	cmd := registryStringValue(`SOFTWARE\Classes\`+app+`\shell\open\command`, "")
+	if cmd == "" {
+		// Not a ProgID after all — a bare executable name; let the shell
+		// resolve it on PATH as notepad does.
+		return exec.Command("cmd", "/c", "start", "", app, path).Start()
+	}
+	if !strings.Contains(cmd, "%1") {
+		cmd += ` "%1"`
+	}
+	cmd = strings.ReplaceAll(cmd, "%1", path)
+	// Split respecting quotes: the first token is the program.
+	prog := cmd
+	rest := ""
+	if rest2, ok := strings.CutPrefix(cmd, `"`); ok {
+		prog, rest, _ = strings.Cut(rest2, `"`)
+	} else if i := strings.IndexByte(cmd, ' '); i >= 0 {
+		prog, rest = cmd[:i], cmd[i+1:]
+	}
+	args := []string{}
+	for _, f := range strings.Fields(rest) {
+		args = append(args, strings.Trim(f, `"`))
+	}
+	return exec.Command(prog, args...).Start()
+}
+
+// registrySubkeys lists a Classes-tree key's subkey names, empty when the
+// key is absent — the common case for the extensions a machine has no
+// open-with entries for.
+func registrySubkeys(path string) []string {
+	k, err := registry.OpenKey(registry.CLASSES_ROOT, path, registry.ENUMERATE_SUB_KEYS)
+	if err != nil {
+		return nil
+	}
+	defer k.Close()
+	names, err := k.ReadSubKeyNames(-1)
+	if err != nil {
+		return nil
+	}
+	return names
+}
+
+// registryValueNames lists a key's value names, empty when absent.
+func registryValueNames(path string) []string {
+	k, err := registry.OpenKey(registry.CLASSES_ROOT, path, registry.QUERY_VALUE)
+	if err != nil {
+		return nil
+	}
+	defer k.Close()
+	names, err := k.ReadValueNames(-1)
+	if err != nil {
+		return nil
+	}
+	return names
+}
+
+// registryStringValue reads a key's string value, empty when either is
+// missing.
+func registryStringValue(path, name string) string {
+	k, err := registry.OpenKey(registry.CLASSES_ROOT, path, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	v, _, err := k.GetStringValue(name)
+	if err != nil {
+		return ""
+	}
+	return v
 }
 
 // sysRootName is the root volume's name in the sidebar, the breadcrumb and

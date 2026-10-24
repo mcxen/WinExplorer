@@ -272,33 +272,26 @@ func sysKnownFolders() map[string]string { return nil }
 
 func sysOpenWithScan() { scanOpenWithAppsLinux() }
 
-func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
-	shown := 0
-	for _, app := range openWithApps(e.Ext) {
-		if shown >= 8 {
-			break
-		}
-		if m.Item(app).Chosen() {
-			if err := sysOpenWith(app, e.Path); err != nil {
-				a.statusMsg = "无法用 " + app + " 打开：" + err.Error()
-			}
-		}
-		shown++
-	}
-	if shown > 0 {
-		m.Separator()
-	}
+// sysOpenWithMenuTail is openWithMenu's Linux tail: a browse entry into
+// the applications folder, as macOS's points at /Applications.
+func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {
 	if m.Item("在应用文件夹中查看…").Chosen() {
 		a.navigate("/usr/share/applications")
 	}
 }
 
+// desktopApps maps .desktop file ids to their Name= entries over the
+// standard application folders.
+var desktopApps = func() map[string]string { return desktopAppsIn(appDesktopDirs) }
+
 // scanOpenWithAppsLinux fills the 打开方式 registry from the installed
-// applications' .desktop files: the MimeType lines name the patterns each
-// one opens, *.png and the like. One pass, published once.
+// applications' .desktop files: the MimeType lines name what each one
+// opens, as *.png patterns or image/png types, and the menu shows each
+// app's Name= rather than its file id. One pass, published once.
 func scanOpenWithAppsLinux() {
 	r := &openWithRegistry{byExt: map[string][]string{}}
-	for _, dir := range []string{"/usr/share/applications", "/usr/local/share/applications"} {
+	names := desktopApps()
+	for _, dir := range appDesktopDirs {
 		files, err := os.ReadDir(dir)
 		if err != nil {
 			continue
@@ -307,13 +300,19 @@ func scanOpenWithAppsLinux() {
 			if !strings.HasSuffix(f.Name(), ".desktop") {
 				continue
 			}
-			name := strings.TrimSuffix(f.Name(), ".desktop")
-			if strings.HasPrefix(name, "org.gnome.") || strings.HasPrefix(name, "gnome-") {
+			id := strings.TrimSuffix(f.Name(), ".desktop")
+			if strings.HasPrefix(id, "org.gnome.") || strings.HasPrefix(id, "gnome-") {
 				// GNOME's own tools are noise in a file menu.
 				continue
 			}
+			// The menu launches by id and shows by name; a file without
+			// Name= keeps the id, which still works for both.
+			app := id
+			if name, ok := names[id]; ok {
+				app = name
+			}
 			for _, ext := range desktopMimeExts(filepath.Join(dir, f.Name())) {
-				r.byExt[ext] = append(r.byExt[ext], name)
+				r.byExt[ext] = append(r.byExt[ext], app)
 			}
 		}
 	}

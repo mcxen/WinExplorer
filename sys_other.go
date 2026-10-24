@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -74,9 +73,9 @@ func sysKnownFolders() map[string]string { return nil }
 
 func sysOpenWithScan() {}
 
-func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {
-	_ = exec.Command // keep the import for platforms that grow support
-}
+// sysOpenWithMenuTail: no system chooser and no registry here, so the
+// shared menu simply ends without a tail.
+func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {}
 
 // sysRootName is the root volume's name in the sidebar, the breadcrumb and
 // This PC: the generic Unix root.

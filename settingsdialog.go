@@ -124,6 +124,7 @@ func (a *App) settingsCategories() []components.SettingsCategory {
 	return []components.SettingsCategory{
 		{ID: "appearance", Title: "外观", Icon: lucide.Palette(), Groups: a.settingsAppearanceGroups()},
 		{ID: "view", Title: "查看", Icon: lucide.LayoutList(), Groups: a.settingsViewGroups()},
+		{ID: "openwith", Title: "打开方式", Icon: lucide.ExternalLink(), Groups: a.settingsOpenWithGroups()},
 		{ID: "tray", Title: "托盘", Icon: lucide.HardDrive(), Groups: a.settingsTrayGroups()},
 		{ID: "extensions", Title: "扩展", Icon: lucide.Puzzle(), Groups: a.settingsExtensionGroups()},
 		{ID: "plugins", Title: "插件", Icon: lucide.Blocks(), Groups: a.settingsPluginGroups()},
@@ -246,6 +247,41 @@ func (a *App) settingsViewGroups() []components.SettingsGroup {
 			}),
 		}},
 	}
+}
+
+// settingsOpenWithGroups lists the 打开方式 defaults the user has recorded
+// (openwith.go's 始终使用), each with a delete button; an empty record
+// explains where the entries come from.
+func (a *App) settingsOpenWithGroups() []components.SettingsGroup {
+	defaults := a.store.openWithDefaults()
+	exts := make([]string, 0, len(defaults))
+	for ext := range defaults {
+		exts = append(exts, ext)
+	}
+	slices.Sort(exts)
+	items := make([]components.SettingsItem, 0, len(exts)+1)
+	if len(exts) == 0 {
+		items = append(items, components.SettingsItem{
+			ID:          "empty",
+			Title:       "还没有默认应用",
+			Description: "在文件的右键「打开方式 ▸ 始终使用…」里记录",
+		})
+	}
+	for _, ext := range exts {
+		app := defaults[ext]
+		items = append(items, components.SettingsItem{
+			ID:          "ow-" + ext,
+			Title:       "." + ext,
+			Description: "始终使用 " + app,
+			Content: func(c *ui.Context) {
+				if components.Button(c, "删除", components.ButtonSecondary).Clicked() {
+					a.store.setOpenWithDefault(ext, "")
+					a.statusMsg = "已去掉 ." + ext + " 的默认应用"
+				}
+			},
+		})
+	}
+	return []components.SettingsGroup{{ID: "defaults", Title: "始终使用", Items: items}}
 }
 
 func (a *App) settingsTrayGroups() []components.SettingsGroup {

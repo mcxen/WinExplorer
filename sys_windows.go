@@ -22,8 +22,8 @@ import (
 // dialog (shell32), Windows Terminal / cmd, drives through kernel32, and
 // the Recycle Bin's own $I/$R metadata — delete goes through
 // SHFileOperationW so the item lands in the system bin, and the menu
-// lists, restores and empties it by parsing the bin's files, all without
-// cgo.
+// lists, restores and empties it by parsing every volume's bin files,
+// all without cgo.
 
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
@@ -183,40 +183,60 @@ func sysAudioPlay(path string) (name string, args []string, dur time.Duration, o
 
 // — The Recycle Bin —
 
-// recycleRoot is where the system keeps every user's deleted items, each
-// as a $I metadata file beside its $R payload.
-const recycleRoot = `C:\$Recycle.Bin`
+// recycleRootName is the folder every volume keeps its own bin in, each
+// user's deleted items inside as a $I metadata file beside its $R payload.
+const recycleRootName = `$Recycle.Bin`
+
+// recycleRoots lists every mounted volume's bin — a file deleted from E:
+// lands in E:'s bin, never C:'s, so bin operations walk all of them.
+func recycleRoots() []string {
+	r, _, _ := procGetLogicalDrives.Call()
+	mask := uint32(r)
+	var roots []string
+	for i := 0; i < 26; i++ {
+		if mask&(1<<i) == 0 {
+			continue
+		}
+		root := string(rune('A'+i)) + `:\` + recycleRootName
+		if info, err := os.Stat(root); err == nil && info.IsDir() {
+			roots = append(roots, root)
+		}
+	}
+	return roots
+}
 
 // recycleIndex maps each bin item's original path to its $R payload.
 func recycleIndex() map[string]string {
 	out := map[string]string{}
-	sids, err := os.ReadDir(recycleRoot)
-	if err != nil {
-		return out
-	}
-	for _, sid := range sids {
-		if !sid.IsDir() {
-			continue
-		}
-		dir := filepath.Join(recycleRoot, sid.Name())
-		files, err := os.ReadDir(dir)
+	for _, root := range recycleRoots() {
+		sids, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
-		for _, f := range files {
-			if !strings.HasPrefix(f.Name(), "$I") {
+		for _, sid := range sids {
+			if !sid.IsDir() {
 				continue
 			}
-			meta, err := os.ReadFile(filepath.Join(dir, f.Name()))
+			dir := filepath.Join(root, sid.Name())
+			files, err := os.ReadDir(dir)
 			if err != nil {
 				continue
 			}
-			orig, ok := fsops.ParseRecycleInfo(meta)
-			if !ok || orig == "" {
-				continue
+			for _, f := range files {
+				if !strings.HasPrefix(f.Name(), "$I") {
+					continue
+				}
+				meta, err := os.ReadFile(filepath.Join(dir, f.Name()))
+				if err != nil {
+					continue
+				}
+				orig, ok := fsops.ParseRecycleInfo(meta)
+				if !ok || orig == "" {
+					continue
+				}
+				payload := filepath.Join(dir, "$R"+strings.TrimPrefix(f.Name(), "$I"))
+				out[strings.ToLower(orig)] = payload
 			}
-			payload := filepath.Join(dir, "$R"+strings.TrimPrefix(f.Name(), "$I"))
-			out[strings.ToLower(orig)] = payload
 		}
 	}
 	return out
@@ -224,10 +244,10 @@ func recycleIndex() map[string]string {
 
 // sysTrashDir is the bin's root, for callers that just need a place.
 func sysTrashDir() (string, error) {
-	if info, err := os.Stat(recycleRoot); err != nil || !info.IsDir() {
-		return "", fmt.Errorf("找不到回收站")
+	if roots := recycleRoots(); len(roots) > 0 {
+		return roots[0], nil
 	}
-	return recycleRoot, nil
+	return "", fmt.Errorf("找不到回收站")
 }
 
 // sysTrashMove sends path to the Recycle Bin with SHFileOperationW, then
@@ -253,10 +273,14 @@ func sysTrashMove(path string) (string, string, error) {
 // shellDelete moves path to the Recycle Bin, quietly.
 func shellDelete(path string) error {
 	// The list must end with two NULs, as the shell's string lists do.
-	from, err := syscall.UTF16FromString(path + "\x00")
+	// UTF16FromString rejects embedded NULs and appends the first one, so
+	// the second is appended here — composing path+"\x00" up front made
+	// every delete fail with EINVAL before the shell was ever called.
+	from, err := syscall.UTF16FromString(path)
 	if err != nil {
 		return err
 	}
+	from = append(from, 0)
 	op := shFileOpStruct{
 		wFunc: 3, // FO_DELETE
 		pFrom: &from[0],
@@ -286,10 +310,19 @@ type shFileOpStruct struct {
 	lpszProgressTitle     *uint16
 }
 
-// sysTrashList enumerates the bin across its SID folders, showing each
-// item under its original name.
+// sysTrashList enumerates the bins of every volume, showing each item
+// under its original name.
 func sysTrashList() []Entry {
-	sids, err := os.ReadDir(recycleRoot)
+	var entries []Entry
+	for _, root := range recycleRoots() {
+		entries = append(entries, trashListRoot(root)...)
+	}
+	return entries
+}
+
+// trashListRoot lists one volume's bin across its SID folders.
+func trashListRoot(root string) []Entry {
+	sids, err := os.ReadDir(root)
 	if err != nil {
 		return nil
 	}
@@ -298,7 +331,7 @@ func sysTrashList() []Entry {
 		if !sid.IsDir() {
 			continue
 		}
-		dir := filepath.Join(recycleRoot, sid.Name())
+		dir := filepath.Join(root, sid.Name())
 		files, err := os.ReadDir(dir)
 		if err != nil {
 			continue
@@ -361,9 +394,19 @@ func sysTrashRemove(payload string) error {
 	return nil
 }
 
-// sysTrashEmpty clears every SID folder of the bin.
+// sysTrashEmpty clears every volume's bin.
 func sysTrashEmpty() error {
-	sids, err := os.ReadDir(recycleRoot)
+	for _, root := range recycleRoots() {
+		if err := trashEmptyRoot(root); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// trashEmptyRoot clears one volume's bin of its SID folders.
+func trashEmptyRoot(root string) error {
+	sids, err := os.ReadDir(root)
 	if err != nil {
 		return err
 	}
@@ -371,7 +414,7 @@ func sysTrashEmpty() error {
 		if !sid.IsDir() {
 			continue
 		}
-		dir := filepath.Join(recycleRoot, sid.Name())
+		dir := filepath.Join(root, sid.Name())
 		files, err := os.ReadDir(dir)
 		if err != nil {
 			continue

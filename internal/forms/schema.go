@@ -28,6 +28,16 @@ const (
 	KindList        = "list"
 	KindImage       = "image"
 	KindVideo       = "video"
+
+	// Presentation kinds (OPENUI4): they paint inside a Form's field list but
+	// are not editable fields.
+	KindNote     = "note"
+	KindBadge    = "badge"
+	KindKeyValue = "keyvalue"
+	KindRating   = "rating"
+	KindChart    = "chart"
+	KindDonut    = "donut"
+	KindAccord   = "accordion"
 )
 
 // PathMode selects what a path field's browse button opens.
@@ -51,10 +61,21 @@ type Field struct {
 	PathMode    string   `json:"path_mode,omitempty"` // path: folder|file; list: single|multi
 	Description string   `json:"description,omitempty"`
 	// Min/Max/Step drive slider (and optional progress scale). Zero Max
-	// means the painter picks a default (0–100 for slider, 0–1 for progress).
+	// means the painter picks a default (0–100 for slider, 0–1 for progress);
+	// rating uses Max as its star count.
 	Min  float64 `json:"min,omitempty"`
 	Max  float64 `json:"max,omitempty"`
 	Step float64 `json:"step,omitempty"`
+	// Tone tints the presentation kinds (note, badge, keyvalue): info,
+	// success, warning or danger. Empty paints neutral.
+	Tone string `json:"tone,omitempty"`
+}
+
+// ChartSeries is one series of a chart field: values align with the chart's
+// labels, or stand alone as a donut slice's value.
+type ChartSeries struct {
+	Label  string
+	Values []float64
 }
 
 // Action is a submit button. Message is what the assistant receives
@@ -108,7 +129,17 @@ func (f *Form) Normalize() {
 		field.Placeholder = strings.TrimSpace(field.Placeholder)
 		field.Pattern = strings.TrimSpace(field.Pattern)
 		field.PathMode = strings.TrimSpace(field.PathMode)
-		if field.ID == "" || field.Kind == "" {
+		field.Tone = strings.ToLower(strings.TrimSpace(field.Tone))
+		if field.ID == "" {
+			// Presentation kinds (badge, note, chart…) carry their content in
+			// Value/Label/Options, so an id is synthesized only for them —
+			// never a hard requirement as it is for editable fields.
+			if !isPresentationKind(field.Kind) {
+				continue
+			}
+			field.ID = field.Kind
+		}
+		if field.Kind == "" {
 			continue
 		}
 		if field.Label == "" {
@@ -185,8 +216,33 @@ func normalizeKind(k string) string {
 		return KindImage
 	case KindVideo, "movie", "clip":
 		return KindVideo
+	case KindNote, "callout", "alert":
+		return KindNote
+	case KindBadge, "pill":
+		return KindBadge
+	case KindKeyValue, "kv", "stat":
+		return KindKeyValue
+	case KindRating, "stars", "star":
+		return KindRating
+	case KindChart, "bar_chart":
+		return KindChart
+	case KindDonut, "donut_chart", "pie":
+		return KindDonut
+	case KindAccord, "accordion_panel", "disclosure":
+		return KindAccord
 	default:
 		return ""
+	}
+}
+
+// isPresentationKind reports a field that paints but is not filled in: the
+// OPENUI4 display components that may appear inside a Form's field list.
+func isPresentationKind(kind string) bool {
+	switch kind {
+	case KindNote, KindBadge, KindKeyValue, KindChart, KindDonut, KindAccord:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -220,5 +276,6 @@ func KnownKinds() []string {
 		KindSelect, KindMultiSelect, KindSwitch, KindTime, KindDate, KindDays,
 		KindSegmented, KindFileTypes, KindTags, KindSlider, KindProgress, KindTableSelect,
 		KindList, KindImage, KindVideo,
+		KindNote, KindBadge, KindKeyValue, KindRating, KindChart, KindDonut, KindAccord,
 	}
 }

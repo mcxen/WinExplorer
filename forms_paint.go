@@ -65,6 +65,8 @@ func (a *App) paintFormField(c *ui.Context, kind, label string, value *string, o
 			a.paintFormSlider(c, value, opts)
 		case forms.KindProgress:
 			a.paintFormProgress(c, value, opts)
+		case forms.KindRating:
+			a.paintFormRating(c, value, opts)
 		case forms.KindPath:
 			a.paintFormPath(c, value, opts)
 		case forms.KindTextArea:
@@ -380,6 +382,36 @@ func (a *App) paintFormProgress(c *ui.Context, value *string, opts formFieldOpts
 	ui.Column(c).FillWidth().Gap(4).Children(func() {
 		components.Progress(c, frac).FillWidth().Height(6)
 		ui.Text(c, strconv.Itoa(int(frac*100+0.5))+"%").FontSize(11).TextColor(colorMuted())
+	})
+}
+
+// paintFormRating draws RatingField on Onevra's star control: 1–Max stars,
+// the chosen count written into the form's message as a number string.
+func (a *App) paintFormRating(c *ui.Context, value *string, opts formFieldOpts) {
+	max := int(opts.Max)
+	if max < 1 {
+		max = 5
+	}
+	if max > 10 {
+		max = 10
+	}
+	n := int(parseFloatString(*value, 0))
+	if n < 0 {
+		n = 0
+	}
+	if n > max {
+		n = max
+	}
+	row := ui.Row(c).Gap(6).AlignItems(ui.Center)
+	if opts.Locked {
+		row.Disabled(true)
+	}
+	row.Children(func() {
+		r := components.Rating(c, &n, max)
+		if r.Changed() && !opts.Locked {
+			*value = strconv.Itoa(n)
+		}
+		ui.Text(c, itoa(n)+" / "+itoa(max)).FontSize(11).TextColor(colorMuted())
 	})
 }
 

@@ -67,6 +67,25 @@ type OUIView struct {
 	// Min/Max are slider bounds (ProgressBar ignores them).
 	Min float64
 	Max float64
+
+	// Tone tints the painted component (Note, Badge): info, success, warning
+	// or danger. Tone-less paints the neutral surface.
+	Tone string
+	// Icon is a named lucide glyph (Badge, Note). Empty means none.
+	Icon string
+	// Series is one Chart line or DonutChart slice group: label plus values.
+	Series []OUISeries
+	// Open is an Accordion item's initial disclosure state.
+	Open bool
+}
+
+// OUISeries is one named series of a chart: the label shown in the legend,
+// the values aligned by index with the chart's labels, and DonutChart's
+// single value (the first). Colors come from the painter's palette, so a
+// program never carries them.
+type OUISeries struct {
+	Label  string
+	Values []float64
 }
 
 // OUICol is one Table column. Cells line up by index with the other columns.
@@ -629,11 +648,19 @@ func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 	case "FormControl":
 		label, _ := openText(env, openArg(e.args, 0), stack)
 		field := realizeOpen(env, openArg(e.args, 1), stack)
-		if field == nil || !OpenIsField(field.Kind) {
+		if field == nil {
 			return nil
 		}
-		field.Label = strings.TrimSpace(label)
-		return field
+		if OpenIsField(field.Kind) {
+			field.Label = strings.TrimSpace(label)
+			return field
+		}
+		// A presentation component keeps its own shape; the control's label
+		// only names it above, the way a field's does.
+		return &OUIView{Kind: "stack", Children: []*OUIView{
+			{Kind: "text", Text: strings.TrimSpace(label), Size: "small"},
+			field,
+		}}
 	case "Input", "TextArea":
 		return openInputField(env, e, stack)
 	case "Number":
@@ -670,6 +697,34 @@ func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 		return openMediaField(env, e, stack, "image")
 	case "VideoField", "Video":
 		return openMediaField(env, e, stack, "video")
+	case "Note", "Callout":
+		return openNote(env, e, stack)
+	case "Badge", "Tag":
+		return openBadge(env, e, stack)
+	case "KeyValue", "KV", "Stat":
+		return openKeyValue(env, e, stack)
+	case "RatingField", "Rating":
+		return openRatingField(env, e, stack)
+	case "Chart":
+		return openChart(env, e, stack)
+	case "DonutChart", "Donut":
+		return openDonutChart(env, e, stack)
+	case "Accordion":
+		return openAccordion(env, e, stack)
+	case "AccordionItem":
+		return openAccordionItem(env, e, stack)
+	case "Divider":
+		return &OUIView{Kind: "divider"}
+	case "SectionHeader":
+		// The model sometimes reaches for a second header shape under a
+		// different name; drawing it as a header keeps the reply in the
+		// card's rhythm instead of failing the statement.
+		title, _ := openText(env, openArg(e.args, 0), stack)
+		sub, _ := openText(env, openArg(e.args, 1), stack)
+		if strings.TrimSpace(title) == "" {
+			return nil
+		}
+		return &OUIView{Kind: "header", Text: strings.TrimSpace(title), Sub: strings.TrimSpace(sub)}
 	default:
 		return nil
 	}
@@ -729,7 +784,7 @@ func OpenIsField(kind string) bool {
 	switch kind {
 	case "input", "select", "number", "path", "time", "date", "days", "switch", "segmented",
 		"multi_select", "filetypes", "tags", "slider", "progress", "table_select",
-		"list", "image", "video":
+		"list", "image", "video", "rating":
 		return true
 	default:
 		return false

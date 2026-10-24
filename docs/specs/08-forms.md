@@ -66,3 +66,25 @@
 `present_form` 预设追加：`filelist` | `image` | `video`（`internal/forms/scenes.go`）。
 
 截图：`docs/assets/shots/OPENUI-MEDIA/`。
+
+## OPENUI4 — 展示组件（数据看板）
+
+回复不再只有表单与表格：新增一组展示组件，磁盘、空间、统计类回复直接画成看板。
+
+| 组件 | OpenUI 写法 | 绘制 |
+| --- | --- | --- |
+| `Note` | `Note(text, tone?, icon?)`，tone 为 `info`/`success`/`warning`/`danger` | Onevra 提示条：色调左边条 + 图标（tone 未指定图标时自动选）；icon 取白名单 lucide 名（约 35 个），不认识的名字丢弃而非丢组件 |
+| `Badge` | `Badge(text, tone?)` | Onevra Badge 胶囊，状态用 |
+| `KeyValue` | `KeyValue(label, value, tone?)` | 一行摘要：左灰标签、右加重值（可着色） |
+| `Chart` | `Chart(labels, [Series(name, [v…])…])`，也接受 `{labels: […], series: [{label, values}]}` | Onevra chart.Bar，PlotHeight 140，最多 4 系列 / 60 类目，选择状态按卡片键存在 `assistOpenState.charts` |
+| `DonutChart` | `DonutChart([Series(name, [v])…])` | chart.Donut（128 高）+ 自绘数值图例（色点、值、百分比），比例制：百分比或绝对数都直接可用 |
+| `Accordion` | `Accordion([AccordionItem(title, children?, open?)])` | Onevra Accordion；首项默认展开，`open` 可指定；折叠状态记在 `assistOpenState.planNo` |
+| `RatingField` | `RatingField(name, label?, max?, "required"?)` | Onevra Rating 星级（1–max，max 默认 5 上限 10），值以数字字符串进表单消息；`rating` 加入 `OpenIsField` |
+| `Divider` | `Divider()` | 一条分隔线 |
+
+规则与实现：
+
+- `FormControl` 现在也接受展示组件：字段保持原样，展示组件前垫一行小字标题（`internal/assistant/openui.go`）；`present_form` 的 ToOpenUI 把每个字段都包在 FormControl 里，两条路由此合一。
+- `internal/forms` 新 kind：`note`/`badge`/`keyvalue`/`rating`/`chart`/`donut`/`accordion`（`Field.Tone` 着色；图表数据用 `Options` 里的 `「标签: v1, v2」` 行表示系列，见 `chartFieldData`）。展示类 kind 不要求 `id`，也不进提交消息。
+- 演示场景 `disk`（磁盘概览看板）：Badge 健康 + KeyValue 容量 + Chart 近三月 + DonutChart 构成 + Note 建议 + Accordion SMART + RatingField 打分；`SUNVALE_OPENUI_DEMO=1` 说「磁盘 / 看板 / 概览」或斜杠 `/表单-磁盘概览看板` 注入。
+- 系统提示词列出全部新组件与看板优先规则；颜色始终由绘制层从主题 token 取（`openToneColor` + `openChartPalette`），程序里不携带颜色。

@@ -15,6 +15,7 @@ const (
 	SceneFileList = "filelist"
 	SceneImage    = "image"
 	SceneVideo    = "video"
+	SceneDisk     = "disk"
 )
 
 // SceneNames is the ordered demo catalog (Chinese labels for slash / docs).
@@ -29,6 +30,7 @@ func SceneNames() []struct{ ID, Label, Detail string } {
 		{SceneFileList, "批量文件清单", "可勾选列表：文件名/大小/缩略图"},
 		{SceneImage, "图片预览确认", "表单内嵌图片缩放预览"},
 		{SceneVideo, "视频关键帧预览", "关键帧 + 系统打开播放"},
+		{SceneDisk, "磁盘概览看板", "图表 / 占比 / 提示条 / 键值行 / 折叠面板"},
 	}
 }
 
@@ -204,8 +206,36 @@ func Scene(id string, prefill map[string]string) (Form, bool) {
 				{ID: "note", Kind: KindTextArea, Label: "备注", Placeholder: "给剪辑或归档留一句说明", Value: get("note", "")},
 			},
 			Actions: []Action{
-				{ID: "archive", Label: "归档此片段", Variant: "primary", Message: "归档所选视频片段"},
+				{ID: "archive", Label: "归档此片段", Variant: "primary", Message: "按表单归档所选视频片段"},
 				{ID: "cancel", Label: "取消", Variant: "secondary", Message: "取消视频预览"},
+			},
+		}, true
+	case SceneDisk, "磁盘概览", "disk_overview", "dashboard":
+		// A read-only dashboard exercising every presentation component; the
+		// demo has no live disk to poll, so the figures are samples.
+		return Form{
+			ID:          "disk_overview",
+			Title:       "磁盘概览",
+			Description: "示例数据：空间、构成与健康状态一屏读完。",
+			Fields: []Field{
+				{ID: "state", Kind: KindBadge, Value: "健康", Tone: "success"},
+				{ID: "total", Kind: KindKeyValue, Label: "总容量", Value: "1 TB"},
+				{ID: "free", Kind: KindKeyValue, Label: "可用空间", Value: "312 GB", Tone: "info"},
+				{ID: "months", Kind: KindChart, Label: "近三月占用", Options: []string{
+					"8月", "9月", "10月",
+					"已用GB: 610, 655, 688",
+					"新增GB: 24, 45, 33",
+				}},
+				{ID: "mix", Kind: KindDonut, Label: "空间构成", Options: []string{
+					"文档: 210", "图片: 168", "视频: 96", "压缩包: 64", "其他: 50",
+				}},
+				{ID: "tip", Kind: KindNote, Value: "图片近一月新增最多，可先整理「图片/截图」再备份。", Tone: "info"},
+				{ID: "health", Kind: KindAccord, Label: "健康详情", Options: []string{"SMART 概况", "温度与通电"}},
+				{ID: "score", Kind: KindRating, Label: "本次整理效果打分", Max: 5},
+			},
+			Actions: []Action{
+				{ID: "plan", Label: "生成分配方案", Variant: "primary", Message: "按磁盘概览生成分配方案"},
+				{ID: "later", Label: "稍后再说", Variant: "secondary", Message: "稍后再看磁盘概览"},
 			},
 		}, true
 	default:
@@ -217,6 +247,6 @@ func Scene(id string, prefill map[string]string) (Form, bool) {
 func ScenePresetIDs() []string {
 	return []string{
 		SceneSchedule, SceneRename, SceneShare, SceneSearch, SceneClassify, SceneBackup,
-		SceneFileList, SceneImage, SceneVideo,
+		SceneFileList, SceneImage, SceneVideo, SceneDisk,
 	}
 }

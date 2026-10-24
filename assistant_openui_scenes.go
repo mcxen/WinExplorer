@@ -98,6 +98,9 @@ func openUIDemoMatch(text string) string {
 		return forms.SceneImage
 	case strings.Contains(text, "视频") || strings.Contains(text, "video") || strings.Contains(text, "关键帧"):
 		return forms.SceneVideo
+	case strings.Contains(text, "磁盘") || strings.Contains(text, "看板") || strings.Contains(text, "disk") ||
+		strings.Contains(text, "概览") || strings.Contains(text, "dashboard"):
+		return forms.SceneDisk
 	}
 	return ""
 }

@@ -86,7 +86,16 @@ SwitchField(name, label?)：开关。
 Segmented(name, options)：分段选择（如移动/复制）。
 MultiSelect(name, options, placeholder?)：多选开关组。
 Select(name, options, placeholder?)：下拉，options 是字符串数组。
-需要用户补路径、时间、开关等结构化字段时：调用 present_form（fields_json 或 preset=schedule|rename|share|search|classify|backup|filelist|image|video），或直接在回复里写 OpenUI Form；不要只口头追问。present_form 调用后立刻停止，等用户提交。
+Note(text, tone?, icon?)：提示条。tone 用 info、success、warning 或 danger；icon 可省（按 tone 自动选），可用名有 info、lightbulb、sparkles、check、circlecheck、circlealert、trianglealert、circlex、ban、clock、star、tag、tags、folder、file、filetext、image、video、music、archive、harddrive、gauge、activity、zap、shieldcheck、shieldalert、chartpie、chartcolumn、chartline、layers、dot、pin、quote。
+Badge(text, tone?)：徽标胶囊，用于状态（如「健康」「已加密」）。
+KeyValue(label, value, tone?)：一行摘要，左名称右值。
+Chart(labels, series)：柱状图，最多 4 个系列。series 每项 Series("名称", [数值…])，labels 是类目名。
+DonutChart(slices)：环图占比。slices 每项 Series("名称", [数值])，数值按比例显示。
+Accordion(items)：折叠面板。items 每项 AccordionItem("标题", children?, open?)，children 是数组，open 为 true 时默认展开。
+RatingField(name, label?, max?, "required"?)：1–max 星评分，值写入数字字符串。
+Divider()：分隔线。
+数据看板（磁盘、空间、统计类回复）优先用 KeyValue + Badge + Chart / DonutChart + Note 组合，而不是长段文字。
+需要用户补路径、时间、开关等结构化字段时：调用 present_form（fields_json 或 preset=schedule|rename|share|search|classify|backup|filelist|image|video|disk），或直接在回复里写 OpenUI Form；不要只口头追问。present_form 调用后立刻停止，等用户提交。
 一块卡片只回答一次：用户按下任一按钮后整块锁定。不要写 Query、Mutation、$变量、图表，或上面没有的组件。普通说明不要放进围栏。要用户勾选几种做法时仍调用 offer_choices，不要改成按钮。按钮不会改文件，只会把那句话交给下一轮。
 示例：
 ` + "```openui\n" + `root = Stack([card])

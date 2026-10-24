@@ -2,6 +2,7 @@ package forms
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -122,9 +123,132 @@ func fieldOpenUI(ref string, field Field) string {
 			src = field.Placeholder
 		}
 		return fmt.Sprintf("%s = VideoField(%q, %q)\n", ref, field.ID, src)
+	case KindNote:
+		tone := field.Tone
+		if tone == "" {
+			tone = "info"
+		}
+		src := field.Value
+		if src == "" {
+			src = field.Placeholder
+		}
+		return fmt.Sprintf("%s = Note(%q, %q)\n", ref, src, tone)
+	case KindBadge:
+		src := field.Value
+		if src == "" {
+			src = field.Placeholder
+		}
+		if field.Tone != "" {
+			return fmt.Sprintf("%s = Badge(%q, %q)\n", ref, src, field.Tone)
+		}
+		return fmt.Sprintf("%s = Badge(%q)\n", ref, src)
+	case KindKeyValue:
+		val := field.Value
+		if val == "" {
+			val = field.Placeholder
+		}
+		if field.Tone != "" {
+			return fmt.Sprintf("%s = KeyValue(%q, %q, %q)\n", ref, field.Label, val, field.Tone)
+		}
+		return fmt.Sprintf("%s = KeyValue(%q, %q)\n", ref, field.Label, val)
+	case KindRating:
+		max := field.Max
+		if max == 0 {
+			max = 5
+		}
+		return fmt.Sprintf("%s = RatingField(%q, %q, %g%s)\n", ref, field.ID, field.Label, max, req)
+	case KindChart:
+		labels, series := chartFieldData(field)
+		return fmt.Sprintf("%s = Chart([%s], [%s])\n", ref, quoteList(labels), seriesOpenUI(series))
+	case KindDonut:
+		_, series := chartFieldData(field)
+		parts := make([]string, 0, len(series))
+		for _, s := range series {
+			v := 0.0
+			if len(s.Values) > 0 {
+				v = s.Values[0]
+			}
+			parts = append(parts, fmt.Sprintf("Series(%q, [%g])", s.Label, v))
+		}
+		return fmt.Sprintf("%s = DonutChart([%s])\n", ref, strings.Join(parts, ", "))
+	case KindAccord:
+		items := make([]string, 0, len(field.Options))
+		for _, opt := range field.Options {
+			items = append(items, fmt.Sprintf("AccordionItem(%q)", opt))
+		}
+		return fmt.Sprintf("%s = Accordion([%s])\n", ref, strings.Join(items, ", "))
 	default:
 		return fmt.Sprintf("%s = Input(%q, %q, \"text\"%s)\n", ref, field.ID, ph, req)
 	}
+}
+
+// chartFieldData reads a chart field's data: labels from Options, series
+// values from the "标签: v1, v2" lines of SeriesLabels, or one nameless
+// series from a plain comma list of numbers.
+func chartFieldData(field Field) ([]string, []ChartSeries) {
+	var labels []string
+	var series []ChartSeries
+	for _, opt := range field.Options {
+		if label, vals, ok := splitSeriesLine(opt); ok {
+			series = append(series, ChartSeries{Label: label, Values: vals})
+			continue
+		}
+		labels = append(labels, opt)
+	}
+	if len(series) == 0 && len(labels) > 0 {
+		var vals []float64
+		for _, l := range labels {
+			if v, err := strconv.ParseFloat(strings.TrimSpace(l), 64); err == nil {
+				vals = append(vals, v)
+			}
+		}
+		if len(vals) == len(labels) {
+			return nil, []ChartSeries{{Values: vals}}
+		}
+	}
+	return labels, series
+}
+
+// splitSeriesLine reads "标签: 1, 2, 3" (ASCII or full-width colon) into one
+// series; a trailing percent on the first number is dropped (DonutChart takes
+// proportions as they come).
+func splitSeriesLine(s string) (string, []float64, bool) {
+	label, rest, found := strings.Cut(s, ":")
+	if !found {
+		label, rest, found = strings.Cut(s, "：")
+	}
+	if !found {
+		return "", nil, false
+	}
+	var vals []float64
+	for _, part := range strings.Split(rest, ",") {
+		part = strings.TrimSuffix(strings.TrimSpace(part), "%")
+		if part == "" {
+			continue
+		}
+		v, err := strconv.ParseFloat(part, 64)
+		if err != nil {
+			return "", nil, false
+		}
+		vals = append(vals, v)
+	}
+	if len(vals) == 0 {
+		return "", nil, false
+	}
+	return strings.TrimSpace(label), vals, true
+}
+
+// seriesOpenUI emits one series as Series(label, [values]).
+func seriesOpenUI(series []ChartSeries) string {
+	parts := make([]string, 0, len(series))
+	for _, s := range series {
+		vals := make([]string, 0, len(s.Values))
+		for _, v := range s.Values {
+			vals = append(vals, strconv.FormatFloat(v, 'g', -1, 64))
+		}
+		parts = append(parts, fmt.Sprintf("Series(%q, [%s])", s.Label, strings.Join(vals, ", ")))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func quoteList(opts []string) string {

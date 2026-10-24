@@ -1,10 +1,12 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/components/chart"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
@@ -24,6 +26,8 @@ type assistOpenState struct {
 	custom  map[int]*string
 	planNo  map[string]bool
 	tree    map[string]bool
+	// charts keeps each chart's selection by card key and kind.
+	charts map[string]*chart.State
 	// keys are the Alt+number shortcuts of the latest card still open,
 	// gathered as the transcript builds.
 	keys []openShortcut
@@ -230,11 +234,305 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 		p.form = outer
 	case "input", "select", "number", "path", "time", "date", "days", "switch", "segmented",
 		"multi_select", "filetypes", "tags", "slider", "progress", "table_select",
-		"list", "image", "video":
+		"list", "image", "video", "rating":
 		a.paintOpenField(c, v, p)
 	case "button":
 		a.paintOpenButton(c, v, p)
+	case "note", "badge", "keyvalue", "chart", "donut", "accordion", "divider":
+		a.paintOpenExtra(c, v, p, depth)
 	}
+}
+
+// paintOpenExtra draws the OPENUI4 presentation components. They are laid
+// out by the same stack the fields use, so a card mixes them freely.
+func (a *App) paintOpenExtra(c *ui.Context, v *ouiView, p *openPaint, depth int) {
+	if v == nil {
+		return
+	}
+	switch v.Kind {
+	case "note":
+		a.paintOpenNote(c, v)
+	case "badge":
+		components.Badge(c, v.Text)
+	case "keyvalue":
+		a.paintOpenKeyValue(c, v)
+	case "chart":
+		a.paintOpenChart(c, v, p)
+	case "donut":
+		a.paintOpenDonut(c, v, p)
+	case "accordion":
+		a.paintOpenAccordion(c, v, p, depth)
+	case "divider":
+		ui.Box(c).FillWidth().Height(1).Background(colorDivider())
+	}
+}
+
+// openToneColor is the theme color a tone names; neutral answers the muted
+// token, which notes and key values paint with.
+func openToneColor(tone string) ui.Color {
+	switch tone {
+	case "success":
+		return tokSuccess
+	case "warning":
+		return tokWarning
+	case "danger":
+		return tokDanger
+	case "info":
+		return colorAccent()
+	default:
+		return colorMuted()
+	}
+}
+
+// openToneIcon is the glyph a tone implies when the program named none.
+func openToneIcon(tone string) *ui.SVG {
+	switch tone {
+	case "success":
+		return lucide.CircleCheck()
+	case "warning":
+		return lucide.TriangleAlert()
+	case "danger":
+		return lucide.CircleAlert()
+	case "info":
+		return lucide.Info()
+	default:
+		return nil
+	}
+}
+
+// openNamedIcon draws one of the supported lucide glyphs by its OpenUI name.
+// Returns false for a name outside the set (or none).
+func openNamedIcon(c *ui.Context, name, tone string, w, h float32) bool {
+	var svg *ui.SVG
+	switch name {
+	case "info":
+		svg = lucide.Info()
+	case "lightbulb":
+		svg = lucide.Lightbulb()
+	case "sparkles":
+		svg = lucide.Sparkles()
+	case "circlecheck":
+		svg = lucide.CircleCheck()
+	case "circlealert":
+		svg = lucide.CircleAlert()
+	case "trianglealert":
+		svg = lucide.TriangleAlert()
+	case "circlex":
+		svg = lucide.CircleX()
+	case "ban":
+		svg = lucide.Ban()
+	case "check":
+		svg = lucide.Check()
+	case "clock":
+		svg = lucide.Clock()
+	case "star":
+		svg = lucide.Star()
+	case "tag":
+		svg = lucide.Tag()
+	case "tags":
+		svg = lucide.Tags()
+	case "folder":
+		svg = lucide.Folder()
+	case "file":
+		svg = lucide.File()
+	case "filetext":
+		svg = lucide.FileText()
+	case "image":
+		svg = lucide.Image()
+	case "video":
+		svg = lucide.Video()
+	case "music":
+		svg = lucide.Music()
+	case "archive":
+		svg = lucide.Archive()
+	case "harddrive":
+		svg = lucide.HardDrive()
+	case "gauge":
+		svg = lucide.Gauge()
+	case "activity":
+		svg = lucide.Activity()
+	case "zap":
+		svg = lucide.Zap()
+	case "shieldcheck":
+		svg = lucide.ShieldCheck()
+	case "shieldalert":
+		svg = lucide.ShieldAlert()
+	case "chartpie":
+		svg = lucide.ChartPie()
+	case "chartcolumn":
+		svg = lucide.ChartColumn()
+	case "chartline":
+		svg = lucide.ChartLine()
+	case "layers":
+		svg = lucide.Layers()
+	case "dot":
+		svg = lucide.Dot()
+	case "pin":
+		svg = lucide.Pin()
+	case "quote":
+		svg = lucide.Quote()
+	default:
+		return false
+	}
+	components.Icon(c, svg).Size(w, h).TextColor(openToneColor(tone))
+	return true
+}
+
+// paintOpenNote draws a callout strip: a tinted icon (the tone's own when the
+// program named none), the text, and a hairline colored by the same tone.
+func (a *App) paintOpenNote(c *ui.Context, v *ouiView) {
+	tint := openToneColor(v.Tone)
+	if v.Tone == "" {
+		tint = colorAccent()
+	}
+	ui.Row(c).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Padding(8, 10).
+		Radius(6).BorderStartWidth(3).BorderColor(tint).Background(colorSurface()).Children(func() {
+		if !openNamedIcon(c.Key("icon"), v.Icon, v.Tone, 15, 15) {
+			if svg := openToneIcon(v.Tone); svg != nil {
+				components.Icon(c, svg).Size(15, 15).TextColor(tint)
+			} else {
+				components.Icon(c, lucide.Info()).Size(15, 15).TextColor(tint)
+			}
+		}
+		ui.Text(c, v.Text).FontSize(12).TextColor(colorText()).Wrap().Grow(1).MinWidth(0).Selectable()
+	})
+}
+
+// paintOpenKeyValue draws one summary row: label left, value right, the
+// value tinted by the tone when one was asked for.
+func (a *App) paintOpenKeyValue(c *ui.Context, v *ouiView) {
+	ui.Row(c).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, v.Label).FontSize(12).TextColor(colorMuted()).Wrap().MaxWidth(160).Shrink(0)
+		ui.Spacer(c)
+		ui.Text(c, v.Text).FontSize(12).FontWeight(600).TextColor(openToneColor(v.Tone)).Wrap().
+			Grow(1).MinWidth(0).TextAlign(ui.End).Selectable()
+	})
+}
+
+// openChartPalette is the series palette, theme-aware, shared by the two
+// chart kinds (the volume donut keeps its own richer one).
+func openChartPalette() []ui.Color {
+	return []ui.Color{colorAccent(), tokWarning, tokSuccess, ui.Hex("#8B5CF6")}
+}
+
+// paintOpenChart draws Chart on Onevra's grouped bars, PlotHeight 140 for the
+// pane's width, the legend kept (a chart without its series names answers
+// less than the table beside it). Selection state lives in the card's state
+// so two charts on one card do not share a cursor.
+func (a *App) paintOpenChart(c *ui.Context, v *ouiView, p *openPaint) {
+	series := make([]chart.Series, 0, len(v.Series))
+	for i, s := range v.Series {
+		label := s.Label
+		if label == "" {
+			label = "系列 " + itoa(i+1)
+		}
+		series = append(series, chart.Series{ID: "s" + itoa(i), Label: label, Values: s.Values})
+	}
+	data := chart.Data{Labels: v.Options, Series: series}
+	ui.Box(c).FillWidth().MinWidth(0).Children(func() {
+		chart.Bar(c, a.openChartState(p, "bar"), data, chart.Options{
+			Label:       "图表",
+			PlotHeight:  140,
+			FormatValue: openChartFormat,
+		})
+	})
+}
+
+// paintOpenDonut draws DonutChart: each series' first value is a slice. The
+// legend is the pane's own two-column list — name and value — which stays
+// readable at the pane's width where the chart's own legend wraps.
+func (a *App) paintOpenDonut(c *ui.Context, v *ouiView, p *openPaint) {
+	palette := openChartPalette()
+	slices := make([]chart.Slice, 0, len(v.Series))
+	values := make([]float64, 0, len(v.Series))
+	total := 0.0
+	for i, s := range v.Series {
+		val := s.Values[0]
+		if val < 0 {
+			val = 0
+		}
+		label := s.Label
+		if label == "" {
+			label = "项 " + itoa(i+1)
+		}
+		slices = append(slices, chart.Slice{ID: "d" + itoa(i), Label: label, Value: val})
+		values = append(values, val)
+		total += val
+	}
+	ui.Column(c).FillWidth().MinWidth(0).Gap(8).Children(func() {
+		chart.Donut(c, a.openChartState(p, "donut"), slices, chart.Options{
+			Label:       "占比",
+			PlotHeight:  128,
+			HideLegend:  true,
+			FormatValue: openChartFormat,
+			Detail:      func(*ui.Context, chart.Selection) {},
+		})
+		for i, s := range slices {
+			share := 0.0
+			if total > 0 {
+				share = s.Value / total
+			}
+			ui.Row(c.Key("slice-" + s.ID)).FillWidth().MinWidth(0).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(8, 8).Shrink(0).Radius(4).Draw(func(painter *ui.Painter, r ui.Rect) {
+					painter.Fill(r, palette[i%len(palette)], r.H/2)
+				})
+				ui.Text(c, s.Label).FontSize(12).TextColor(colorText()).Grow(1).MinWidth(0).Wrap().Selectable()
+				ui.Text(c, openChartFormat(values[i])).FontSize(12).TextColor(colorMuted()).Shrink(0).Selectable()
+				if share > 0 {
+					ui.Text(c, itoa(int(share*100+0.5))+"%").FontSize(11).TextColor(colorMuted()).Width(36).Shrink(0)
+				}
+			})
+		}
+	})
+}
+
+// openChartFormat prints chart figures: integers plain, the rest to one
+// decimal, so axis ticks and legend values agree.
+func openChartFormat(v float64) string {
+	if v == float64(int64(v)) {
+		return itoa(int(v))
+	}
+	return strconv.FormatFloat(v, 'f', 1, 64)
+}
+
+// openChartState keeps one chart's selection per card and kind, so picking a
+// bar of one chart does not move another.
+func (a *App) openChartState(p *openPaint, kind string) *chart.State {
+	st := &a.assist.open
+	if st.charts == nil {
+		st.charts = map[string]*chart.State{}
+	}
+	id := p.key + "\x00" + kind
+	if st.charts[id] == nil {
+		st.charts[id] = &chart.State{Index: -1}
+	}
+	return st.charts[id]
+}
+
+// paintOpenAccordion draws Accordion on Onevra's Accordion: the pane's own
+// disclosure state, the first item open when nothing was asked.
+func (a *App) paintOpenAccordion(c *ui.Context, v *ouiView, p *openPaint, depth int) {
+	st := &a.assist.open
+	if st.planNo == nil {
+		st.planNo = map[string]bool{}
+	}
+	components.Accordion(c, func(group *components.AccordionGroup) {
+		for i, item := range v.Items {
+			id := p.key + "\x00acc\x00" + itoa(i) + "\x00" + item.Text
+			open := item.Open
+			if seen, ok := st.planNo[id]; ok {
+				open = seen
+			} else if i == 0 {
+				open = true
+			}
+			group.Item(item.Text, &open, func() {
+				for j, ch := range item.Children {
+					a.paintOpenView(c.Key(j), ch, p, depth+1)
+				}
+			})
+			st.planNo[id] = open
+		}
+	})
 }
 
 // paintOpenTree draws the read-only directory tree. The disclosure is a
@@ -331,6 +629,12 @@ func (a *App) openValue(key, name string) *string {
 }
 
 func (a *App) paintOpenField(c *ui.Context, v *ouiView, p *openPaint) {
+	// A presentation component inside a FormControl (ToOpenUI wraps every
+	// scene field in one) is not a field: draw it as itself.
+	if !openIsField(v.Kind) {
+		a.paintOpenExtra(c, v, p, 0)
+		return
+	}
 	label := v.Label
 	if label == "" {
 		label = v.Name

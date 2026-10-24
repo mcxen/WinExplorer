@@ -245,6 +245,13 @@ func Replan(rows []Row, o Options, dir string) {
 		}
 		if why := ValidateName(r.To); why != "" {
 			r.Err = why
+		} else if dir != "" {
+			// The folder is local, so the OS's own name rules apply on top
+			// of the protocol's; a remote endpoint (dir == "") validates
+			// against the disk it will write to.
+			if why := LocalNameProblem(r.To); why != "" {
+				r.Err = why
+			}
 		}
 	}
 	// Two rows wanting one name collide; the first keeps it, the rest are

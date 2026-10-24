@@ -38,3 +38,12 @@ func TestWindowsShellDeleteToRecycleBin(t *testing.T) {
 		t.Fatalf("payload = %q, want a $R entry", payload)
 	}
 }
+
+// TestWindowsTrashRecyclableLocal pins the confirm guard's baseline: an
+// ordinary local folder must report recyclable so local deletes never see
+// the permanent-delete dialog.
+func TestWindowsTrashRecyclableLocal(t *testing.T) {
+	if !sysTrashRecyclable(t.TempDir()) {
+		t.Fatal("local temp directory reported unrecyclable")
+	}
+}

@@ -65,6 +65,13 @@ func sysTrashRemove(src string) error { return os.RemoveAll(src) }
 
 func sysTrashEmpty() error { return fmt.Errorf("此平台不支持回收站") }
 
+// sysTrashRecyclable — there is no bin here; the delete flow confirms
+// nothing and reports the move's own failure instead.
+func sysTrashRecyclable(string) bool { return true }
+
+// sysKnownFolders is nil: the home-relative fallback in fs.go applies.
+func sysKnownFolders() map[string]string { return nil }
+
 func sysOpenWithScan() {}
 
 func sysOpenWithMenu(a *App, m *ui.Menu, e Entry) {

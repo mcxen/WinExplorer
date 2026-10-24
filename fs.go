@@ -191,21 +191,45 @@ func splitPath(p string) []string {
 	return out
 }
 
+// knownFolderKeys is the sidebar's known-folder set in display order: the
+// key the shell resolves (sysKnownFolders), the name shown, and the
+// home-relative folder that is the fallback when the shell has no redirect.
+var knownFolderKeys = []struct{ key, name, def string }{
+	{"desktop", "桌面", "Desktop"},
+	{"downloads", "下载", "Downloads"},
+	{"documents", "文档", "Documents"},
+	{"pictures", "图片", "Pictures"},
+	{"music", "音乐", "Music"},
+	{"videos", "视频", "Videos"},
+}
+
+// mergeKnownFolderPaths layers the shell's redirects over the home-relative
+// defaults, one folder at a time: a redirect that failed to resolve (or is
+// not absolute) falls back, rather than pointing the sidebar nowhere.
+func mergeKnownFolderPaths(home string, redirects map[string]string) map[string]string {
+	out := make(map[string]string, len(knownFolderKeys))
+	for _, k := range knownFolderKeys {
+		if p, ok := redirects[k.key]; ok && filepath.IsAbs(p) {
+			out[k.key] = filepath.Clean(p)
+			continue
+		}
+		out[k.key] = filepath.Join(home, k.def)
+	}
+	return out
+}
+
 func knownFolderNames() map[string]string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return nil
 	}
 	home = filepath.Clean(home)
-	return map[string]string{
-		home:                             "主文件夹",
-		filepath.Join(home, "Desktop"):   "桌面",
-		filepath.Join(home, "Downloads"): "下载",
-		filepath.Join(home, "Documents"): "文档",
-		filepath.Join(home, "Pictures"):  "图片",
-		filepath.Join(home, "Music"):     "音乐",
-		filepath.Join(home, "Videos"):    "视频",
+	paths := mergeKnownFolderPaths(home, sysKnownFolders())
+	names := map[string]string{home: "主文件夹"}
+	for _, k := range knownFolderKeys {
+		names[paths[k.key]] = k.name
 	}
+	return names
 }
 
 func (a *App) quickPlaces() []Place {
@@ -213,46 +237,22 @@ func (a *App) quickPlaces() []Place {
 	if err != nil || home == "" {
 		return nil
 	}
-	want := []Place{
-		{Name: "桌面", Path: filepath.Join(home, "Desktop"), Kind: "desktop"},
-		{Name: "下载", Path: filepath.Join(home, "Downloads"), Kind: "downloads"},
-		{Name: "文档", Path: filepath.Join(home, "Documents"), Kind: "documents"},
-		{Name: "图片", Path: filepath.Join(home, "Pictures"), Kind: "pictures"},
-		{Name: "音乐", Path: filepath.Join(home, "Music"), Kind: "music"},
-		{Name: "视频", Path: filepath.Join(home, "Videos"), Kind: "videos"},
-	}
-	out := make([]Place, 0, len(want))
-	for _, p := range want {
-		info, err := os.Stat(p.Path)
+	paths := mergeKnownFolderPaths(home, sysKnownFolders())
+	out := make([]Place, 0, len(knownFolderKeys))
+	for _, k := range knownFolderKeys {
+		info, err := os.Stat(paths[k.key])
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		out = append(out, p)
+		out = append(out, Place{Name: k.name, Path: paths[k.key], Kind: k.key})
 	}
 	return out
 }
 
-func (a *App) thisPCPlaces() []Place {
-	root := "/"
-	places := []Place{{Name: sysRootName(), Path: root, Kind: "drive"}}
-	vols, err := os.ReadDir("/Volumes")
-	if err != nil {
-		return places
-	}
-	rootDev := deviceID(root)
-	for _, v := range vols {
-		path := filepath.Join("/Volumes", v.Name())
-		info, err := os.Stat(path)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		if same, ok := sameDevice(path, rootDev); ok && same {
-			continue
-		}
-		places = append(places, Place{Name: v.Name(), Path: path, Kind: "drive"})
-	}
-	return places
-}
+// thisPCPlaces is the volumes sysVolumes lists — the per-OS truth. The
+// /Volumes walk it used to duplicate was macOS-only and left Windows and
+// Linux with a bare root row.
+func (a *App) thisPCPlaces() []Place { return sysVolumes() }
 
 func deviceID(path string) uint64 {
 	id, ok := statDevice(path)

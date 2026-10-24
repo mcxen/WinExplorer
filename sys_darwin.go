@@ -237,6 +237,13 @@ func sysTrashEmpty() error {
 	return nil
 }
 
+// sysTrashRecyclable — the local trash always takes the delete here.
+func sysTrashRecyclable(string) bool { return true }
+
+// sysKnownFolders is nil: macOS keeps the known folders at their
+// home-relative names, which is the fallback in fs.go.
+func sysKnownFolders() map[string]string { return nil }
+
 // The 打开方式 registry scans the Applications folders with plutil.
 
 func sysOpenWithScan() { scanOpenWithAppsMac() }

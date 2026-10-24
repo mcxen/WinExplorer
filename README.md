@@ -4,9 +4,9 @@
 
 没有 HTML、没有 WebView、没有 cgo——整个界面由 Go 绘制。
 
-当前版本 **0.1.4**（`mygo.json`），三平台安装包由 GitHub Actions 在打 tag 时构建。
+当前版本 **0.2.1**（`mygo.json`），三平台安装包由 GitHub Actions 在打 tag 时构建。
 
-> 目录名仍为 `WinExplorer`（`/Users/mcx/Documents/OpenSpring/WinExplorer`），项目与可执行文件已更名为 **sunvale / 晴谷**。
+> 目录名仍为 `WinExplorer`，项目与可执行文件已更名为 **sunvale / 晴谷**。
 
 ## 目录
 
@@ -37,7 +37,6 @@
 需要 Go 1.27 或更高版本（MyGo 的要求）。
 
 ```bash
-cd /Users/mcx/Documents/OpenSpring/WinExplorer
 go run .
 ```
 
@@ -65,6 +64,8 @@ go build -o sunvale .
 
 外观上采用 Windows 11 的**材质与悬浮窗**语言（`glass.go`）：窗口带系统背景材质（Windows 11 的 Mica/亚克力，macOS 的 under-window 材质），标签栏、命令栏、地址行、侧边栏与状态栏不绘背景、让材质透出，文件列表保持不透光面层；不提供材质的平台（旧版 Windows、Linux）回退为主题色。各对话框（设置、属性、批量重命名、快速预览、重复文件、占用可视化、扩展编辑）为**磨砂玻璃悬浮面板**：圆角 12、大半径投影、暗化背景、上浮淡入入场（`ui.DialogBase` + `glass.Glass`）。
 
+**单实例**：同一用户同一时刻只有一个 Sunvale 进程——第二次启动（桌面快捷方式、安装完成页的「运行」、文件关联打开压缩包等）把命令行交给已有实例后退出，第一个实例从托盘唤起并聚焦主窗口（`singleinstance.go`，Windows 上另有命名 mutex 兜底，更新重启竞态最多等待 3 秒）。
+
 ## 功能
 
 **标签页**
@@ -91,16 +92,16 @@ go build -o sunvale .
 详细信息视图的「大小」列对文件夹也显示体积。统计在后台 goroutine 中进行——每文件夹一次有界遍历（30 秒超时、25 万节点上限，跳过符号链接、计入隐藏文件），文件列表永不阻塞，统计完成前显示「…」；按大小排序与分组对文件夹同样生效，状态栏的选中合计也计入文件夹体积。结果缓存在内存（8192 条）与磁盘 `sunvale/sizes.json`（4096 条、最旧先淘汰，防抖 5 秒落盘、退出时落盘）：再次打开同一文件夹直接显示缓存值，仅当文件夹自身修改时间与缓存记录不一致时才自动重算。右键「刷新统计」（空白处对当前文件夹、文件夹行对该文件夹）强制重算其子树体积，只局部更新大小列、不整页刷新。统计不依赖窗口可见，最小化到托盘期间照常进行。
 
 **文件操作**
-新建文件夹、新建文本文档、内联重命名（`F2`，单选）、**批量重命名**、复制/剪切/粘贴（Windows 风格 `名称 - 副本` 命名）、删除（macOS/Linux 移入 `~/.Trash` 或 freedesktop 回收站；Windows 经系统回收站，`SHFileOperationW`）、永久删除、复制为路径（系统剪贴板）、在终端中打开、属性（打开属性对话框，见下）。
+新建文件夹、新建文本文档、内联重命名（`F2`，单选，按平台规则就地拦下非法名称——Windows 的 `<>:"|?*`、设备名 `CON`/`NUL`/`COM1`、结尾点或空格，macOS 的冒号）、**批量重命名**、复制/剪切/粘贴（Windows 风格 `名称 - 副本` 命名）、删除（macOS/Linux 移入 `~/.Trash` 或 freedesktop 回收站；Windows 经系统回收站，`SHFileOperationW`；选中项位于没有回收站的位置（如网络驱动器）时先弹**永久删除确认**，同资源管理器）、永久删除、复制为路径（系统剪贴板）、在终端中打开、属性（打开属性对话框，见下）。
 
 **批量重命名**
-多选时 `F2`、命令栏「重命名」或右键「重命名」打开对话框，单选仍走内联重命名。三种模式（对话框顶部切换）：**模板**（占位符 `{name}` 完整原名、`{stem}` 去扩展名、`{ext}` 不带点、`{n}` 编号、`{n:3}` 补零三位，起始编号默认 1，默认模式 `{n} {name}`）、**正则**（Go 正则 + `$1` 捕获组）、**查找替换**（字面替换）；三种模式都支持 `{created_year}`…`{modified_second}` 日期占位符。预览逐行实时更新，并且可交互：**拖动行**调整顺序（编号随之改变，`{n}` 因此按拖后的次序编号）、**双击（或 `F2`）逐项改写**目标名（改过的行「钉住」不再受模式影响，行尾 `↺` 恢复）、`↑/↓` 移动焦点。目标名为空、`.`、`..`、含路径分隔符、两项撞名（不区分大小写）或与文件夹里已有项目撞名时该行标红并说明原因，主按钮按可应用行数显示「重命名 N 项」；提交时整批走两段式改名（互换名字也不会丢文件），跳过冲突行，失败项在状态栏点名，整批压入**一次**撤销（`Ctrl+Z` 一次全还原）。
+多选时 `F2`、命令栏「重命名」或右键「重命名」打开对话框，单选仍走内联重命名。三种模式（对话框顶部切换）：**模板**（占位符 `{name}` 完整原名、`{stem}` 去扩展名、`{ext}` 不带点、`{n}` 编号、`{n:3}` 补零三位，起始编号默认 1，默认模式 `{n} {name}`）、**正则**（Go 正则 + `$1` 捕获组）、**查找替换**（字面替换）；三种模式都支持 `{created_year}`…`{modified_second}` 日期占位符。预览逐行实时更新，并且可交互：**拖动行**调整顺序（编号随之改变，`{n}` 因此按拖后的次序编号）、**双击（或 `F2`）逐项改写**目标名（改过的行「钉住」不再受模式影响，行尾 `↺` 恢复）、`↑/↓` 移动焦点。目标名为空、`.`、`..`、含路径分隔符、两项撞名（不区分大小写）、当前平台的非法名称（Windows 的非法字符/设备名/结尾点或空格、macOS 的冒号）或与文件夹里已有项目撞名时该行标红并说明原因，主按钮按可应用行数显示「重命名 N 项」；提交时整批走两段式改名（互换名字也不会丢文件），跳过冲突行，失败项在状态栏点名，整批压入**一次**撤销（`Ctrl+Z` 一次全还原）。
 
 **压缩 / 解压**
 任意选择「压缩为 ZIP 文件」（单选以原名命名，多选为“压缩文件”）。解压支持 zip、tar、tar.gz/tgz、tar.bz2/tbz2（标准库纯 Go），tar.xz（系统 `bsdtar`），7z/rar（需安装 `7zz` 或 `unar`）。解压到以归档名命名的子文件夹；成员路径含 `..`、绝对路径或反斜杠（zip-slip）一律拒绝，符号链接成员跳过。
 
 **回收站**
-“此电脑”下的回收站页：macOS/Linux 列出 `~/.Trash` 或 freedesktop 回收站；Windows 列出每个卷的 `$Recycle.Bin`（从哪个盘删除就落在哪个盘的回收站）。本应用删除的项目可**还原**到原位（删除时记录来源路径，原文件夹缺失会重建、重名自动避让）；**永久删除**与**清空回收站**弹出系统确认对话框（`mygo.Dialog`）。
+“此电脑”下的回收站页：macOS/Linux 列出 `~/.Trash` 或 freedesktop 回收站；Windows 列出每个本地卷的 `$Recycle.Bin`（从哪个盘删除就落在哪个盘的回收站；网络驱动器没有回收站，删除前会先确认）。本应用删除的项目可**还原**到原位（删除时记录来源路径，原文件夹缺失会重建、重名自动避让）；**永久删除**与**清空回收站**弹出系统确认对话框（`mygo.Dialog`）。
 
 **撤销**
 `Ctrl+Z` 依次撤销最近的 复制/移动、重命名、删除（从废纸篓放回）、新建文件夹/文本文档、压缩、解压、还原；栈深 64，**只活在进程内**（每个窗口一份，关闭窗口或退出应用即清空，不写进 `state.json`）。撤销时若原位置已被占用或待撤文件已不存在，该项跳过并在状态栏点名，不会覆盖任何东西。
@@ -115,7 +116,7 @@ go build -o sunvale .
 查询语法对齐 Everything（`internal/searchquery`）：空格分隔的多个词是 **AND**；`"完整短语"`；`case:` 自该处起区分大小写（再写一次切回）；`file:` / `folder:` 只看文件/文件夹（`folder:rep` 即名字含 rep 的文件夹）；`ext:txt;md` 按扩展名；`path:docs` 按完整路径。引擎不支持的修饰符（`regex:`、`dupe:` 等）**照原样当普通搜索词**，不静默变成别的含义。命中的片段在名称里以**黄色底色**标出（Everything 的标记），详细信息、列表、图标视图与 `Ctrl+K` 列表一致。
 
 **主页（主文件夹）**
-导航树顶部「主文件夹」是资源管理器的 Home 页：**快速访问**磁贴（单击文件夹即进入，单击文件则打开它所在的文件夹并选中它；首次运行按 Windows 11 默认固定 桌面/下载/文档/图片/音乐/视频 中存在的项）+ **最近使用的文件**（本应用打开过的文件，最新在前，最多 20 条）。文件或文件夹右键「固定到快速访问」，也可以直接拖到侧边栏或主页的「快速访问」上固定。侧边栏或主页磁贴右键「从快速访问取消固定」。
+导航树顶部「主文件夹」是资源管理器的 Home 页：**快速访问**磁贴（单击文件夹即进入，单击文件则打开它所在的文件夹并选中它；首次运行按 Windows 11 默认固定 桌面/下载/文档/图片/音乐/视频 中存在的项；Windows 上这些已知文件夹经系统解析——OneDrive「已知文件夹备份」重定向后的真实位置生效，而非家目录下的同名空壳）+ **最近使用的文件**（本应用打开过的文件，最新在前，最多 20 条）。文件或文件夹右键「固定到快速访问」，也可以直接拖到侧边栏或主页的「快速访问」上固定。侧边栏或主页磁贴右键「从快速访问取消固定」。
 
 另有「项目复选框」开关（`查看 > 显示` 或设置里的「查看」页）：打开后详细信息、列表与小图标视图在文件图标前多一个 16×16 方框，勾选状态即该项是否被选中，点方框只切换这一项、不移动选择锚点。复选框只在 `nameCell` 里绘制，而它只服务详情行、列表行与小图标磁贴，所以中等 / 大 / 超大图标视图与画廊磁贴不会出现复选框。
 
@@ -216,7 +217,7 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 
 文件能力是进程内的 MCP 服务，Eino 只通过这些工具操作：列出、读取、按文件名搜索、在文本里查找、文件夹摘要、磁盘剩余空间、属性、新建文件夹和文本、写入文本、复制、移动、移到回收站、单个重命名、压缩、解压、用系统打开、打开终端、复制路径、让窗口跳转到某个文件夹，以及解压密码库；另有 `schedule_list` / `schedule_create` / `schedule_update` / `schedule_delete` / `schedule_run`，与设置 → 定时任务共用同一份 `schedules.json`；以及 `assistant_task_run`（一次性全托管助手任务，不保存定时任务，适合「现在把下载按内容分类」）。按扩展名整理用 `file_rule`；按内容分类用助手预设或 `assistant_task_run`。缺路径或时间时可先 `present_form`（或 OpenUI Form）再创建。复制、移动和删除的来源限制在当前标签页的文件夹，目标可以是用户给出的绝对路径。`list_outside` / `read_outside` 用绝对路径查看文件夹以外的位置。`read_files` 一次读用户指定的多个路径（相对当前文件夹或绝对路径），大文件只给开头，图片和视频会直接带画面。对话记录和输入框都可以拖入文件，只挂上路径，不移动也不复制；也可以点回形针多选，或把列表里的选中项带上；粘贴一行已存在的路径也会挂上。批量 `rename_plan` 只出方案，点「应用方案」才改名；单个 `rename_item` 会立刻改名。删除是移到系统回收站，可撤销，没有永久删除。`write_text` 新建的文件可以撤销，覆盖已有文件不会恢复原文，并且不会改密钥、cookie 或私钥。解压密码本在设置 → 助手中管理：模型只能看到名称，`unzip` 会在本机按顺序尝试，密码正文不会进入提示词或回复。
 
-回复按流式逐段出现，思考过程显示在状态行里。供应商返回限流（429）且这一轮还没写出文字时，助手会改用同一模型的其他线路并记住它；已经写出的内容不会重跑。都不可用时，回复里说明恢复时间，而不是抛出原始错误。工具一旦被点名就出现在这一轮里，调用中的那条会标成进行中；整轮完成后收成一行「调用了……」，工具返回按实际文本显示，不暴露 MCP 封装 JSON；重命名方案和可勾选选项也从工具结果正确解析。输入框在回答时变成「停止」，已经写出来的文字会留下。输入框左侧的「全托管」打开后，助手自己把说清楚的事做完，不再每一步征求同意；批量重命名方案会在这一轮结束时自动应用。没打开时，改动很多文件或覆盖已有文件之前会先问。需要用户拍板时，助手给出可勾选的做法（默认能多选），点「发送所选」才继续。比较、清单或下一步操作时，回复里可以带一块 OpenUI（卡片、表格、目录树、规范表单与按钮）；表格长路径单行中间省略，悬停显示完整内容，反引号中的 Windows 含空格路径整体可点击。目录树默认展开前两级，点击带路径的节点打开文件夹，超过 6 层或 200 个节点会显示“…另有 n 项”。流式 OpenUI 占位和卡片都保持 64px 以上高度，复制代码后的“已复制”反馈持续 4 秒，与普通 toast 一致。按钮把一句中文当作下一条消息发出，不会直接改文件。远程接口返回的 text 里仍是这块原文。系统提示词在 `internal/assistant/prompt.go`，OpenUI 解析在 `internal/assistant/openui.go`，绘制在 `assistant_openui_paint.go`。
+回复按流式逐段出现，思考过程显示在状态行里。供应商返回限流（429）且这一轮还没写出文字时，助手会改用同一模型的其他线路并记住它；已经写出的内容不会重跑。整轮失败时，报错收进对话流里**单行可折叠**的一条（展开限高滚动，超长截断），而不是长篇 HTML 撑开对话；输入框随即恢复可用，不必重开会话。都不可用时，回复里说明恢复时间，而不是抛出原始错误。工具一旦被点名就出现在这一轮里，调用中的那条会标成进行中；整轮完成后收成一行「调用了……」，工具返回按实际文本显示，不暴露 MCP 封装 JSON；重命名方案和可勾选选项也从工具结果正确解析。输入框在回答时变成「停止」，已经写出来的文字会留下。输入框左侧的「全托管」打开后，助手自己把说清楚的事做完，不再每一步征求同意；批量重命名方案会在这一轮结束时自动应用。没打开时，改动很多文件或覆盖已有文件之前会先问。需要用户拍板时，助手给出可勾选的做法（默认能多选），点「发送所选」才继续。比较、清单或下一步操作时，回复里可以带一块 OpenUI（卡片、表格、目录树、规范表单与按钮）；表格长路径单行中间省略，悬停显示完整内容，反引号中的 Windows 含空格路径整体可点击。目录树默认展开前两级，点击带路径的节点打开文件夹，超过 6 层或 200 个节点会显示“…另有 n 项”。流式 OpenUI 占位和卡片都保持 64px 以上高度，复制代码后的“已复制”反馈持续 4 秒，与普通 toast 一致。按钮把一句中文当作下一条消息发出，不会直接改文件。远程接口返回的 text 里仍是这块原文。系统提示词在 `internal/assistant/prompt.go`，OpenUI 解析在 `internal/assistant/openui.go`，绘制在 `assistant_openui_paint.go`。
 
 会话会留下来。顶栏「会话」可以新开、切换和删除；关掉窗口或退出后再打开，还是上次那段。记录在用户配置目录的 `sunvale/assistant/sessions/`，列表是同目录的 `index.json`（不是搜索用的 `sunvale/index.json`）。每段只留最近的对话。指定文件时自动附上的正文不写入磁盘，重新打开后要再读。
 
@@ -242,6 +243,7 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 - `mygo.json` 的 `updates` 字段登记 `publicKey`（公钥内容）与 `github`（`mcxen/WinExplorer`）。
 - GitHub 仓库 secret `UPDATE_PRIVATE_KEY` 存 `mygo-update.key` 的内容，`release.yml` 构建时经 `MYGO_UPDATER_PRIVATE_KEY` 传入：每个平台随安装包上传 `update-<platform>.json` 清单（版本、发行说明、日期与归档/增量的 URL、大小、签名）、签名的 `sunvale-<版本>-<平台>.tar.gz` 更新包与 `.delta` 增量包；未设 secret 时构建照常、只跳过这些文件（Linux 的 `.tar.gz` 仍会生成，供 `install.sh` 安装）。
 - 发布（publish job 的 `--latest`）后，应用读 `https://github.com/mcxen/WinExplorer/releases/latest/download/update-<platform>.json` 发现新版本并下载安装。
+- **下载换线**（`updatemirror.go`）：所有对 github.com release 文件的请求走传输层镜像换线——默认先经镜像 `https://tvv.tw/`，响应头 20 秒超时即切直连；镜像不跟随 `latest/download` 的跳转，会先 HEAD `releases/latest` 解析出真实 tag 再代理。线路顺序可在设置 → 更新里查看。签名校验不受线路影响。
 
 **增量更新**：签名构建读取各平台已发布清单，下载最近 3 个版本（`updates.deltas` 可调）的更新包，与新版本做 bsdiff 二进制差分出 `.delta`；应用只下载变化的部分，按清单的大小与 SHA-256 校验重组出与发布完全一致的新版本，失败或不比整包小时回退整包下载。
 
@@ -421,7 +423,13 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | --- | --- |
 | `internal/netfs/` | 网络卷识别：按平台判断路径是否在 SMB/NFS/AFP/WebDAV 挂载上（macOS 读 `statfs` 类型、Linux 查挂载表、Windows 用 `GetDriveTypeW`），结果缓存 5 秒。列表并行读与缩略图预热都据此决定策略 |
 | `internal/searchquery/` | 搜索查询语法（对齐 Everything）：AND、引号短语、`case:`、`file:`/`folder:`、`ext:`、`path:`，与命中高亮分段。纯字符串，不依赖界面与文件列表 |
+| `internal/search/` | 可复用的实时遍历搜索与持久化索引：只负责走树、匹配、流式与存储，根目录、界面状态与文案由主包持有 |
+| `internal/fsentry/` | `Entry` 条目模型（主包与各数据源共享的文件/文件夹数据结构） |
+| `internal/fsops/` | 与窗口无关的文件系统操作：复制、空闲命名、粘贴与回收站元数据（`.trashinfo` 与 Windows `$I` 文件解析） |
 | `internal/rename/` | 重命名引擎（桌面端与远程共用）：模板/正则/查找替换展开、日期占位符、校验、撞名判定、两段式改名，以及按平台读取创建时间 |
+| `internal/schedule/` | 定时任务的定义、下次运行时刻计算与 `schedules.json` 持久化、文件规则的纯匹配/规划；调度器与 UI 留在主包 |
+| `internal/forms/` | 声明式表单模型：设置（定时任务）与助手（OpenUI Form / `present_form`）共用一套字段 schema 与绘制 |
+| `internal/remote/` | 远程访问服务里与窗口无关的部分：OpenList 式 JSON 封套与请求绑定、JWT 签名与口令哈希、虚拟路径清洗、对象类型判定与共享网页令牌 |
 | `main.go` | 入口、`newApp`、`view` 组合各区域、快捷键表、选择辅助 |
 | `state.go` | `App` / `tabState` 状态模型、视图/排序/分组枚举与常量 |
 | `tabs.go` | 导航、历史、排序/视图/分组切换、标签增删与切换 |
@@ -435,7 +443,7 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `pathinput.go` | 地址栏输入解析（引号、`~`、环境变量、文件路径）与子文件夹补全缓存 |
 | `sidebar.go` | 左侧导航树：主文件夹、插件位置、快速访问、此电脑（卷与文件树行）、磁盘健康与回收站、宽度拖拽手柄；行虚拟化（`ui.List`），只构建可见行 |
 | `navtree.go` | 导航窗格的文件树：按层读子文件夹（缓存 + 重载/刷新失效）、跟随当前标签展开祖先并把当前行滚到视线中心 |
-| `files.go` | 详情/列表/图标视图、分组、选择、项目复选框、行与空白右键菜单、内联重命名 |
+| `files.go` / `files_details.go` / `files_list.go` / `files_icon.go` | 文件窗格：详情/列表/图标视图、分组、选择、项目复选框、行与空白右键菜单、内联重命名 |
 | `keynav.go` | 键盘导航：`↑`/`↓`/`←`/`→`、`Home`/`End`、`PageUp`/`PageDown` 移动选择，`Shift` 从锚点扩展，并把移到的行滚入可视区 |
 | `marquee.go` | 鼠标圈选：空白处拖出矩形，实时选中与选区相交的行/磁贴（`docs/marquee-selection.md`） |
 | `thumb.go` | 图标视图的媒体缩略图与文件夹封面：四档解码尺寸、后台并发解码、面向像素预算的 LRU 缓存、封面拼图；大图标下 PDF/HTML 也走同一缓存 |
@@ -449,10 +457,11 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `home.go` | 主页（主文件夹）：快速访问磁贴、最近使用的文件 |
 | `gallery.go` | 「画廊」插件：`~/Pictures` 的扫描（按月分组、2000 张上限）、200 像素缩略图解码与 LRU 缓存、网格页与月份节 |
 | `trash.go` | 回收站页：还原、永久删除、清空 |
-| `recycleinfo.go` | 回收站元数据解析：Windows `$I/$R`（v2 头、FILETIME、UTF-16 路径）与 freedesktop `.trashinfo` 的转义 |
+| `recycleinfo` → `internal/fsops` | 回收站元数据解析（Windows `$I/$R` 与 freedesktop `.trashinfo`）已迁入 `internal/fsops/recycleinfo.go` |
 | `search.go` | 搜索引擎：查询解析后的后台**流式**遍历（5000 条上限；本文件夹 8 秒 / 全部磁盘 30 秒）、多卷并行、平台剪枝表、状态栏搜索行；后台批次由所属帧统一应用（`frameQueue`） |
 | `searchindex.go` | Everything 式索引：启动读缓存（`sunvale/index.json`）当帧命中、后台重建（先主文件夹后各卷、2 条并行、20 万条上限）、面板列表即时回填、索引答不了的回落实时遍历、底行项数/进度/估计与「重建索引」 |
-| `searchbox.go` | `Ctrl+K` 全局搜索面板：独立磨砂玻璃窗口、查询框、相关度/按文件夹/按类型/名称与本文件夹/全部磁盘切换、分组标题结果列表、索引/遍历结果、`Enter` 打开 / `Ctrl+Enter` 或行内「位置」按钮定位 / `Esc` 收起 |
+| `searchpath.go` | 搜索命中项的路径面包屑：保留根与命中项附近两级、中部省略，供结果第二行与「位置」列使用 |
+| `searchbox.go` / `searchbox_panel.go` / `searchbox_accel.go` | `Ctrl+K` 全局搜索面板：独立磨砂玻璃窗口、查询框、相关度/按文件夹/按类型/名称与本文件夹/全部磁盘切换、分组标题结果列表、索引/遍历结果、`Enter` 打开 / `Ctrl+Enter` 或行内「位置」按钮定位 / `Esc` 收起 |
 | `searchpreview.go` | 快速搜索右侧预览：缩略图、文件信息、完整路径、打开/定位/复制路径，以及相关度得分的排序原因；窄窗口自动收起 |
 | `sizes.go` | 文件夹大小统计：后台有界遍历（30 秒 / 25 万节点、跳过符号链接）、内存与磁盘缓存（`sunvale/sizes.json`）、「刷新统计」强制重算 |
 | `archive.go` | 压缩为 ZIP 与解压（zip/tar 纯 Go，xz 走 bsdtar，7z/rar 走 7zz/unar），zip-slip 拒绝与唯一命名 |
@@ -464,7 +473,7 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `dups.go` | 「重复文件查找」插件：后台受限扫描（大小+SHA-256 分组）、重复文件对话框与「删除多余项」 |
 | `dsstore.go` | 「清理 .DS_Store」插件：后台扫描子树（不适用隐藏规则）、结果对话框与「全部删除」（移入废纸篓 + 撤销 + 回收站日志） |
 | `usage.go` | 「可视化查看占用」插件：后台并发体积扫描（广度优先装配、自底向上汇总）、squarified 矩形树图与最大项列表对话框 |
-| `diskhealth.go` | 「磁盘健康」插件：概览磁贴、每盘卡片（评分环、指标条、实时曲线、检测项、统计、卷构成环形图）、高温阈值与着色、复制磁盘报告、页面的轮询生命周期 |
+| `diskhealth.go` / `diskhealth_page.go` / `diskhealth_card.go` / `diskhealth_chart.go` | 「磁盘健康」插件：概览磁贴、每盘卡片（评分环、指标条、实时曲线、检测项、统计、卷构成环形图）、高温阈值与着色、复制磁盘报告、页面的轮询生命周期 |
 | `brandicons/` | 盘厂 logo：Simple Icons（CC0）的 14 个品牌 SVG，按型号前缀匹配、`go:embed` 内嵌、解析结果按型号缓存；认不出时返回 nil 由页面回退到通用图标 |
 | `diskhealth/` | 磁盘探测包：`model.go` 统一模型、文案、检测项与健康评分，`api.go` 缓存、实时速率采样与吞吐历史、`darwin.go` 的 `diskutil` plist 解析、`linux.go` 的 sysfs、`windows.go` 的 PowerShell、`mount.go` 挂载表（两种格式）与分区名匹配、`smartctl.go` 共享的 smartctl 合并、`sys_darwin.go` / `sys_linux.go` / `sys_windows.go` 各平台的挂载表与容量查询、`other.go` 其他平台的降级、`unsupported.go` 的哨兵错误 |
 | `gifplay.go` | 「GIF 自动播放」插件：把各帧合成到一张位图并按帧延时更新，只服务快速预览（300 帧、1024 像素上限） |
@@ -473,14 +482,16 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `preview_pane.go` | 预览窗格 UI：各类型预览体、属性列表、播放器控件、宽度拖拽 |
 | `propsdialog.go` | 属性对话框：后台读取文件夹事实、文件复用预览管线、底部在 Finder 中显示 / 打开 / 确定 |
 | `uikit.go` | 对话框按钮原型：次要按钮（描边）/ 主要按钮（强调色）、同一行等宽 |
-| `settingsdialog.go` | 设置对话框：分类与搜索用 Onevra `components.Settings`，各页只声明行（外观/查看/托盘/扩展/插件/助手/更新） |
-| `settings_assistant.go` | 设置「助手」分类：供应商、附加提示词、Skills、MCP、行为与密码本 |
-| `assistant.go` | 右侧助手窗格：对话、多选回复、全托管、指定文件、拖入对话、拖宽与全屏 |
+| `settingsdialog.go` | 设置对话框：分类与搜索用 Onevra `components.Settings`，各页只声明行（外观/查看/托盘/扩展/插件/助手/定时任务/更新） |
+| `settings_assistant.go` / `settings_schedule.go` / `settings_websearch.go` | 设置「助手」「定时任务」等分类：供应商、附加提示词、Skills、MCP、行为与密码本；任务规则与脚本 |
+| `assistant.go` | 右侧助手窗格：对话、多选回复、全托管、指定文件、拖入对话、拖宽与全屏；报错行渲染在回合页脚 |
+| `assistant_error.go` | 助手整轮失败的报错规范化（换行归一、截断 2000 字）与对话流内单行可折叠的错误块；失败即复位输入状态 |
 | `assistant_opcard.go` | 助手回复里的文件操作卡片、执行计划、发言人行、复制按钮与当前目录条 |
 | `assistant_demo.go` | 助手离线演示（`SUNVALE_ASSIST_DEMO=1`）：按场景播放脚本，在临时文件夹里执行 |
-| `assistant_choice.go` | 多选回复的选项块：模型、工具和窗格共用的格式 |
-| `assistant_openui.go` | 助手回复里的 OpenUI 子集：卡片、表格和按钮，按钮只发送下一句 |
-| `assistant_mcp.go` | 进程内 MCP：当前文件夹的列出、读取、重命名方案、压缩、自动试用解压密码库的解压 |
+| `assistant_choice.go` / `assistant_choice_paint.go` | 多选回复的选项块与绘制：模型、工具和窗格共用的格式 |
+| `assistant_openui.go` → `internal/assistant/openui.go` | OpenUI 子集的解析已迁入 `internal/assistant`；绘制在 `assistant_openui_paint.go`，预设场景在 `assistant_openui_scenes.go` |
+| `assistant_mcp.go` | 进程内 MCP：当前文件夹的列出、读取、重命名方案、压缩、自动试用解压密码库的解压；定时任务工具在 `schedule_mcp.go` |
+| `schedule.go` / `schedule_run.go` | 定时任务：后台调度 tick、文件规则移动/复制/按日期备份、脚本与助手预设执行 |
 | `archive_password.go` | 解压密码候选与重试：ZIP/7z/RAR 走 `7zz`/`unar`，失败后清理目标目录 |
 | `assistant_run.go` | 用 Eino ChatModelAgent 调用上面的 MCP 工具；全托管时自动应用重命名方案 |
 | `assistant_config.go` | 助手配置的无界面读写：供应商、激活项和偏好；HTTP 层不返回密钥 |
@@ -490,18 +501,25 @@ macOS 是这次重构的重点：Apple Silicon 的 `SPNVMeDataType` 只给型号
 | `assistant_http.go` | 管理员 A2A 与 Streamable HTTP MCP：Agent Card、任务、供应商配置和文件助手调用 |
 | `assistant_fm.go` | 文件管理器动作：越界查看、属性、新建、复制、移动、回收站、打开、终端 |
 | `assistant_tools.go` | 指定文件、搜索、写入、目录摘要、磁盘空间、跳转和多选提问 |
-| `assistant_prompt.go` | 助手的系统提示词 |
+| `assistant_task_run.go` | 一次性全托管助手任务（`assistant_task_run` 工具）：不保存定时任务，适合「现在把下载按内容分类」 |
+| `assistant_slash.go` | 输入框上方的斜杠命令菜单：内置命令与 Skills、过滤与键盘选择 |
+| `assistant_ratelimit.go` | 限流换线：429 时改用同模型的其他线路并记住（解析与适配在 `internal/assistant/ratelimit.go`） |
+| `assistant_websearch.go` | 助手的网络搜索接入（设置 → 助手 → 联网搜索） |
+| `assistant_prompt.go` | 助手的系统提示词（`internal/assistant/prompt.go` 的组装） |
 | `assistant_memory.go` | 会话记录和跨会话记忆：落在 `sunvale/assistant/`，和密钥分开 |
 | `media.go` | 媒体：MyGo `audio` 播放器封装（句柄生命周期、播放节拍器）、`ffmpeg` 视频海报帧 |
 | `tray.go` | 系统托盘：最小化隐藏、左键单击或「显示晴谷」恢复窗口（无存活窗口则新开主窗口）、「退出晴谷」 |
 | `statestore.go` | 持久化状态：固定项、最近文件、回收站还原日志、设置与插件开关（JSON），旧目录名迁移 |
 | `platform.go` / `sys_darwin.go` / `sys_windows.go` / `sys_linux.go` / `sys_other.go` | 平台层：打开/定位/终端/缩略图/元数据/回收站/卷，共享代码零平台分支 |
 | `desktopfiles.go` | Linux 的 `.desktop` 解析：`Exec=` 占位符替换（`%f %F %u %U`、`%%`）与 `MimeType=` 扩展名，供打开方式注册表使用 |
-| `webtokens.go` | 内置网页共享的 CSS 设计令牌与 JS（主题切换、图标、格式化、toast），构建时替换进两张 HTML |
+| `webtokens` → `internal/remote/webtokens.go` | 内置网页共享的 CSS 设计令牌与 JS（主题切换、图标、格式化、toast），构建时替换进两张 HTML |
 | `statdev_unix.go` / `statdev_windows.go` | 取路径所在设备号（Unix `Stat_t.Dev` / Windows 卷名 FNV 哈希），用于卷列表去重 |
 | `statfs_unix.go` / `statfs_other.go` | 按平台读取卷容量 |
-| `birthtime_darwin.go` / `birthtime_other.go` | 按平台读取文件创建时间 |
-| `remote*.go` | 远程访问（OpenList 兼容）：服务生命周期/账号与 JWT（`remote.go`）、auth/public API（`remote_api.go`）、fs/list·get·search 与虚拟路径映射、下载签名（`remote_fs.go`）、fs 写操作与上传（`remote_manage.go`）、压缩与解压端点（`remote_archive.go`）、右键 shell 端点：扩展命令列出/执行与开终端（`remote_ext.go`）、分享协议、`/@s` 访客流与 `/sd` 直链（`remote_share.go`）、`/api/storage/*` 与 `/api/driver/*` 挂载点与远程首页（`remote_storage.go`）、`/api/sunvale/*` 管理端点（`remote_admin.go`）、`/d`/`/p` 流式下载（`remote_dl.go`）、内置网页（`remote_web.go` + `remote_web.html`）、管理界面（`remote_manage_web.go` + `remote_manage_web.html`） |
+| 创建时间 → `internal/rename` | 按平台读取文件创建时间已迁入 `internal/rename/birth_darwin.go` / `birth_other.go` |
+| `singleinstance.go` / `singleinstance_windows.go` / `singleinstance_other.go` | 单实例：mygo socket 交接 + Windows 命名 mutex 兜底，第二实例唤起已有窗口后退出 |
+| `updatemirror.go` | 自动更新的下载换线：github.com release 走镜像（tvv.tw→直连），每线 20 秒响应头超时；代理不跟随跳转，先解析真实 tag；签名校验不受影响 |
+| `session.go` | 恢复上次会话：标签与窗口的持久化往返 |
+| `remote*.go` | 远程访问（OpenList 兼容）：服务生命周期/账号与 JWT（`remote.go`）、auth/public API（`remote_api.go`）、fs/list·get·search 与虚拟路径映射、下载签名（`remote_fs.go`）、fs 写操作与上传（`remote_manage.go`）、压缩与解压端点（`remote_archive.go`）、右键 shell 端点：扩展命令列出/执行与开终端（`remote_ext.go`）、分享协议、`/@s` 访客流与 `/sd` 直链（`remote_share.go`）、`/api/storage/*` 与 `/api/driver/*` 挂载点与远程首页（`remote_storage.go`）、`/api/sunvale/*` 管理端点（`remote_admin.go`）、`/d`/`/p` 流式下载（`remote_dl.go`）、预览端点（`remote_preview.go`）、内置网页（`remote_web.go` + `remote_web.html`）、管理界面（`remote_manage_web.go` + `remote_manage_web.html`） |
 | `sharedialog.go` | 桌面端分享对话框：密码、有效期、创建分享与复制链接 |
 
 ## 测试
@@ -521,67 +539,23 @@ SUNVALE_EVAL_BASEURL=... SUNVALE_EVAL_MODEL=... SUNVALE_EVAL_KEY=... \
 
 评测只从环境变量读取密钥，覆盖工具选择、重命名确认/全托管、回收站、选项、读文件、危险请求和 OpenUI 语法共 8 条，并输出每条耗时与工具序列；`TestPromptListsAllTools` 随默认测试运行，确保 MCP 新工具同步写入系统提示词。
 
-无界面回归测试（不启动 `mygo.App`；`keynav_ui_test.go`、`searchbox_test.go`、`glass_test.go` 等用 MyGo 的 `ui.NewTester` 跑真实窗口视图）共 47 个测试文件：
+无界面回归测试为主（不启动 `mygo.App`；键盘导航、`Ctrl+K` 面板、玻璃对话框等用 MyGo 的 `ui.NewTester` 跑真实窗口视图）。测试文件按被测主题与源文件就近命名（`*_test.go` 对应同名源文件），主要覆盖面如下：
 
-- `archive_drop_test.go` —— 压缩→解压 ZIP 回环、tar.gz（系统 tar）、zip-slip 拒绝、唯一命名、拖拽移动/复制/边界情形。
-- `features_test.go` —— 特殊路径与中文别名、固定/最近状态、主页条目、回收站还原 + 撤销、撤销移动/新建、递归搜索、分组行。
-- `internal/searchquery`、`internal/rename` —— 各自的包测试：查询语法与命中高亮；模板展开、正则/查找替换、两段式名字互换。
-- `search_stream_test.go` —— 流式遍历：分批与结尾回调、多根并行、5000 条上限、查询语言端到端、两种作用域的取根、平台剪枝表、作用域改动重启遍历。
-- `searchbox_test.go` —— `Ctrl+K` 全局搜索（无应用事件循环时画在测试窗口里的同一套面板）：快捷键抬起、默认全部磁盘、流式结果上屏、行布局、排序与分组标题、`↑`/`↓` 跳过标题并在两端即停、`Ctrl+Enter` 定位到所在文件夹、`Esc` 关闭并清空、索引进度遵守“减少动画”；另含一万条结果分组切换基准。
-- `searchpreview_test.go` —— 快速搜索右侧预览：跟随第二条结果、完整路径与排序原因、复制路径按钮、`Ctrl+C` 区分查询选区和结果路径、「打开所在位置」与 `Ctrl+Enter` 一致、窗口窄于 900 时隐藏预览。
-- `searchindex_test.go` —— 搜索索引：临时树的遍历与查询语言（`ext:`/`path:`/`folder:`、隐藏项开关）、只在覆盖范围内作答（否则回落遍历）、缓存往返与异版本拒绝、上限即「未完整」、面板列表即时回填、底行项数/千分位/构建估计、启动读缓存与过期重建、`Ctrl+K` 从索引作答与「重建索引」按钮、行内「位置」按钮跳转。
-- `hiddenname_windows_test.go` —— Windows 地址栏补全：`FILE_ATTRIBUTE_HIDDEN` 的普通名称（`AppData`）按「显示隐藏的项目」过滤；其余平台的点前缀规则由 `addressbar_test.go` 覆盖。
-- `searchmark_test.go` —— 命中标记（像素级）：详情行、图标磁贴与 `Ctrl+K` 列表里的名称都画出 Everything 的黄色底色。
-- `navtree_test.go` —— 导航树：只列文件夹且按名排序、隐藏项与读缓存/失效、跟随当前标签展开祖先（不越过卷根、特殊页不参与）、当前行选中并滚入可视区、箭头只展开不导航、点行导航。
-- `nativedrag_test.go` —— 系统拖拽：拖出窗口携带文件列表（含空格与中文名）、外部拖入是复制且原件保留、特殊页不是放置目标、非本地链接被拒并给出提示。
-- `dsstore_test.go` —— 清理 .DS_Store：扫描只认这个文件名（隐藏目录也找）、菜单项出现在空白处与单个文件夹行而不在文件行/多选/特殊页、删除走废纸篓并留一条撤销、对话框列出结果并可关闭。
-- `keynav_test.go` —— 方向键步进与两端即停、`Shift` 从锚点扩展、图标视图按行/按屏、分组头下的行号映射。
-- `keynav_ui_test.go` —— 真实视图上的同一套按键：快捷键分发、移到的行滚入可视区（详情/列表/图标/分组图标）、搜索框持有焦点时独占按键。
-- `marquee_test.go` —— 框选：命中判定、修饰键组合，详情与图标视图中的绘制位置。
-- `colwidths_test.go` —— 详细信息列宽：默认值/持久化/拖动后的读写与下限钳制。
-- `colalign_test.go` —— 详细信息视图的列头逐列压在其下方数据上，列间不留缝。
-- `chrome_nav_test.go` —— 地址栏面包屑间的分隔箭头须与面包屑文字同一行并居中。
-- `clipboard_test.go` —— 文件剪贴板往返（空格、中文、仅绝对路径）与 `canPaste` 的回退判断。
-- `toastalign_test.go` —— 内联重命名的输入/回车提交/`Esc` 取消，以及删除 toast 的撤销按钮。
-- `batchrename_test.go` —— 批量重命名对话框：拖动排序后的编号重算、逐行改写与恢复、冲突检测、提交与撤销；单选仍走内联。
-- `rename_ui_test.go` —— 真实窗口里的批量重命名对话框：行被布局出来、拖动改变顺序并重算编号、双击进入行内编辑且输入落到该行。
-- `propsdialog_test.go` —— 属性对话框仅单选时打开，文件与文件夹均可（文件夹由后台取事实）。
-- `previewpane_test.go` —— 预览窗格只在左边缘分隔条处接受拖动，宽度随拖动改变并受钳制。
-- `gallery_test.go` —— 画廊扫描（时间倒序、跳过隐藏）、月份键、缩略图解码与缓存生命周期。
-- `thumb_test.go` —— 缩略图档位、媒体识别、文件夹封面（拼图布局与面板匹配）、缓存预算与放大重读。
-- `imgsize_test.go` —— 图片缩放：目标边长与宽高比、小于目标时不放大、4000×3000 的 JPEG/PNG 端到端解码、输出像素与源像素的偏差检查。
-- `sniff_test.go` —— 文本/二进制嗅探、十六进制转储，以及预览对未知类型的接入。
-- `sizes_test.go` —— 文件夹大小：遍历统计、缓存与陈旧重排、「刷新统计」失效、`sizes.json` 往返。
-- `sizes_ui_test.go` —— 大小列各状态文案、状态栏选中总量与两处「刷新统计」菜单。
-- `diskhealth_test.go` —— 磁盘健康插件：高温阈值与警告判定、插件声明的设置行。
-- `diskhealth_ui_test.go` —— 真实窗口里的磁盘页：页面各部分上屏、离开页面/停用插件时停掉后台轮询、复制出的报告包含各字段且缺失值写「未知」。
-- `brandicons/brandicons_test.go` —— 盘厂识别：各家的真实型号名前缀、大小写差异、未收录品牌返回 nil、每个品牌都有内嵌图标、前缀表必须大写（匹配前会转大写）。
-- `diskhealth/diskhealth_test.go` —— 探测包：SMART 键的成对计数与缺失区分、开尔文换算与异常读数忽略、寿命与备用块判定、容量与已用比例、两种挂载表格式与 `\040` 转义、分区名匹配、实时速率的差分与首轮无值、检测项与阈值、健康评分的分档与封顶、吞吐历史的容量与时间窗。
-- `dups_test.go` —— 重复文件分组、子树扫描，以及删除多余项进废纸篓并可撤销。
-- `usage_test.go` —— 占用树图切分、小份额并入「其他」、扫描统计与配色。
-- `uikit_test.go` —— 对话框按钮的内边距与统一最小宽度。
-- `plugintask_test.go` —— 插件后台管线：`taskRunner` 串行化与心跳、`appFlag`/`appVal` 的按窗口状态。
-- `plugins_test.go` —— 插件默认全开、启停持久化、钩子按开关收集、设置读写与 GIF 门控。
-- `polish_test.go` —— `afinfo` 时长与 `afplay` 回退、快速预览步进、惰性启动扫描、GIF 播放器。
-- `glass_test.go` —— 材质与悬浮窗：逐个打开玻璃对话框并跑完入场动画（真实视图上的布局回归）。
-- `multiwindow_test.go` —— 多窗口共享同一持久化存储，以及应用注册表的注册与注销。
-- `tray_test.go` —— 托盘图标是可解码的 32×32 PNG（不启动真实托盘）。
-- `statestore_test.go` —— 旧目录名（`winexplorer`）状态迁移。
-- `theme_test.go` —— 外观模式：`light`/`dark`/缺省（跟随系统）三种取值与设置页分段控件的对应，未知取值回退跟随系统。
-- `platform_test.go` —— 回收站 `$I` 解析、`.trashinfo` 转义与 `.desktop` 的 `Exec`/`MimeType` 解析。
-- `ext_openwith_test.go` —— 扩展命令配置解析与匹配、占位符展开、`Info.plist` 扩展名解析、快速预览门控。
-- `remote_test.go` —— 远程访问协议回归：登录三态（错误/明文/StaticHash）、`/api/me` 三态、fs 列表/获取/搜索（含 GET 与查询参数绑定、缺省路径即根、文件夹 size 为 0、root 名、视频 related）、`type` 后缀表、CORS 预检、签名下载（全量/Range/HEAD/过期签名/目录拒绝）、路径防逃逸，及真实端口 + curl 端到端冒烟。
-- `remote_manage_test.go` —— 管理界面一轮回归：fs 写操作（mkdir/rename/move/copy/remove 进回收站/dirs/put 上传，含中文与转义路径）、分享全链路（管理端 CRUD 与改名、`/@s` 免登录访客流、密码/过期/停用/超次、按 IP 去重计数、`/sd` 下载与 Range/HEAD）、`/api/sunvale/*`（状态、改密后旧登录失效、重置令牌、端口校验、开关幂等与真实启停）、`/@manage` 页面，及真实端口 + curl 全故事线冒烟（登录→上传→分享→访客下载→管理页→状态）。
-- `remote_archive_test.go` —— 远程压缩/解压回归：解压到以归档名命名的子文件夹、重名「- 副本」、`dst_dir` 与批量（个别失败在 `reason` 里说明）、压缩单个文件夹/单个文件/批量的三种命名、zip-slip 拒绝且不留半成品文件夹、来宾 401 与参数校验。
-- `remote_ext_test.go` —— 远程扩展 list/run 端点、终端端点校验与搜索的 `global` 标志。
-- `remote_manage_web_test.go` —— 内置管理页自包含，且脚本引用的元素与命令栏都存在。
+- **文件窗格与导航**：特殊路径与中文别名、固定/最近状态、回收站还原 + 撤销、递归搜索与分组行（`features_test.go`）；方向键步进/扩展与分组行号映射（`keynav_test.go`、`keynav_ui_test.go`）；框选命中与绘制（`marquee_test.go`）；导航树展开、跟随当前标签与隐藏项（`navtree_test.go`、`navtree_jump_test.go`）；列宽持久化（`colwidths_test.go`）；地址栏补全、路径解析与 Windows 隐藏属性（`addressbar_test.go`、`hiddenname_windows_test.go`）；多窗口共享状态与单实例锁（`multiwindow_test.go`、`singleinstance_test.go`）。
+- **搜索**：流式遍历与查询语言端到端（`search_stream_test.go`）；`Ctrl+K` 面板、排序/分组、键盘与索引进度（`searchbox_test.go`）；索引覆盖、缓存往返、即时回填与回落（`searchindex_test.go`）；右侧预览与复制路径（`searchpreview_test.go`）；命中高亮像素级断言（`searchmark_test.go`）；路径面包屑省略（`searchpath_test.go`）。
+- **文件操作**：压缩/解压回环、zip-slip 拒绝、拖拽移动与原生放置（`archive_drop_test.go`、`archive_nested_test.go`、`archive_async_test.go`、`nativedrag_test.go`）；批量重命名对话框与真实窗口布局（`batchrename_test.go`、`rename_ui_test.go`）；文件夹大小统计与缓存（`sizes_test.go`、`sizes_ui_test.go`）；回收站还原日志（`platform_test.go`、`trash*`）；扩展命令配置与占位符（`ext_openwith_test.go`）。
+- **预览**：缩略图档位、封面拼图与缓存预算（`thumb_test.go`、`imgsize_test.go`）；画廊扫描与缓存（`gallery_test.go`）；快速预览步进、GIF 播放与媒体（`polish_test.go`、`imageview_test.go`、`videoview_test.go`、`docview_test.go`）；属性对话框（`propsdialog_test.go`）；文本嗅探（`sniff_test.go`）。
+- **助手**：离线演示场景（`assistant_demo_test.go`）、文件操作卡片与撤销（`assistant_aifx_test.go`、`aifx_test.go`、`aifx_ui_test.go`）、斜杠命令（`assistant_slash_test.go`）、MCP 工具（`assistant_mcp_test.go`、`assistant_tools_test.go`）、A2A/MCP HTTP（`assistant_http_test.go`）、限流换线（`assistant_ratelimit_test.go`）、报错折叠与输入复位（`assistant_error_test.go`）、OpenUI 解析与绘制（`assistant_openui_*_test.go`）、会话与记忆（`assistant_memory_test.go`）。另有真实模型评测（见上）。
+- **插件**：默认全开与启停持久化（`plugins_test.go`）、后台管线（`plugintask_test.go`）、重复文件（`dups_test.go`）、.DS_Store（`dsstore_test.go`）、占用树图（`usage_test.go`）、磁盘健康插件与真实页面（`diskhealth_test.go`、`diskhealth_ui_test.go`）、盘厂识别（`brandicons/brandicons_test.go`）。
+- **远程访问**：OpenList 协议回归（登录三态、fs 读写、签名下载、路径防逃逸与 curl 冒烟，`remote_test.go`）；管理界面与分享全链路（`remote_manage_test.go`）；远程压缩/解压（`remote_archive_test.go`）；右键 shell 与全局搜索标志（`remote_ext_test.go`）；管理页自包含（`remote_manage_web_test.go`）。
+- **基础**：磁盘探测包（SMART 键、开尔文换算、评分分档、速率差分，`diskhealth/diskhealth_test.go`）；查询语法与重命名引擎（`internal/searchquery`、`internal/rename` 各自的包测试）；状态存储与旧目录迁移（`statestore_test.go`）；外观模式切换（`theme_test.go`）。
 
 > 删除/还原相关测试会真实地在 `~/.Trash` 中创建并恢复一个临时文件。macOS 上若终端没有完全磁盘访问权限（TCC 拒绝列出 `~/.Trash`，rename 进去不受限），这些测试自动降级为「还原日志 + 按落点名定位」断言，枚举废纸篓的交叉核对仅在列表可读时进行。
 
 ## 实现说明
 
 - **图标分层**：单色命令/导航图标（后退、前进、向上、刷新、剪切、复制、粘贴、重命名、分享、删除、新建、排序、查看、更多、搜索、播放/暂停等）统一使用 Onevra 内置 Lucide 图标，经 `components.Icon` 渲染、继承文本色；命令栏与导航行的图标按钮用 `components.IconButton`。**彩色**文件、文件夹、盘符、位置图标仍由 MyGo `ui` 包在 GPU 上以 Painter 路径自绘——它们承载资源管理器的视觉识别度，单色图标集无法替代。第三层是**真实画面**：图标视图里的图片/视频用解码出的缩略图，含媒体的文件夹用拼合封面（`thumb.go`），经 `ui.Image(...).Fit(ui.Cover)` 铺满方块；三层各有各的用意，媒体缩略图不是替代自绘图标，而是叠在它上面——解码未落地的那几帧显示的正是自绘图标。
-- **Onevra 本地依赖**：`go.mod` 以 `replace` 指向本地克隆 `/Users/mcx/onevra/source`（含未发布的提交）；下一个 Onevra 版本发布后可移除该行。
+- **Onevra 依赖**：`github.com/oneo-me/onevra/source v0.2026.11`（正式版本，无本地 `replace`）。
 - **删除语义**：删除是「移动到 `~/.Trash`」而非直接抹除，并在状态文件里记录来源路径，供还原与撤销使用。
 - **剪贴板**：应用内实现（`clipPaths` / `clipCut`），不污染系统剪贴板；跨标签复制/粘贴可用。仅「复制为路径」写入系统剪贴板。
 - **窗口**：无边框（`Frameless`），标题栏由应用自绘；窗口尺寸/位置不持久化（未用 MyGo 的 `StateKey`）。

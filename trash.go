@@ -54,6 +54,35 @@ func (a *App) trashPaneMenu(m *ui.Menu) {
 	}
 }
 
+// confirmUnrecyclable asks once when some of paths sit where deleting
+// bypasses the bin — a network share, on Windows. Explorer warns before a
+// permanent delete there; without this the shell's own confirmation is
+// suppressed and the delete would be silent and final. False means the
+// user backed out and nothing should be deleted at all.
+func (a *App) confirmUnrecyclable(paths []string) bool {
+	var doomed int
+	for _, p := range paths {
+		if p == "" || p == pathThisPC || p == "/" {
+			continue
+		}
+		if !sysTrashRecyclable(p) {
+			doomed++
+		}
+	}
+	if doomed == 0 {
+		return true
+	}
+	res, err := mygo.Dialog.Message(mygo.MessageOptions{
+		Parent:  a.win,
+		Type:    mygo.MessageWarning,
+		Title:   "永久删除",
+		Message: fmt.Sprintf("选中的 %d 个项目位于没有回收站的位置（如网络驱动器），将被永久删除。", doomed),
+		Detail:  "这些项目不会移入回收站，删除后无法还原。",
+		Buttons: []string{"永久删除", "取消"},
+	})
+	return err == nil && res.Button == 0
+}
+
 // doRestore moves the selected items back to where they were deleted from,
 // as Explorer's 回收站 "还原" does. The original folder is recreated when
 // it has since gone missing; an existing file in the way gets a

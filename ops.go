@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sunvale/internal/fsops"
+	"sunvale/internal/rename"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
@@ -206,6 +207,13 @@ func (a *App) doDelete() {
 	if len(sel) == 0 {
 		return
 	}
+	paths := make([]string, len(sel))
+	for i, e := range sel {
+		paths[i] = e.Path
+	}
+	if !a.confirmUnrecyclable(paths) {
+		return
+	}
 	var failed []string
 	var moved []undoMove
 	var desc string
@@ -253,6 +261,9 @@ func trashDir() (string, error) { return sysTrashDir() }
 // and undo, the way doDelete handles the selection. The extract toast's
 // 「删除原归档」 uses it, and its status line keeps the 撤销 toast.
 func (a *App) trashPaths(paths []string) {
+	if !a.confirmUnrecyclable(paths) {
+		return
+	}
 	var failed []string
 	var moved []undoMove
 	for _, p := range paths {
@@ -309,6 +320,12 @@ func (a *App) commitRenameIn(t *tabState) error {
 	}
 	if newName == "." || newName == ".." || strings.ContainsAny(newName, `/\`) {
 		return fmt.Errorf("名称无效")
+	}
+	// The OS's own rules — Windows' reserved device names and illegal
+	// characters, macOS' colon — block here with a reason, not later as a
+	// raw syscall error after the file seemed renamed.
+	if why := rename.LocalNameProblem(newName); why != "" {
+		return fmt.Errorf("%s", why)
 	}
 	if specialPath(t.path) {
 		return fmt.Errorf("无法重命名此页面中的项目")

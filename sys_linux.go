@@ -260,6 +260,13 @@ func sysTrashEmpty() error {
 	return nil
 }
 
+// sysTrashRecyclable — the local trash always takes the delete here.
+func sysTrashRecyclable(string) bool { return true }
+
+// sysKnownFolders is nil: XDG folders are not redirected on Linux, so the
+// home-relative fallback in fs.go is the truth.
+func sysKnownFolders() map[string]string { return nil }
+
 // The 打开方式 registry reads the .desktop files of the installed
 // applications: their MimeType lists name what they open.
 

@@ -28,11 +28,20 @@ import (
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	shell32  = syscall.NewLazyDLL("shell32.dll")
+	ole32    = syscall.NewLazyDLL("ole32.dll")
 
 	procGetLogicalDrives    = kernel32.NewProc("GetLogicalDrives")
 	procGetVolumeInfoW      = kernel32.NewProc("GetVolumeInformationW")
 	procGetDiskFreeSpaceExW = kernel32.NewProc("GetDiskFreeSpaceExW")
+	procGetDriveTypeW       = kernel32.NewProc("GetDriveTypeW")
 	procSHFileOperationW    = shell32.NewProc("SHFileOperationW")
+	procSHGetKnownFolder    = shell32.NewProc("SHGetKnownFolderPath")
+	procCoTaskMemFree       = ole32.NewProc("CoTaskMemFree")
+)
+
+// Drive types GetDriveTypeW reports; the rest are unused here.
+const (
+	driveRemote = 4 // DRIVE_REMOTE — a share, no client-side bin
 )
 
 // volumeCap reports a volume's free and total bytes.
@@ -53,14 +62,37 @@ func volumeCap(path string) (free, total int64, ok bool) {
 	return int64(f), int64(t), true
 }
 
-// volumeRoot widens a path to its drive root, "C:" → "C:\".
+// driveTypeOf reports GetDriveTypeW's verdict on a volume root.
+func driveTypeOf(root string) uint32 {
+	p, err := syscall.UTF16PtrFromString(root)
+	if err != nil {
+		return 0
+	}
+	r, _, _ := procGetDriveTypeW.Call(uintptr(unsafe.Pointer(p)))
+	return uint32(r)
+}
+
+// sysTrashRecyclable reports whether deleting path can land in a bin. A
+// network share (SMB, \\wsl$) has no client-side bin — delete there is
+// permanent, so callers confirm first, the way Explorer does.
+func sysTrashRecyclable(path string) bool {
+	return driveTypeOf(volumeRoot(path)) != driveRemote
+}
+
+// volumeRoot widens a path to its volume's root — "C:…" → "C:\", a UNC
+// path to its \\server\share — for the per-volume Win32 calls, which all
+// accept either form (GetDiskFreeSpaceExW, GetDriveTypeW).
 func volumeRoot(path string) string {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		abs = path
 	}
-	if len(abs) >= 2 && abs[1] == ':' {
-		return strings.ToUpper(abs[:1]) + `:\`
+	vol := filepath.VolumeName(abs)
+	if strings.HasPrefix(vol, `\\`) {
+		return vol + `\`
+	}
+	if len(vol) == 2 && vol[1] == ':' {
+		return strings.ToUpper(vol[:1]) + `:\`
 	}
 	return `C:\`
 }
@@ -123,6 +155,35 @@ func driveLabel(root string) string {
 		return ""
 	}
 	return syscall.UTF16ToString(name[:])
+}
+
+// knownFolderGUIDs maps the sidebar's folder keys to their KNOWNFOLDERIDs.
+var knownFolderGUIDs = map[string]syscall.GUID{
+	"desktop":   {Data1: 0xB4BFCC3A, Data2: 0xDB2C, Data3: 0x424C, Data4: [8]byte{0xB0, 0x29, 0x7F, 0xE9, 0x9A, 0x87, 0xC6, 0x41}},
+	"downloads": {Data1: 0x374DE290, Data2: 0x123F, Data3: 0x4565, Data4: [8]byte{0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B}},
+	"documents": {Data1: 0xFDD39AD0, Data2: 0x238F, Data3: 0x46AF, Data4: [8]byte{0xAD, 0xB4, 0x6C, 0x85, 0x48, 0x03, 0x69, 0xC7}},
+	"pictures":  {Data1: 0x33E28130, Data2: 0x4E1E, Data3: 0x4676, Data4: [8]byte{0x83, 0x5A, 0x98, 0x39, 0x5C, 0x3B, 0xC3, 0xBB}},
+	"music":     {Data1: 0x4BD8D571, Data2: 0x6D19, Data3: 0x48D3, Data4: [8]byte{0xBE, 0x97, 0x42, 0x22, 0x20, 0x08, 0x0E, 0x43}},
+	"videos":    {Data1: 0x18989B1D, Data2: 0x99B5, Data3: 0x455B, Data4: [8]byte{0x84, 0x1C, 0xAB, 0x7C, 0x74, 0xE4, 0xDD, 0xFC}},
+}
+
+// sysKnownFolders resolves the sidebar's known folders through the shell,
+// so redirects the user set up — OneDrive's known-folder move above all —
+// are honored instead of the home-relative default. Entries that fail to
+// resolve are absent, and fs.go falls back per folder.
+func sysKnownFolders() map[string]string {
+	out := make(map[string]string, len(knownFolderGUIDs))
+	for key, guid := range knownFolderGUIDs {
+		var p *uint16
+		r, _, _ := procSHGetKnownFolder.Call(
+			uintptr(unsafe.Pointer(&guid)), 0, 0, uintptr(unsafe.Pointer(&p)))
+		if r != 0 || p == nil {
+			continue
+		}
+		out[key] = syscall.UTF16ToString((*[1 << 16]uint16)(unsafe.Pointer(p))[:])
+		procCoTaskMemFree.Call(uintptr(unsafe.Pointer(p)))
+	}
+	return out
 }
 
 func sysOpen(path string) error {
@@ -189,6 +250,8 @@ const recycleRootName = `$Recycle.Bin`
 
 // recycleRoots lists every mounted volume's bin — a file deleted from E:
 // lands in E:'s bin, never C:'s, so bin operations walk all of them.
+// Remote drives are skipped: they have no client-side bin, and statting a
+// disconnected share can block for the whole SMB timeout.
 func recycleRoots() []string {
 	r, _, _ := procGetLogicalDrives.Call()
 	mask := uint32(r)
@@ -197,9 +260,12 @@ func recycleRoots() []string {
 		if mask&(1<<i) == 0 {
 			continue
 		}
-		root := string(rune('A'+i)) + `:\` + recycleRootName
-		if info, err := os.Stat(root); err == nil && info.IsDir() {
-			roots = append(roots, root)
+		root := string(rune('A'+i)) + `:\`
+		if driveTypeOf(root) == driveRemote {
+			continue
+		}
+		if info, err := os.Stat(root + recycleRootName); err == nil && info.IsDir() {
+			roots = append(roots, root+recycleRootName)
 		}
 	}
 	return roots
@@ -291,7 +357,7 @@ func shellDelete(path string) error {
 	}
 	r, _, _ := procSHFileOperationW.Call(uintptr(unsafe.Pointer(&op)))
 	if r != 0 {
-		return fmt.Errorf("删除错误 %d", r)
+		return fmt.Errorf("%s", shellDeleteErrorText(int(r)))
 	}
 	if op.fAnyOperationsAborted != 0 {
 		return fmt.Errorf("删除被取消")

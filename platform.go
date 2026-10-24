@@ -21,4 +21,10 @@ package main
 //	sysTrashList / sysTrashKey         an item's listing and restore key
 //	sysTrashRestore / sysTrashRemove   putting back, deleting outright
 //	sysTrashEmpty                      emptying the whole bin
+//	sysTrashRecyclable                 whether delete-to-bin works there (a
+//	                                    network share deletes for good, so
+//	                                    the caller confirms first)
+//	sysKnownFolders                    the sidebar's known folders as the
+//	                                    shell resolves them (redirects),
+//	                                    nil when home-relative is the truth
 //	sysOpenWithScan / sysOpenWithMenu  the 打开方式 registry and its menu

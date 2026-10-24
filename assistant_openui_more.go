@@ -85,7 +85,11 @@ func (a *App) paintOpenMore(c *ui.Context, v *ouiView) {
 	case "gallery":
 		a.paintOpenGallery(c, v)
 	case "taskprogress":
-		paintArchiveTaskCard(c, openTaskSnap(v))
+		if progressStyleOf(v.Size) == progressStyleGauge {
+			paintArchiveGaugeCard(c, openTaskSnap(v))
+		} else {
+			paintArchiveTaskCard(c, openTaskSnap(v))
+		}
 	}
 }
 

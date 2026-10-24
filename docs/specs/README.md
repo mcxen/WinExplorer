@@ -16,6 +16,7 @@
 | 06 | [助手配置迁入系统设置](06-assistant-settings.md) |
 | 07 | [定时任务（SCH1 + SCH2）](07-scheduled-tasks.md) |
 | 08 | [规范表单组件](08-forms.md) |
+| 09 | [压缩 / 解压进度与进度样式（ARCHIVE-PROG、PROG-STYLE）](09-archive-progress.md) |
 
 **任务状态、分支、依赖与验收统一维护在仓库根目录 [`TASK.md`](../../TASK.md)**，本目录不再记录状态，避免两处不一致。界面与动效规范见 [`docs/UI.md`](../UI.md)。
 

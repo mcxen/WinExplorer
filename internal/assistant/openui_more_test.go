@@ -47,3 +47,14 @@ func TestOpenTaskProgress(t *testing.T) {
 		t.Fatalf("%+v", v)
 	}
 }
+
+func TestOpenProgressStyleParse(t *testing.T) {
+	v := ParseOpenUI(`root = TaskProgress("t", 0.5, {style: "仪表盘"})`)
+	if v == nil || v.Size != "gauge" {
+		t.Fatalf("%+v", v)
+	}
+	p := ParseOpenUI(`root = ProgressBar("p", 40, {style: "meter"})`)
+	if p == nil || p.Size != "gauge" {
+		t.Fatalf("%+v", p)
+	}
+}

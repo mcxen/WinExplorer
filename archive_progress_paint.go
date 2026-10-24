@@ -110,7 +110,7 @@ func paintArchiveTaskCard(c *ui.Context, s archiveTaskSnap) {
 		if s.Err != "" && s.Total > 0 {
 			frac = float64(s.Done) / float64(s.Total)
 		}
-		components.Progress(c.Key("bar"), frac).FillWidth().Height(4).Label(archiveVerb(s.Kind) + "进度")
+		paintProgressBar(c, "bar-"+s.key(), frac, snapTone(s), 5).Label(archiveVerb(s.Kind) + "进度")
 		line, col := s.Cur, colorMuted()
 		if s.Err != "" {
 			line, col = s.Err, tint
@@ -155,7 +155,9 @@ func paintArchiveStatus(c *ui.Context) bool {
 	}
 	s := live[len(live)-1]
 	ui.Row(c.Key("archive-status")).Gap(6).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
-		components.Progress(c.Key("bar"), s.Frac()).Width(90).Height(4).Label(archiveVerb(s.Kind) + "进度")
+		ui.Box(c.Key("barbox")).Width(90).Shrink(0).Children(func() {
+			paintProgressBar(c, "sbar-"+s.key(), s.Frac(), toneRunning, 4).Label(archiveVerb(s.Kind) + "进度")
+		})
 		text := archiveVerb(s.Kind) + " " + s.Name
 		if m := archiveMeta(s); m != "" {
 			text += "  " + m
@@ -188,8 +190,14 @@ func (a *App) paintAssistArchiveTasks(c *ui.Context, since time.Time) {
 		return
 	}
 	ui.Column(c.Key("archive-tasks")).FillWidth().MinWidth(0).Gap(6).Children(func() {
+		gauge := a.assistProgressStyle() == progressStyleGauge
 		for _, s := range tasks {
-			paintArchiveTaskCard(c.Key("t"+strconv.FormatInt(s.ID, 10)), s)
+			cc := c.Key("t" + strconv.FormatInt(s.ID, 10))
+			if gauge {
+				paintArchiveGaugeCard(cc, s)
+			} else {
+				paintArchiveTaskCard(cc, s)
+			}
 		}
 	})
 }

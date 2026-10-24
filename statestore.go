@@ -80,6 +80,9 @@ type appSettings struct {
 	ItemCheckboxes bool   `json:"itemCheckboxes"`
 	PreviewOpen    bool   `json:"previewOpen"`
 	Mode           int    `json:"mode"`
+	// ProgressStyle is the assistant task cards' look: bar (default) or
+	// gauge (PROG-STYLE).
+	ProgressStyle string `json:"progressStyle,omitempty"`
 	// RestoreSession puts the last run's windows and tabs back on launch
 	// (session.go). It defaults to on, so it is the one setting stored as
 	// its negation: turned off writes the field.

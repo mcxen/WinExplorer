@@ -198,6 +198,19 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 					useAppearance(a.store, source)
 				}
 			},
+		}, {
+			ID: "progress", Title: "进度样式", Description: "助手任务卡",
+			Build: func(c *ui.Context) {
+				pv := 0
+				if a.assistProgressStyle() == progressStyleGauge {
+					pv = 1
+				}
+				seg := ui.Segmented(c, &pv, "条形", "仪表盘").Shrink(0)
+				if seg.Changed() {
+					style := []string{progressStyleBar, progressStyleGauge}[pv]
+					a.store.updateSettings(func(s *appSettings) { s.ProgressStyle = style })
+				}
+			},
 		}},
 	}}
 }

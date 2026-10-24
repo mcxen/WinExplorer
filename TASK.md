@@ -79,6 +79,7 @@
 | OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
 | OPENUI-MEDIA | OpenUI 图文列表 MediaList：左缩略图卡 + 右标题正文 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MEDIA | OPENUI3 | `main` |
 | OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
+| PROG-STYLE | 进度条样式优化与可选绿色仪表盘 | 中 | 已完成 | [09](docs/specs/09-archive-progress.md) PROG-STYLE | ARCHIVE-PROG | `main` |
 | ARCHIVE-PROG | 压缩 / 解压按字节进度：百分比、速度、当前文件、剩余时间、取消；助手实时进度卡 | 高 | 已完成 | [09](docs/specs/09-archive-progress.md) | OPENUI-MORE | `main` |
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
@@ -381,4 +382,12 @@
 - **交付**：状态栏进度条 + 数字行 + ×；助手本轮任务卡实时刷新至完成 / 失败 / 取消；`TaskProgress` 组件；截图 `docs/assets/shots/ARCHIVE-PROG/01-assistant-live.png`、`02-assistant-done-error.png`、`03-status-bar.png`。
 - **验收**：单测覆盖 zip 压缩 / 解压与 tar.gz 字节计数、取消、速度与剩余时间、状态栏 × 取消、助手卡只显示 ai 任务且显示错误、`TaskProgress` 解析与绘制；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
 - **已知限制**：txz / 7z / rar 及加密 ZIP 走外部程序，只有不确定进度条，且不能中途取消；内层归档连解不单独计数；助手任务卡只在最后一轮显示；tar 家族按压缩字节计数，当前成员按 tar 顺序。
+- **状态**：已完成，合入 `main`。
+
+### PROG-STYLE — 进度样式与绿色仪表盘
+- **目标**：进度条更精致（圆角、淡轨道、缓动填充、不确定横扫、状态着色），并可选绿色半圆仪表盘。
+- **范围**：`progress_style.go`（`paintProgressBar`、`paintGauge`、`paintArchiveGaugeCard`、`progressEased`）、`archive_progress_paint.go`、`forms_paint.go:paintFormProgress`、`settingsdialog.go`（进度样式）、`statestore.go`（`ProgressStyle`）；OpenUI `{style}`（`internal/assistant/openui_more.go`、`openui_fields.go`、`prompt.go`）；`docs/specs/09-archive-progress.md`、`docs/specs/README.md`、`docs/UI.md`。
+- **交付**：细条与仪表盘两种样式，覆盖进行中 / 不确定 / 完成 / 失败 / 取消；设置一行切换（助手任务卡），状态栏固定细条；`TaskProgress`、`ProgressBar` 支持 `{style: "gauge"}`；截图 `docs/assets/shots/PROG-STYLE/01-bar.png`、`02-gauge.png`。
+- **验收**：缓动 / 回退 / 减弱动态单测，设置切到仪表盘后助手卡显示百分比与取消，OpenUI style 解析与绘制；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
+- **已知限制**：缓动状态按字符串键全局保存（上限 256 个）；仪表盘固定 132×76，窄栏下右侧信息被压缩；无头截图不体现动画。
 - **状态**：已完成，合入 `main`。

@@ -673,6 +673,7 @@ func (a *App) paintOpenField(c *ui.Context, v *ouiView, p *openPaint) {
 			Hint:     v.Placeholder,
 			Min:      v.Min,
 			Max:      v.Max,
+			Style:    v.Size,
 		})
 	})
 }

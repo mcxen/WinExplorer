@@ -241,12 +241,13 @@ func openTaskProgress(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) 
 			"meta": "meta", "detail": "meta", "speed": "meta",
 			"file": "file", "current": "file", "error": "file",
 			"status": "status", "state": "status",
+			"style": "style", "variant": "style",
 		})
 	if !ok || m["title"] == "" {
 		return nil
 	}
 	return &OUIView{Kind: "taskprogress", Text: OpenShort(m["title"], 80), Label: OpenShort(m["meta"], 80),
-		Sub: m["file"], Variant: OpenStepStatus(m["status"]), Min: OpenFraction(m["value"])}
+		Sub: m["file"], Variant: OpenStepStatus(m["status"]), Min: OpenFraction(m["value"]), Size: OpenProgressStyle(m["style"])}
 }
 
 // OpenFraction reads 0–1, 0–100 or "42%" as a fraction; empty or junk is -1.
@@ -266,4 +267,32 @@ func OpenFraction(s string) float64 {
 		v = 1
 	}
 	return v
+}
+
+// OpenProgressStyle normalizes a progress style: "gauge" (dial, meter,
+// 仪表盘) or "bar"; empty means the default.
+func OpenProgressStyle(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "gauge", "dial", "meter", "仪表盘":
+		return "gauge"
+	case "bar", "line", "条形":
+		return "bar"
+	}
+	return ""
+}
+
+// openStyleArg reads {style: …} from any object argument of e.
+func openStyleArg(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) string {
+	for _, a := range e.args {
+		a = openDeref(env, a, stack)
+		if a.kind != "object" {
+			continue
+		}
+		m := map[string]string{}
+		openMoreObject(env, a, stack, map[string]string{"style": "style", "variant": "style"}, m)
+		if s := OpenProgressStyle(m["style"]); s != "" {
+			return s
+		}
+	}
+	return ""
 }

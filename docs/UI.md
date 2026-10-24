@@ -277,3 +277,10 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **状态栏**：进行中时替代「处理中 N 项」：90 DIP 细进度条 + 「动词 名称  百分比 · 已完成 / 总量 · 速度 · 剩余 m:ss」+ 「+N」+ 20px ×；悬停提示当前成员。
 - **助手任务卡**：1px 分隔色描边、8px 圆角；首行 15px 状态图标（进行中强调色归档 / 完成绿勾 / 失败红叹号 / 取消灰禁止）+ 13 号粗体标题 + 11.5 号灰数字行 + ×；次行 4px 进度条；末行 11 号当前成员或错误，超长省略并带提示。
 - **OpenUI `TaskProgress`**：同一卡片的静态版。语法见 `docs/specs/09-archive-progress.md`。
+
+## 进度样式（PROG-STYLE）
+
+- **细条** `progress_style.go:paintProgressBar`：全圆角，轨道 = 状态色 α0.14；填充指数缓出（τ=80ms，≈240ms 到位，`progressEased`），下降立即跳；不确定时 35% 色带余弦缓动横扫 1200ms。任务卡 5px、状态栏 4px、表单 6px。
+- **仪表盘** `paintGauge` / `paintArchiveGaugeCard`：132×76 半圆，描边 10，轨道 α0.16 绿；值弧同一缓动；弧端内侧 9px 指针；中心 20 号 700 粗体百分比；不确定 60° 弧段往返 2400ms，中心「—」。
+- **状态色**：进行中强调色（仪表盘绿 `tokSuccess`）/ 完成 `tokSuccess` / 失败 `tokDanger` / 取消 `colorMuted`。`ReduceMotion` 时全部静止。
+- **选择**：设置「进度样式」条形 / 仪表盘（助手任务卡）；OpenUI `{style: "gauge"}`；状态栏固定细条。

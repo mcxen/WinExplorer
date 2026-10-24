@@ -235,7 +235,7 @@ func openProgressBar(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *
 		return nil
 	}
 	val, _ := openText(env, openArg(e.args, 1), stack)
-	return &OUIView{Kind: "progress", Name: name, Placeholder: strings.TrimSpace(val)}
+	return &OUIView{Kind: "progress", Name: name, Placeholder: strings.TrimSpace(val), Size: openStyleArg(env, e, stack)}
 }
 
 func openFloatArg(env map[string]OUIExpr, e OUIExpr, stack map[string]bool, def float64) float64 {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ type formFieldOpts struct {
 	Min      float64
 	Max      float64
 	Step     float64
+	// Style is ProgressBar's bar | gauge.
+	Style string
 }
 
 // paintFormField draws one standardized control. value is the live string
@@ -379,9 +382,13 @@ func (a *App) paintFormSlider(c *ui.Context, value *string, opts formFieldOpts) 
 
 func (a *App) paintFormProgress(c *ui.Context, value *string, opts formFieldOpts) {
 	frac := parseProgressFraction(*value)
-	ui.Column(c).FillWidth().Gap(4).Children(func() {
-		components.Progress(c, frac).FillWidth().Height(6)
-		ui.Text(c, strconv.Itoa(int(frac*100+0.5))+"%").FontSize(11).TextColor(colorMuted())
+	if progressStyleOf(opts.Style) == progressStyleGauge {
+		paintGauge(c, fmt.Sprintf("form-gauge-%p", value), frac, toneRunning)
+		return
+	}
+	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Box(c.Key("b")).Grow(1).MinWidth(0).Children(func() { paintProgressBar(c, fmt.Sprintf("form-bar-%p", value), frac, toneRunning, 6) })
+		ui.Text(c, strconv.Itoa(int(frac*100+0.5))+"%").FontSize(11).TextColor(colorMuted()).Shrink(0)
 	})
 }
 

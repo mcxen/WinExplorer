@@ -25,3 +25,14 @@
 - OpenUI `TaskProgress(title, value?, meta?, file?, status?)`（别名 `ArchiveProgress`，或对象 `{title, value, meta, file, status}`）：同一卡片的静态版，供模型总结。
 
 截图：`docs/assets/shots/ARCHIVE-PROG/`。
+
+## PROG-STYLE — 进度样式
+
+- **细条**（`progress_style.go:paintProgressBar`）：全圆角，轨道为状态色 14% 透明度；填充按指数缓出逼近目标（时间常数 80ms，约 240ms 到 95%），回退直接跳；不确定（外部工具 txz/7z/rar）时 35% 宽色带以余弦缓动横扫，周期 1200ms。减弱动态效果时不动画。
+- **状态色**：进行中强调色（仪表盘为绿色）、完成绿色、失败红色、取消灰色。
+- **仪表盘**（`paintGauge`、`paintArchiveGaugeCard`）：132×76 半圆弧，10px 描边，轨道 16% 绿；值弧同样缓动；弧端内侧一根短指针；中心 20 号粗体百分比；右侧标题、已完成 / 总量、速度 · 剩余、当前文件或错误、×。不确定时 60° 弧段来回摆动（周期 2400ms），中心显示「—」。
+- **选择**：
+  - 设置 → 外观 → 主题 →「进度样式」条形 / 仪表盘（`appSettings.ProgressStyle`），用于助手实时任务卡；状态栏始终为细条。
+  - OpenUI：`TaskProgress(…, {style: "gauge"})`、`ProgressBar(name, value, {style: "gauge"})`；同义词 dial、meter、仪表盘 / bar、line、条形。
+
+截图：`docs/assets/shots/PROG-STYLE/01-bar.png`、`02-gauge.png`（进行中 / 不确定 / 完成 / 失败 / 取消）。

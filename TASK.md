@@ -78,6 +78,7 @@
 | OPENUI3 | OpenUI 列表/图片/视频控件 + 媒体演示场景 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI3 | OPENUI2 | `feat/openui-media` → `main` |
 | OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
 | OPENUI-MEDIA | OpenUI 图文列表 MediaList：左缩略图卡 + 右标题正文 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MEDIA | OPENUI3 | `main` |
+| OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
@@ -127,6 +128,14 @@
 - **范围**：`assistant_markdown.go`（`assistOpenPlaceholder` / `assistOpenSkelBar` / `assistOpenReveal`）；`docs/UI.md` §6；截图 `docs/assets/shots/OPENUI-SKEL/`；本文。
 - **参考**：mygo `ui.BorderDashed`（`examples/gallery` 虚线放置区）、`Element.Loop("pulse", …, Bounce(EaseInOut))`（`ui/widgets.go` 占位说明）；本仓 `marquee.go:StrokeDashed`、`aifx.go` 呼吸节拍 `aiFxPulse`。
 - **验收**：加载态可见虚线框+呼吸条；闭合后变为真实 OpenUI；高度跳变 ≤2 DIP；`gofmt`/`go build`/`vet`/`test` 与 Windows 交叉编译通过；合入 `main` 并 push（禁止 force-push）。
+
+### OPENUI-MORE — 文件行 / 步骤 / 指标卡 / 图库
+- **目标**：补齐 ChatGPT 式高信息密度展示组件，适配文件管理助手：文件结果、执行进度、关键指标、图片网格。
+- **范围**：`internal/assistant/openui_more.go`（解析、别名、状态归一）、`openui.go` 分派、`prompt.go`；`assistant_openui_more.go`（绘制，复用 `mediaThumb`/`fileIcon`/`videoBadge`/`openQuickLookPath`/`openWithOS`）；离线演示 `assistant_openui_scenes.go`（「更多组件」/`openui-more`）；`docs/specs/08-forms.md`、`docs/UI.md`。
+- **交付**：`Files`/`FileCard`、`Steps`/`Step`、`StatCards`/`StatCard`、`Gallery`，均支持位置参数与对象形式；系统提示写明何时用；截图 `docs/assets/shots/OPENUI-MORE/01-stats-steps.png`、`02-files-gallery.png`、`03-narrow-pane.png`、`04-gallery-quicklook.png`。
+- **验收**：解析与绘制单测通过（含点图标打开快速预览）；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
+- **已知限制**：Gallery 固定 120×90 瓦片，无列数参数；Gallery 瓦片单击即快速预览，无双击系统打开（快速预览内可打开）；Files 每帧 `os.Stat` 本地路径（≤60 项）；远程路径不读大小/时间。
+- **状态**：已完成，合入 `main`。
 
 ### OPENUI-MEDIA — 图文列表 MediaList
 - **目标**：助手 OpenUI 可画 ChatGPT 式图文步骤列表：每行左侧圆角缩略图卡（图片 / 视频关键帧+播放角标 / 文档缩略，失败退回文件图标），右侧粗体标题（可编号）+ 正文；点缩略图打开快速预览。

@@ -109,3 +109,16 @@ m3 = {media: "https://example.com/a.png", kind: "image", title: "参考", text: 
 绘制：左侧 136×92 圆角缩略图卡（图片 Cover；视频走 `mediaThumb` 关键帧 + 播放角标；PDF/HTML 走首页/图标缩略；其余或加载失败显示文件图标），右侧 13px 粗体标题 + 12px 正文自动换行，行间 1px 分隔线。点击缩略图以该文件打开空格快速预览（`openQuickLookPath`，不改变选中项；←/→ 不切换）。`http(s)` 地址后台下载（≤16 MB、20 s 超时）到 `TempDir/sunvale-openui-media` 后显示与预览，下载前显示文件图标。流式未闭合时沿用 OPENUI-SKEL 骨架。
 
 截图：`docs/assets/shots/OPENUI-MEDIA/04-medialist.png`（列表）、`05-medialist-quicklook.png`（点缩略图打开快速预览）。
+
+## OPENUI-MORE — Files / Steps / StatCards / Gallery
+
+已有组件不重复：`Note`/`Callout`、`KeyValue`、`Badge`、`Table`、`Tree`、`Chart`、`DonutChart`、`Accordion`、`ListField`（`FileList` 为其别名，表单内勾选）、`MediaList`。本批只补缺口。
+
+| 组件 | 别名 | 语法 | 说明 |
+|---|---|---|---|
+| `Files` | `FileCards` | `Files(items, title?)`；项 `FileCard(path, note?, size?, mtime?, name?)` / `{path, name, size, mtime, note}` / 路径字符串 | 行：36px 图标或缩略图 + 名称 + 「大小 · 修改时间 · 备注」；本地文件缺省的大小、时间自动读取。点图标快速预览，双击行系统打开（文件夹进入）。 |
+| `Steps` | `Timeline` | `Steps(items, title?)`；项 `Step(title, text?, status?, time?)` / `{title, text, status, time}` | 竖向时间线；status `done`/`active`/`pending`/`error`（complete、doing、failed 等同义词归一）。 |
+| `StatCards` | `Stats`、`Metrics` | `StatCards(items)`；项 `StatCard(label, value, delta?, tone?)` / `{label, value, delta, tone}` | 自动换行的指标卡；tone 着色数值与 delta。 |
+| `Gallery` | `ImageGrid` | `Gallery(items, title?)`；项为路径字符串、`MediaItem(media, caption)` 或 `{media, title}` | 120×90 缩略图网格，视频带播放角标；点开快速预览。 |
+
+每组最多 60 项；空项丢弃，全空则整条语句不画。流式时沿用 OPENUI-SKEL 骨架。离线演示：`SUNVALE_OPENUI_DEMO=1` 下发送含「更多组件」或 `openui-more` 的消息。截图：`docs/assets/shots/OPENUI-MORE/`。

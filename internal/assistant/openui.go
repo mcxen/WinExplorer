@@ -727,6 +727,14 @@ func realizeOpen(env map[string]OUIExpr, e OUIExpr, stack map[string]bool) *OUIV
 		return &OUIView{Kind: "header", Text: strings.TrimSpace(title), Sub: strings.TrimSpace(sub)}
 	case "MediaList", "MediaCards":
 		return openMediaList(env, e, stack)
+	case "Files", "FileCards":
+		return openFiles(env, e, stack)
+	case "Steps", "Timeline":
+		return openSteps(env, e, stack)
+	case "StatCards", "Stats", "Metrics":
+		return openStatCards(env, e, stack)
+	case "Gallery", "ImageGrid":
+		return openGallery(env, e, stack)
 	default:
 		return nil
 	}

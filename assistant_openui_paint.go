@@ -242,6 +242,8 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 		a.paintOpenExtra(c, v, p, depth)
 	case "medialist":
 		a.paintOpenMediaList(c, v)
+	case "files", "steps", "stats", "gallery":
+		a.paintOpenMore(c, v)
 	}
 }
 

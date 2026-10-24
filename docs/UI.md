@@ -263,3 +263,11 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 - **`MediaList(items, title?, "numbered"?)` + `MediaItem(media, title, text, kind?)`**：每行左 136×92 圆角缩略图卡（图片 / 视频关键帧 + 播放角标 / 文档首页，失败退回文件图标），右粗体标题（可编号）+ 正文换行；行间 1px 分隔线，无多余说明文字。
 - 点缩略图打开快速预览（不改选中）；`http(s)` 图片后台缓存后显示。语法见 `docs/specs/08-forms.md` OPENUI-MEDIA。截图 `docs/assets/shots/OPENUI-MEDIA/04-medialist.png`、`05-medialist-quicklook.png`；离线演示：`SUNVALE_OPENUI_DEMO=1` 下发送含「图文」或 `medialist` 的消息（`SUNVALE_DEMO_MEDIA_DIR` 可指向真实样例）。
+
+## OpenUI 文件 / 步骤 / 指标 / 图库（OPENUI-MORE）
+
+- **`Files`**：文件行，图标或缩略图 + 粗体名 + 次行「大小 · 时间 · 备注」，行间 1px 分隔，悬停底色；点图标快速预览，双击系统打开。
+- **`Steps`**：22px 状态圆点（完成绿勾 / 进行中强调色编号 / 失败红叉 / 待办空心编号）+ 竖线，右侧标题、说明与可选时间。
+- **`StatCards`**：150 宽起自动换行的指标卡，标签 12 号灰、数值 20 号粗体、delta 11 号，按 tone 着色。
+- **`Gallery`**：120×90 圆角缩略图网格，视频角标，可选说明一行；点开快速预览。
+- 语法见 `docs/specs/08-forms.md` OPENUI-MORE；截图 `docs/assets/shots/OPENUI-MORE/`。

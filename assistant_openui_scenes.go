@@ -73,6 +73,10 @@ func (a *App) assistOpenUIDemoSubmit() bool {
 	if text == "" || a.assist.running {
 		return false
 	}
+	if strings.Contains(text, "更多组件") || strings.Contains(text, "openui-more") {
+		a.assistInjectDemoReply(text, "已扫描下载文件夹：\n\n"+forms.FenceOpenUI(openUIMoreDemoProgram()))
+		return true
+	}
 	if strings.Contains(text, "图文") || strings.Contains(text, "medialist") {
 		a.assistInjectMediaDemo(text)
 		return true
@@ -168,6 +172,45 @@ func openUIMediaDemoProgram() string {
 
 func (a *App) assistInjectMediaDemo(userText string) {
 	body := "素材已按顺序整理：\n\n" + forms.FenceOpenUI(openUIMediaDemoProgram())
+	a.assist.turns = append(a.assist.turns,
+		aiTurn{Role: "user", Text: userText},
+		aiTurn{Role: "assistant", Text: body},
+	)
+	a.assist.draft = ""
+	a.assist.status = ""
+	a.assist.running = false
+}
+
+// openUIMoreDemoProgram is the offline OPENUI-MORE reply: StatCards, Steps,
+// Files and Gallery over the demo sandbox (SUNVALE_DEMO_MEDIA_DIR samples
+// fill the gallery when set).
+func openUIMoreDemoProgram() string {
+	root := forms.EnsureDemoSandbox()
+	q := func(parts ...string) string {
+		return strconv.Quote(filepath.ToSlash(filepath.Join(append([]string{root}, parts...)...)))
+	}
+	gallery := []string{q("Downloads", "demo-photo.png"), q("Downloads", "demo-thumb.png"), q("Movies", "demo-clip.mp4")}
+	if dir := os.Getenv("SUNVALE_DEMO_MEDIA_DIR"); dir != "" {
+		if ents, err := os.ReadDir(dir); err == nil {
+			var picked []string
+			for _, e := range ents {
+				if ext := lowerExt(e.Name()); isImageExt(ext) || isVideoExt(ext) {
+					picked = append(picked, strconv.Quote(filepath.ToSlash(filepath.Join(dir, e.Name()))))
+				}
+			}
+			if len(picked) > 0 {
+				gallery = picked
+			}
+		}
+	}
+	return "root = Card([stats, steps, files, gallery])\n" +
+		"stats = StatCards([StatCard(\"已用空间\", \"412 GB\", \"+12 GB 本周\", \"warning\"), StatCard(\"可释放\", \"3.8 GB\", \"重复 + 安装包\", \"success\"), StatCard(\"文件数\", \"1,284\", \"下载文件夹\")])\n" +
+		"steps = Steps([Step(\"扫描下载文件夹\", \"1,284 个文件\", \"done\", \"22:01\"), Step(\"查找重复文件\", \"按内容哈希比对\", \"done\"), Step(\"移动到分类目录\", \"进行中 3/12\", \"active\"), Step(\"清空回收站\", \"需确认\", \"pending\")], \"整理进度\")\n" +
+		"files = Files([FileCard(" + q("Documents", "报告.pdf") + ", \"与下载中副本重复\"), FileCard(" + q("Downloads", "资料.zip") + ", \"已解压，可删除\"), FileCard(" + q("Downloads", "会议纪要.md") + "), FileCard(" + q("Movies") + ", \"文件夹\")], \"待处理文件\")\n" +
+		"gallery = Gallery([" + strings.Join(gallery, ", ") + "], \"图片与视频\")\n"
+}
+
+func (a *App) assistInjectDemoReply(userText, body string) {
 	a.assist.turns = append(a.assist.turns,
 		aiTurn{Role: "user", Text: userText},
 		aiTurn{Role: "assistant", Text: body},

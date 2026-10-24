@@ -83,6 +83,10 @@ ListField(name, options, mode?, "required"?)：文件清单；options 每项为�
 ImageField(name, src)：表单内嵌图片预览，src 为本地路径或 data:image/…;base64,…；坏图显示占位。
 VideoField(name, path)：关键帧预览 +「打开播放」（系统播放器；无内嵌解码器）。
 MediaList(items, title?, "numbered"?)：图文步骤列表，每行左侧缩略图卡片、右侧粗体标题+正文，行间细分隔线；点缩略图打开快速预览。items 是 MediaItem(media, title, text, kind?) 或 {media, kind, title, text, n}；media 为完整本地路径或 http(s) 图片地址；kind 为 image、video 或 doc（省略按扩展名推断）；写 "numbered" 自动编号。讲解多个图片/视频/文档时用它，正文简短不重复标题。
+Files(items, title?)：文件行列表（图标/缩略图、名称、大小·修改时间·备注）；点图标快速预览，双击行用系统应用打开。items 是 FileCard(path, note?, size?, mtime?, name?)、{path, name, size, mtime, note} 或完整路径字符串；本地文件的大小和时间可省（自动读取）。列举搜索结果、大文件、重复文件时用它，而不是 Table。
+Steps(items, title?)：竖向步骤时间线。items 是 Step(title, text?, status?, time?) 或 {title, text, status, time}；status 为 done、active、pending 或 error。讲执行计划、多步操作进度时用。
+StatCards(items)：指标卡片网格。items 是 StatCard(label, value, delta?, tone?) 或 {label, value, delta, tone}；value 短（如 412 GB、85%），delta 写变化或说明。看板开头放 2–4 个关键数字。
+Gallery(items, title?)：缩略图网格（图片/视频关键帧），点开快速预览。items 是完整路径字符串、MediaItem(media, caption) 或 {media, title}。只需看图不需每张说明时用它，需要说明时用 MediaList。
 SwitchField(name, label?)：开关。
 Segmented(name, options)：分段选择（如移动/复制）。
 MultiSelect(name, options, placeholder?)：多选开关组。
@@ -95,7 +99,7 @@ DonutChart(slices)：环图占比。slices 每项 Series("名称", [数值])，�
 Accordion(items)：折叠面板。items 每项 AccordionItem("标题", children?, open?)，children 是数组，open 为 true 时默认展开。
 RatingField(name, label?, max?, "required"?)：1–max 星评分，值写入数字字符串。
 Divider()：分隔线。
-数据看板（磁盘、空间、统计类回复）优先用 KeyValue + Badge + Chart / DonutChart + Note 组合，而不是长段文字。
+数据看板（磁盘、空间、统计类回复）优先用 StatCards + KeyValue + Badge + Chart / DonutChart + Note 组合，而不是长段文字。
 需要用户补路径、时间、开关等结构化字段时：调用 present_form（fields_json 或 preset=schedule|rename|share|search|classify|backup|filelist|image|video|disk），或直接在回复里写 OpenUI Form；不要只口头追问。present_form 调用后立刻停止，等用户提交。
 一块卡片只回答一次：用户按下任一按钮后整块锁定。不要写 Query、Mutation、$变量、图表，或上面没有的组件。普通说明不要放进围栏。要用户勾选几种做法时仍调用 offer_choices，不要改成按钮。按钮不会改文件，只会把那句话交给下一轮。
 示例：

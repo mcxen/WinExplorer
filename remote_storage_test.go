@@ -76,7 +76,7 @@ func TestRemoteStorageCRUD(t *testing.T) {
 	}
 	// A driver the app cannot serve is refused.
 	rr = e.api(http.MethodPost, "/api/storage/create", tok, map[string]any{
-		"mount_path": "/smb", "driver": "smb", "addition": `{"root":"/x"}`,
+		"mount_path": "/ftp", "driver": "ftp", "addition": `{"root":"/x"}`,
 	})
 	if rr.Code == 200 {
 		t.Fatal("an unsupported driver was accepted")
@@ -351,6 +351,10 @@ func TestRemoteDriverEndpoints(t *testing.T) {
 	if !ok || len(info.ConfigFields) == 0 || info.ConfigFields[0].Name != "root" {
 		t.Fatalf("driver list = %+v, want local with a root field", drivers)
 	}
+	smb, ok := drivers["smb"]
+	if !ok || smb.OnlyProxy != true || len(smb.ConfigFields) < 4 {
+		t.Fatalf("driver list is missing the smb driver: %+v", drivers)
+	}
 
 	if rr := e.api(http.MethodGet, "/api/driver/names", tok, nil); rr.Code != 200 {
 		t.Fatalf("driver names: %d", rr.Code)
@@ -358,8 +362,145 @@ func TestRemoteDriverEndpoints(t *testing.T) {
 	if rr := e.api(http.MethodGet, "/api/driver/info?driver=local", tok, nil); rr.Code != 200 {
 		t.Fatalf("driver info: %d", rr.Code)
 	}
-	if rr := e.api(http.MethodGet, "/api/driver/info?driver=smb", tok, nil); rr.Code != 404 {
+	if rr := e.api(http.MethodGet, "/api/driver/info?driver=smb", tok, nil); rr.Code != 200 {
+		t.Fatalf("smb driver info: %d", rr.Code)
+	}
+	if rr := e.api(http.MethodGet, "/api/driver/info?driver=ftp", tok, nil); rr.Code != 404 {
 		t.Fatalf("unknown driver: code %d, want 404", rr.Code)
+	}
+}
+
+// TestRemoteSMBStorage: the smb driver speaks the protocol directly with
+// go-smb2. The test verifies the storage-page contract — create accepts the
+// driver with its addition fields (address/username/share_name/root), a
+// missing required field is refused, and the driver is writable (it
+// implements Writer, so fs/list reports write=true). A live SMB server is
+// not available in CI, so listing a mount whose server is down returns the
+// protocol's object-not-found rather than a hang.
+func TestRemoteSMBStorage(t *testing.T) {
+	e := storageEnv(t)
+	tok := e.login()
+
+	// Required fields present: accepted.
+	rr := e.api(http.MethodPost, "/api/storage/create", tok, map[string]any{
+		"mount_path": "/nas", "driver": "smb",
+		"addition": `{"address":"nas.local","username":"guest","share_name":"public","root":"/"}`,
+	})
+	if rr.Code != 200 {
+		t.Fatalf("smb create: %d (%s)", rr.Code, rr.Message)
+	}
+
+	// Missing required field (address): refused.
+	if rr := e.api(http.MethodPost, "/api/storage/create", tok, map[string]any{
+		"mount_path": "/nas2", "driver": "smb",
+		"addition": `{"username":"guest","share_name":"public"}`,
+	}); rr.Code == 200 {
+		t.Fatal("an SMB mount without an address was accepted")
+	}
+
+	// The driver is writable: it implements Writer, so the remote API's
+	// write guard does not refuse it. A listing of a server that is down
+	// returns object-not-found (the dial fails), not a hang.
+	list := e.api(http.MethodPost, "/api/fs/list", tok, map[string]any{"path": "/nas"})
+	if list.Code != 500 {
+		t.Fatalf("smb list of a down server: code %d, want 500 (dial failed)", list.Code)
+	}
+
+	// The homepage's storage row still lists the enabled smb mount.
+	rr = e.api(http.MethodGet, "/api/fs/storage_list", tok, nil)
+	var home remoteFSListData
+	if err := json.Unmarshal(rr.Data, &home); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, o := range home.Content {
+		if o.Path == "/nas" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the smb mount is missing from the homepage row: %+v", home.Content)
+	}
+}
+
+// TestRemoteStorageOrder: the management page's drag-to-pin produces an id
+// list, /api/storage/order stores it, and the homepage's storage row lists
+// the mounts lowest order first — pinned mounts lead, unrated ones keep
+// their store order behind them.
+func TestRemoteStorageOrder(t *testing.T) {
+	e := storageEnv(t)
+	for _, name := range []string{"Pictures", "Music", "Movies"} {
+		if err := os.MkdirAll(filepath.Join(e.home, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tok := e.login()
+	ids := map[string]uint{}
+	for i, m := range []struct{ mount, dir string }{
+		{"/pics", "Pictures"}, {"/music", "Music"}, {"/movies", "Movies"},
+	} {
+		rr := e.api(http.MethodPost, "/api/storage/create", tok, map[string]any{
+			"mount_path": m.mount, "driver": "local",
+			"addition": `{"root":"` + filepath.Join(e.home, m.dir) + `"}`,
+		})
+		if rr.Code != 200 {
+			t.Fatalf("create %s: %d (%s)", m.mount, rr.Code, rr.Message)
+		}
+		var created struct {
+			ID uint `json:"id"`
+		}
+		if err := json.Unmarshal(rr.Data, &created); err != nil {
+			t.Fatal(err)
+		}
+		ids[m.mount] = created.ID
+		_ = i
+	}
+
+	// Pin /movies first, then /pics: the homepage row must follow.
+	order := []uint{ids["/movies"], ids["/pics"], ids["/music"]}
+	if rr := e.api(http.MethodPost, "/api/storage/order", tok, map[string]any{"ids": order}); rr.Code != 200 {
+		t.Fatalf("order: %d (%s)", rr.Code, rr.Message)
+	}
+	rr := e.api(http.MethodGet, "/api/fs/storage_list", tok, nil)
+	var page remoteFSListData
+	if err := json.Unmarshal(rr.Data, &page); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, o := range page.Content {
+		if o.Path != "/" { // the root mount always answers first
+			got = append(got, o.Path)
+		}
+	}
+	want := []string{"/movies", "/pics", "/music"}
+	if len(got) != len(want) {
+		t.Fatalf("homepage mounts = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("homepage mounts = %v, want %v", got, want)
+		}
+	}
+
+	// The management page's own list carries the stored orders back.
+	rr = e.api(http.MethodGet, "/api/storage/list", tok, nil)
+	var lst struct {
+		Content []remoteStorage `json:"content"`
+	}
+	if err := json.Unmarshal(rr.Data, &lst); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[uint]int{}
+	for _, s := range lst.Content {
+		byID[s.ID] = s.Order
+	}
+	if byID[ids["/movies"]] != 1 || byID[ids["/pics"]] != 2 || byID[ids["/music"]] != 3 {
+		t.Fatalf("stored orders = %v (movies=%d pics=%d music=%d)", lst.Content,
+			byID[ids["/movies"]], byID[ids["/pics"]], byID[ids["/music"]])
+	}
+	// Guests cannot reorder.
+	if guest := e.api(http.MethodPost, "/api/storage/order", "", map[string]any{"ids": order}); guest.Code != 401 {
+		t.Fatalf("guest reorder: code %d", guest.Code)
 	}
 }
 

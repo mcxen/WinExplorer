@@ -67,9 +67,9 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"fzone", "previewpane", "statusbar", "statusLeft", "statusMode",
 		// 导航树、上传进度与拖拽提示
 		"navtree", "uplist", "dropHint",
-		// 存储页：根目录与挂载点
+		// 存储页：根目录、挂载点行与添加/编辑存储的弹层
 		"pg-storage", "rootPath", "rootSave", "rootNow", "storageList",
-		"stMount", "stRoot", "stAdd",
+		"stAdd",
 	} {
 		if !ids[id] {
 			t.Errorf("the files view lost #%s", id)
@@ -85,6 +85,8 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"压缩为 ZIP 文件", "全部解压", "解压到…", "复制为路径", "属性",
 		"历史记录", "补全建议", "清除历史记录", "输入路径",
 		"隐藏的项目", "api/fs/hidden",
+		// 存储页与快速分享：本轮融资的界面
+		"快速分享", "分享设置…", "置顶", "SMB 网络共享", "api/storage/order",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the management page lost the %q command", want)

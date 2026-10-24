@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -15,9 +16,8 @@ import (
 	"time"
 
 	"sunvale/internal/remote"
+	"sunvale/internal/remote/driver"
 	"sunvale/internal/searchquery"
-
-	"sunvale/internal/rename"
 )
 
 // remote_fs.go is the read side of the remote server's OpenList-compatible
@@ -138,28 +138,19 @@ func remoteObjName(disk string) string {
 	return filepath.Base(disk)
 }
 
-// remoteFSObj builds the remoteObj for the file stat'd at disk, name being
-// its base name and vpath its virtual path: birthtime as Created (modtime
-// as the fallback, zero passed through), and, for files only, a sign.
-// A folder carries size 0: OpenList's Local driver only fills it when
-// directory_size is on, and a bare stat size (the inode on Unix) would read
-// as a real folder total on the client.
-func (a *App) remoteFSObj(name, vpath, disk string, st os.FileInfo) remoteObj {
-	created := st.ModTime()
-	if bt, err := rename.BirthTime(disk); err == nil {
-		created = bt
-	}
-	size := st.Size()
-	if st.IsDir() {
-		size = 0
-	}
+// remoteFSObj builds the remoteObj for a driver.Obj: name being its base
+// name and vpath its virtual path. A folder carries size 0: OpenList's
+// Local driver only fills it when directory_size is on, and a bare stat
+// size (the inode on Unix) would read as a real folder total on the
+// client. A file carries a sign for download.
+func (a *App) remoteFSObj(name, vpath string, o driver.Obj) remoteObj {
 	obj := remoteObj{
 		Name:     name,
-		Size:     size,
-		IsDir:    st.IsDir(),
-		Modified: st.ModTime(),
-		Created:  created,
-		Type:     remote.FSType(name, st.IsDir()),
+		Size:     o.Size,
+		IsDir:    o.IsDir,
+		Modified: o.ModTime,
+		Created:  o.Created,
+		Type:     remote.FSType(name, o.IsDir),
 		HashInfo: "null",
 	}
 	if !obj.IsDir {
@@ -206,48 +197,49 @@ func (a *App) remoteHandleFSList(w http.ResponseWriter, r *http.Request) {
 		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
-	disk, ok := a.remoteDiskPath(req.Path)
+	d, inner, ok := a.remoteDriverFor(req.Path)
 	if !ok {
 		remote.Err(w, 400, "invalid path")
 		return
 	}
-	info, err := os.Stat(disk)
+	// A read-only mount (a driver without Writer) answers list/get/download
+	// but not the write operations; the flag tells the frontend to grey its
+	// 写按钮 out before the server has to refuse them.
+	writable := driver.Writable(d)
+	// List reads a directory; a file is not a folder, as OpenList says.
+	o, err := d.Get(r.Context(), inner)
 	if err != nil {
 		remote.Err(w, 500, "object not found")
 		return
 	}
-	if !info.IsDir() {
+	if !o.IsDir {
 		remote.Err(w, 500, "not a folder")
 		return
 	}
-	entries, err := os.ReadDir(disk)
+	objs, err := d.List(r.Context(), inner)
 	if err != nil {
 		remote.Err(w, 500, "object not found")
 		return
 	}
 	hidden := a.remoteShowHidden()
-	vdir := remoteVPath(disk)
-	objs := make([]remoteObj, 0, len(entries))
-	for _, de := range entries {
-		name := de.Name()
+	vdir := remote.FSCleanVPath(req.Path)
+	out := make([]remoteObj, 0, len(objs))
+	for _, o := range objs {
+		name := o.Name
 		// Dotfiles stay out unless the owner asked the remote pages to show
 		// them. The filter lives here, not in each page, so the homepage and
 		// the management file page cannot disagree.
 		if !hidden && strings.HasPrefix(name, ".") {
 			continue
 		}
-		diskName := filepath.Join(disk, name)
-		st, err := os.Stat(diskName)
-		if err != nil {
-			continue // unreadable entry: leave it out, keep the listing alive
-		}
-		objs = append(objs, a.remoteFSObj(name, path.Join(vdir, name), diskName, st))
+		obj := a.remoteFSObj(name, path.Join(vdir, name), o)
+		out = append(out, obj)
 	}
-	sort.SliceStable(objs, func(i, j int) bool {
-		if objs[i].IsDir != objs[j].IsDir {
-			return objs[i].IsDir
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].IsDir != out[j].IsDir {
+			return out[i].IsDir
 		}
-		return strings.ToLower(objs[i].Name) < strings.ToLower(objs[j].Name)
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
 	})
 	page := req.Page
 	if page < 1 {
@@ -258,19 +250,19 @@ func (a *App) remoteHandleFSList(w http.ResponseWriter, r *http.Request) {
 		start = int64(page-1) * int64(req.PerPage)
 	}
 	var content []remoteObj
-	if start < int64(len(objs)) {
-		end := int64(len(objs))
+	if start < int64(len(out)) {
+		end := int64(len(out))
 		if req.PerPage > 0 && start+int64(req.PerPage) < end {
 			end = start + int64(req.PerPage)
 		}
-		content = objs[start:end]
+		content = out[start:end]
 	}
 	remote.OK(w, remoteFSListData{
 		Content:            content,
-		Total:              int64(len(objs)),
+		Total:              int64(len(out)),
 		Readme:             "",
 		Header:             "",
-		Write:              true,
+		Write:              writable,
 		WriteContentBypass: false,
 		Provider:           "unknown",
 	})
@@ -345,26 +337,30 @@ func (a *App) remoteHandleFSGet(w http.ResponseWriter, r *http.Request) {
 		remote.Err(w, 401, "Guest user is disabled, login please")
 		return
 	}
-	disk, ok := a.remoteDiskPath(req.Path)
+	d, inner, ok := a.remoteDriverFor(req.Path)
 	if !ok {
 		remote.Err(w, 400, "invalid path")
 		return
 	}
-	st, err := os.Stat(disk)
+	o, err := d.Get(r.Context(), inner)
 	if err != nil {
 		remote.Err(w, 500, "object not found")
 		return
 	}
-	vpath := remoteVPath(disk)
+	vpath := remote.FSCleanVPath(req.Path)
+	name := o.Name
+	if remote.FSCleanVPath(req.Path) == "/" {
+		name = "root"
+	}
 	data := remoteFSGetData{
-		remoteObj: a.remoteFSObj(remoteObjName(disk), vpath, disk, st),
+		remoteObj: a.remoteFSObj(name, vpath, o),
 		Readme:    "",
 		Header:    "",
 		Provider:  "Local",
 	}
 	if !data.IsDir {
 		data.RawURL = remote.RequestBase(r) + "/p" + remote.FSEncodePath(vpath) + "?sign=" + data.Sign
-		data.Related = a.remoteRelated(disk, data.Name, data.Type)
+		data.Related = a.remoteRelated(d, inner, data.Name, data.Type)
 	}
 	remote.OK(w, data)
 }
@@ -374,28 +370,23 @@ func (a *App) remoteHandleFSGet(w http.ResponseWriter, r *http.Request) {
 // extension, so a player finds its .srt/.ass/.vtt subtitles and the .xml
 // danmu next to the file. Anything else — a folder, a non-video, a folder
 // too big to list — stays nil, which serializes as null.
-func (a *App) remoteRelated(disk, name string, typ int) []remoteObj {
+func (a *App) remoteRelated(d driver.Driver, inner, name string, typ int) []remoteObj {
 	if typ != remote.FSTypeVideo {
 		return nil
 	}
-	entries, err := os.ReadDir(filepath.Dir(disk))
+	siblings, err := d.List(context.Background(), path.Dir(inner))
 	if err != nil {
 		return nil
 	}
 	stem := strings.TrimSuffix(name, path.Ext(name))
-	vdir := remoteVPath(filepath.Dir(disk))
+	vdir := remote.FSCleanVPath(path.Dir(inner))
 	var related []remoteObj
-	for _, de := range entries {
-		sibling := de.Name()
+	for _, s := range siblings {
+		sibling := s.Name
 		if sibling == name || !strings.HasPrefix(sibling, stem) {
 			continue
 		}
-		diskName := filepath.Join(filepath.Dir(disk), sibling)
-		st, err := os.Stat(diskName)
-		if err != nil {
-			continue
-		}
-		related = append(related, a.remoteFSObj(sibling, path.Join(vdir, sibling), diskName, st))
+		related = append(related, a.remoteFSObj(sibling, path.Join(vdir, sibling), s))
 	}
 	return related
 }

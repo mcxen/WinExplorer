@@ -279,6 +279,21 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
 .shlink{display:flex;align-items:center;gap:8px;background:var(--hover);border-radius:6px;padding:9px 12px;margin-top:12px}
 .shlink span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;text-align:left}
 .setrow{display:flex;align-items:center;gap:10px;margin-top:12px}
+/* 存储页：挂载点行（可拖动置顶）与添加/编辑存储的表单 */
+.strow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-top:10px;background:var(--card);cursor:grab}
+.strow.dragging{opacity:.5}
+.strow.over{border-color:var(--accent);box-shadow:0 0 0 2px var(--weak)}
+.strow .grip{color:var(--muted);flex:none;cursor:grab;display:flex}
+.strow .stmain{flex:1;min-width:0;text-align:left}
+.strow .stmount{font-weight:600;font-size:13px;overflow-wrap:anywhere}
+.strow .stmount .pinned{color:var(--accent);font-size:11px;margin-left:6px}
+.strow .stroot{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.strow .badge{flex:none;font-size:11px;padding:2px 8px;border-radius:9px;background:var(--hover);color:var(--muted)}
+.strow .badge.smb{background:var(--weak);color:var(--accent)}
+.strow .badge.off{color:var(--danger)}
+.stform .fld{margin-top:10px}
+.stform .fld select{width:100%}
+.sthint{color:var(--muted);font-size:12px;margin:6px 0 0;line-height:1.6}
 #preview{position:fixed;inset:0;z-index:70;background:rgba(16,16,16,.88);display:flex;flex-direction:column}
 .pvbar{display:flex;align-items:center;gap:10px;padding:12px 18px;color:#fff}
 #pvName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -554,22 +569,18 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
     </div>
    </section>
    <section id="pg-storage" class="page hidden">
-    <div class="cards">
-     <div class="card">
-      <h2>首页显示</h2>
-      <p class="mtext">根挂载决定远程首页列出哪个文件夹。把它指到图片目录，首页就是图片目录。</p>
-      <div class="fld"><label>根目录（挂载点 /）</label><input id="rootPath" autocomplete="off" placeholder="/Users/me/Pictures"></div>
-      <div class="macts"><button id="rootSave" class="primary">保存</button></div>
-      <p class="hint" id="rootNow"></p>
-     </div>
-     <div class="card">
-      <h2>挂载点</h2>
-      <p class="mtext">每个挂载点把一个虚拟路径映射到本机文件夹。挂载点 / 是根，其余是它下面的子目录。</p>
-      <div id="storageList"></div>
-      <div class="fld"><label>挂载路径（如 /pics）</label><input id="stMount" autocomplete="off" placeholder="/pics"></div>
-      <div class="fld"><label>本机文件夹</label><input id="stRoot" autocomplete="off" placeholder="/Users/me/Pictures"></div>
-      <div class="macts"><button id="stAdd" class="primary">添加挂载</button></div>
-     </div>
+    <div class="card" style="margin-bottom:16px">
+     <h2>挂载点</h2>
+     <p class="mtext">每个挂载点把一个虚拟路径映射到一个存储：本机文件夹，或本机已挂载的 SMB 网络共享（只读）。挂载在 / 的是远程首页；拖动挂载点行可以调整顺序，置顶的挂载在首页的存储行里排最前。</p>
+     <div id="storageList"></div>
+     <div class="macts"><button id="stAdd" class="primary">添加存储</button></div>
+    </div>
+    <div class="card">
+     <h2>首页显示</h2>
+     <p class="mtext">挂载在 / 的存储决定远程首页列出哪个文件夹。把它指到图片目录，首页就是图片目录。</p>
+     <div class="fld"><label>根目录（挂载点 /）</label><input id="rootPath" autocomplete="off" placeholder="/Users/me/Pictures"></div>
+     <div class="macts"><button id="rootSave" class="primary">保存</button></div>
+     <p class="hint" id="rootNow"></p>
     </div>
    </section>
    <section id="pg-set" class="page hidden">
@@ -635,6 +646,7 @@ let page='';
 let status=null;
 let curPath='/';
 let items=[];
+let curWritable=true; // 当前文件夹是否可写（SMB 只读挂载为 false）
 const selected=new Set();
 let modalCancel=null;
 // 触屏判定：粗指针设备上用「点已选中项打开、长按出菜单、左右滑动翻页」，
@@ -833,16 +845,24 @@ async function setRemote(on){
  if(on){toast('远程访问已开启',1);await loadStatus()}
  else{status=status||{};status.enabled=false;renderStatus();toast('远程访问已关闭',1)}
 }
-// ---- 存储：挂载点与远程首页 ----
+// ---- 存储：挂载点（本地 / SMB）、置顶与远程首页 ----
 let storages=[];
+let drivers=null; // /api/driver/list 的缓存：驱动名 → 表单字段
 async function loadStorages(){
  const j=await api('/api/storage/list');
  if(!j||j.code!==200){toast('存储加载失败：'+(j&&j.message||'网络错误'),0);return}
  storages=(j.data&&j.data.content)||[];
  renderStorages();
+ if(!drivers){
+  const d=await api('/api/driver/list');
+  if(d&&d.code===200)drivers=d.data||{};
+ }
 }
 function storageRootOf(s){
  try{return (JSON.parse(s.addition||'{}').root)||''}catch(e){return ''}
+}
+function storageSMBOf(s){
+ try{return JSON.parse(s.addition||'{}')||{}}catch(e){return{}}
 }
 function renderStorages(){
  const root=storages.find(s=>s.mount_path==='/');
@@ -850,12 +870,25 @@ function renderStorages(){
  $('rootNow').textContent=root?('当前：'+storageRootOf(root)):'';
  const box=$('storageList');
  box.textContent='';
- storages.filter(s=>s.mount_path!=='/').forEach(s=>{
+ const rows=storages.filter(s=>s.mount_path!=='/');
+ rows.forEach((s,i)=>{
   const row=document.createElement('div');
-  row.className='setrow';
-  const txt=document.createElement('span');
-  txt.textContent=s.mount_path+' → '+storageRootOf(s)+(s.disabled?'（已停用）':'');
-  txt.style.flex='1';
+  row.className='strow';
+  row.draggable=true;
+  row.dataset.id=s.id;
+  const grip=el('span','grip');
+  grip.innerHTML='<svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>';
+  const main=el('div','stmain');
+  const mount=el('div','stmount',s.mount_path+' → '+storageRootOf(s));
+  if(s.order)mount.append(el('span','pinned','置顶'));
+  main.append(mount);
+  const badge=el('span','badge'+(s.driver==='smb'?' smb':'')+(s.disabled?' off':''),
+   s.disabled?'已停用':(s.driver==='smb'?'SMB · 只读':'本机'));
+  // 置顶 / 取消置顶：直接换到列表首位或末位，保存为 order
+  const pin=btn(s.order?'取消置顶':'置顶');
+  pin.onclick=()=>togglePin(s);
+  const edit=btn('编辑');
+  edit.onclick=()=>storageModal(s);
   const toggle=btn(s.disabled?'启用':'停用');
   toggle.onclick=async()=>{
    const act=s.disabled?'enable':'disable';
@@ -870,39 +903,178 @@ function renderStorages(){
    if(!j||j.code!==200){toast('删除失败：'+(j&&j.message||'网络错误'),0);return}
    await loadStorages();
   };
-  row.append(txt,toggle,del);
+  row.append(grip,main,badge,pin,edit,toggle,del);
+  // 拖动排序：拖起行、拖过行高亮，落下按新顺序保存 order
+  row.addEventListener('dragstart',ev=>{
+   ev.dataTransfer.setData('text/plain',String(s.id));
+   ev.dataTransfer.effectAllowed='move';
+   row.classList.add('dragging');
+  });
+  row.addEventListener('dragend',()=>{
+   row.classList.remove('dragging');
+   box.querySelectorAll('.strow').forEach(r=>r.classList.remove('over'));
+  });
+  row.addEventListener('dragover',ev=>{
+   ev.preventDefault();
+   ev.dataTransfer.dropEffect='move';
+   row.classList.add('over');
+  });
+  row.addEventListener('dragleave',()=>row.classList.remove('over'));
+  row.addEventListener('drop',async ev=>{
+   ev.preventDefault();
+   row.classList.remove('over');
+   const srcId=parseInt(ev.dataTransfer.getData('text/plain'),10);
+   if(!srcId||srcId===s.id)return;
+   const order=storages.filter(x=>x.mount_path!=='/').map(x=>x.id);
+   const from=order.indexOf(srcId),to=order.indexOf(s.id);
+   if(from<0||to<0)return;
+   order.splice(to,0,...order.splice(from,1));
+   const j=await api('/api/storage/order','POST',{ids:order});
+   if(!j||j.code!==200){toast('排序失败：'+(j&&j.message||'网络错误'),0);return}
+   await loadStorages();
+  });
   box.append(row);
  });
- if(!box.children.length){
-  const p=document.createElement('p');p.className='hint';p.textContent='还没有子挂载点';
+ if(!rows.length){
+  const p=document.createElement('p');p.className='hint';p.textContent='还没有子挂载点。添加本机文件夹或 SMB 共享，把它们挂进远程首页。';
   box.append(p);
  }
+}
+// 置顶：order 序号 1..n 即列表顺序。置顶把该挂载移到最前，取消置顶移到最后（order=0 保持原序）。
+async function togglePin(s){
+ const rows=storages.filter(x=>x.mount_path!=='/').map(x=>x.id);
+ const i=rows.indexOf(s.id);
+ if(i<0)return;
+ rows.splice(i,1);
+ if(!s.order)rows.unshift(s.id);else rows.push(s.id);
+ const j=await api('/api/storage/order','POST',{ids:rows});
+ if(!j||j.code!==200){toast('操作失败：'+(j&&j.message||'网络错误'),0);return}
+ await loadStorages();
+}
+// storageModal：新增 / 编辑一个挂载。driver 决定表单字段——local 只要
+// 一个文件夹路径；smb 要服务器、共享名与可选子路径，前端按平台拼出
+// 本机挂载路径（macOS /Volumes/<share>，Windows \\server\share），服务器
+// 只校验这个路径存在可读。
+function storageModal(s){
+ const editing=!!s;
+ s=s||{};
+ frameModal(editing?'编辑挂载 '+s.mount_path:'添加存储',b=>{
+  b.classList.add('stform');
+  const f0=el('div','fld');
+  f0.append(el('label','','存储类型'));
+  const drv=el('select');
+  drv.append(new Option('本机文件夹','local'));
+  drv.append(new Option('SMB 网络共享（本机已挂载，只读）','smb'));
+  drv.value=s.driver||'local';
+  f0.append(drv);
+  const f1=el('div','fld');
+  f1.append(el('label','','挂载路径（如 /pics）'));
+  const mount=el('input');
+  mount.autocomplete='off';
+  mount.placeholder='/pics';
+  mount.value=s.mount_path==='/'?'':(s.mount_path||'');
+  f1.append(mount);
+  // local 字段
+  const f2=el('div','fld');
+  f2.append(el('label','','本机文件夹'));
+  const root=el('input');
+  root.autocomplete='off';
+  root.placeholder='/Users/me/Pictures';
+  f2.append(root);
+  // smb 字段
+  const f3=el('div','fld');
+  f3.append(el('label','','服务器地址'));
+  const smbServer=el('input');
+  smbServer.autocomplete='off';
+  smbServer.placeholder='192.168.1.10 或 nas.local';
+  const f4=el('div','fld');
+  f4.append(el('label','','共享名'));
+  const smbShare=el('input');
+  smbShare.autocomplete='off';
+  smbShare.placeholder='public';
+  const f5=el('div','fld');
+  f5.append(el('label','','共享内子路径（可选）'));
+  const smbSub=el('input');
+  smbSub.autocomplete='off';
+  smbSub.placeholder='/photos';
+  f3.append(smbServer);f4.append(smbShare);f5.append(smbSub);
+  const f2l=el('label','','本机文件夹');
+  const hint=el('p','sthint','');
+  const prefill=()=>{
+   if(drv.value==='local'){
+    if(editing)root.value=storageRootOf(s);
+    hint.textContent='服务器直接读这个文件夹，可读可写。';
+    f2.firstChild.textContent='本机文件夹';
+   }else{
+    const sm=storageSMBOf(s);
+    if(editing){smbServer.value=sm.server||'';smbShare.value=sm.share||'';smbSub.value=sm.sub||''}
+    hint.textContent='需要操作系统已挂载该共享：macOS 打开 Finder → 前往 → 连接服务器（smb://…），Windows 打开 \\\\server\\share 后填同样三项。挂载后只读，可浏览与下载。';
+   }
+  };
+  const syncVis=()=>{
+   f2.classList.toggle('hidden',drv.value!=='local');
+   f3.classList.toggle('hidden',drv.value!=='smb');
+   f4.classList.toggle('hidden',drv.value!=='smb');
+   f5.classList.toggle('hidden',drv.value!=='smb');
+   prefill();
+  };
+  drv.onchange=syncVis;
+  syncVis();
+  const acts=el('div','macts');
+  const cc=btn('取消');
+  cc.onclick=closeModal;
+  const ok=btn(editing?'保存':'添加','primary');
+  acts.append(cc,ok);
+  b.append(f0,f1,f2,f3,f4,f5,hint,acts);
+  ok.onclick=async()=>{
+   const mp=mount.value.trim()||'/';
+   let body;
+   if(drv.value==='local'){
+    const r=root.value.trim();
+    if(!r){toast('请填写文件夹路径',0);return}
+    body={mount_path:mp,driver:'local',addition:JSON.stringify({root:r})};
+   }else{
+    const server=smbServer.value.trim(),share=smbShare.value.trim(),sub=smbSub.value.trim();
+    if(!server||!share){toast('请填写服务器地址与共享名',0);return}
+    body={mount_path:mp,driver:'smb',addition:JSON.stringify({root:smbMountPath(server,share,sub),server:server,share:share,sub:sub})};
+   }
+   if(editing)body.id=s.id;
+   ok.disabled=true;
+   const j=await api('/api/storage/'+(editing?'update':'create'),'POST',body);
+   ok.disabled=false;
+   if(!j||j.code!==200){toast((editing?'保存':'添加')+'失败：'+(j&&j.message||'网络错误'),0);return}
+   closeModal();
+   toast(editing?'挂载已更新':'挂载已添加',1);
+   await loadStorages();
+  };
+ });
+}
+// smbMountPath 按平台把 服务器/共享/子路径 拼成本机挂载路径，与服务器端
+// smb_storage.go 的同名逻辑一致：macOS 与 Linux 用 /Volumes/<share>，
+// Windows 用 \\server\share。
+function smbMountPath(server,share,sub){
+ share=(share||'').trim().replace(/^\/+|\/+$/g,'');
+ let p;
+ if(navigator.platform&&navigator.platform.startsWith('Win')){
+  p='\\\\'+server.trim()+(share?'\\'+share:'');
+  if(sub&&sub.trim()&&sub.trim()!=='/')p+=sub.trim().replace(/\//g,'\\');
+ }else{
+  p='/Volumes/'+share;
+  if(sub&&sub.trim()&&sub.trim()!=='/')p+=sub.trim();
+ }
+ return p;
 }
 async function saveRootStorage(){
  const root=$('rootPath').value.trim();
  if(!root){toast('请填写文件夹路径',0);return}
  const cur=storages.find(s=>s.mount_path==='/');
- const body={mount_path:'/',driver:'local',addition:JSON.stringify({root})};
- if(cur)body.id=cur.id;
+ const body={mount_path:'/',driver:cur?(cur.driver||'local'):'local',addition:JSON.stringify({root})};
+ if(cur){body.id=cur.id;if(cur.order)body.order=cur.order}
  const j=await api('/api/storage/'+(cur?'update':'create'),'POST',body);
  if(!j||j.code!==200){toast('保存失败：'+(j&&j.message||'网络错误'),0);return}
  toast('首页目录已更新',1);
  await loadStorages();
 }
-async function addStorage(){
- const mount=$('stMount').value.trim(),root=$('stRoot').value.trim();
- if(!mount||!root){toast('请填写挂载路径与文件夹',0);return}
- const j=await api('/api/storage/create','POST',{mount_path:mount,driver:'local',addition:JSON.stringify({root})});
- if(!j||j.code!==200){toast('添加失败：'+(j&&j.message||'网络错误'),0);return}
- $('stMount').value='';$('stRoot').value='';
- toast('挂载已添加',1);
- await loadStorages();
-}
-document.addEventListener('DOMContentLoaded',()=>{
- const r=$('rootSave'),a=$('stAdd');
- if(r)r.onclick=saveRootStorage;
- if(a)a.onclick=addStorage;
-});
 
 async function saveAccount(){
  const u=$('accUser').value.trim(),p=$('accPass').value;
@@ -1017,12 +1189,15 @@ function setView(k){
 }
 function updateCmdbar(){
  const n=selected.size;
- $('cbCut').disabled=n===0;
+ const ro=!curWritable; // 只读挂载：剪切/粘贴/重命名/删除都没有意义
+ $('cbNew').disabled=ro;
+ $('cbUpload').disabled=ro;
+ $('cbCut').disabled=n===0||ro;
  $('cbCopy').disabled=n===0;
- $('cbPaste').disabled=!clip;
- $('cbRename').disabled=n===0;
+ $('cbPaste').disabled=!clip||ro;
+ $('cbRename').disabled=n===0||ro;
  $('cbShare').disabled=n===0;
- $('cbDel').disabled=n===0;
+ $('cbDel').disabled=n===0||ro;
  $('navBack').disabled=histIdx<=0;
  $('navFwd').disabled=histIdx>=hist.length-1;
  $('navUp').disabled=curPath==='/';
@@ -1362,6 +1537,8 @@ async function loadDir(path,keepSel){
   return;
  }
  items=(j.data&&j.data.content)||[];
+ // 只读挂载（SMB）：列表的 write 标志为 false，写按钮整批置灰。
+ curWritable=(j.data&&j.data.write!==false);
  addrRemember(curPath);
  if(!changed){
   const names=new Set(items.map(i=>i.name));
@@ -1935,19 +2112,20 @@ function itemMenuItems(it,exts){
  const names=sel.map(i=>i.name);
  const anySel=names.length>0;
  const one=sel.length===1;
- const allArchives=anySel&&sel.every(i=>!i.is_dir&&isArchive(i.name));
+ const rw=curWritable; // 只读挂载（SMB）：写操作整组置灰
+ const allArchives=anySel&&rw&&sel.every(i=>!i.is_dir&&isArchive(i.name));
  const path=joinPath(curPath,it.name);
  return [
   {label:it.is_dir?'打开':'预览',icon:'eye',fn:()=>openItem(it)},
   {label:'下载',icon:'download',disabled:it.is_dir,fn:()=>downloadFile(it)},
   null,
-  {label:'剪切',icon:'scissors',disabled:!anySel,fn:doCut},
+  {label:'剪切',icon:'scissors',disabled:!anySel||!rw,fn:doCut},
   {label:'复制',icon:'copy',disabled:!anySel,fn:doCopy},
-  {label:'粘贴',icon:'clip',disabled:!clip,fn:doPaste},
+  {label:'粘贴',icon:'clip',disabled:!clip||!rw,fn:doPaste},
   {label:'复制为路径',icon:'link',disabled:!anySel,fn:()=>copyText(pathFor(names))},
-  {label:'重命名',icon:'rename',disabled:!anySel,fn:()=>batchRename(names)},
+  {label:'重命名',icon:'rename',disabled:!anySel||!rw,fn:()=>batchRename(names)},
   null,
-  {label:'压缩为 ZIP 文件',icon:'archive',disabled:!anySel,fn:()=>doCompress(names)},
+  {label:'压缩为 ZIP 文件',icon:'archive',disabled:!anySel||!rw,fn:()=>doCompress(names)},
   {label:'全部解压',icon:'extract',disabled:!allArchives,fn:()=>doExtract(names)},
   {label:'解压到…',icon:'extract',disabled:!allArchives,fn:()=>doExtractTo(names)},
   null,
@@ -1962,8 +2140,9 @@ function itemMenuItems(it,exts){
    else toast('扩展运行失败：'+(j&&j.message||'网络错误'),0);
   }})),
   null,
-  {label:'分享',icon:'share',disabled:!anySel,fn:()=>shareModal(names.map(n=>joinPath(curPath,n)))},
-  {label:'删除',icon:'del',danger:true,disabled:!anySel,fn:()=>confirmDelete(names)},
+  {label:'快速分享',icon:'share',disabled:!one||!names.length,fn:()=>quickShare(joinPath(curPath,names[0]))},
+  {label:'分享设置…',icon:'share',disabled:!anySel,fn:()=>shareModal(names.map(n=>joinPath(curPath,n)))},
+  {label:'删除',icon:'del',danger:true,disabled:!anySel||!curWritable,fn:()=>confirmDelete(names)},
   null,
   {label:'属性',icon:'info',disabled:!one,fn:()=>propertiesOne(it)}
  ];
@@ -1974,11 +2153,11 @@ function pathFor(names){
 }
 function backgroundMenuItems(){
  return [
-  {label:'新建文件夹',icon:'folderPlus',fn:newFolder},
-  {label:'新建文本文档',icon:'file',fn:newTextFile},
-  {label:'上传文件…',icon:'upload',fn:()=>$('fileIn').click()},
+  {label:'新建文件夹',icon:'folderPlus',disabled:!curWritable,fn:newFolder},
+  {label:'新建文本文档',icon:'file',disabled:!curWritable,fn:newTextFile},
+  {label:'上传文件…',icon:'upload',disabled:!curWritable,fn:()=>$('fileIn').click()},
   null,
-  {label:'粘贴',icon:'clip',disabled:!clip,fn:doPaste},
+  {label:'粘贴',icon:'clip',disabled:!clip||!curWritable,fn:doPaste},
   null,
   {label:'排序方式',icon:'sort'},
   ...[['name','名称'],['date','修改日期'],['type','类型'],['size','大小']].map(([k,label])=>({label:'  '+label,checked:sortKey===k,fn:()=>setSort(k)})),
@@ -1996,9 +2175,9 @@ function backgroundMenuItems(){
 }
 function newMenuItems(){
  return [
-  {label:'文件夹',icon:'folderPlus',fn:newFolder},
-  {label:'文本文档',icon:'file',fn:newTextFile},
-  {label:'上传文件…',icon:'upload',fn:()=>$('fileIn').click()}
+  {label:'文件夹',icon:'folderPlus',disabled:!curWritable,fn:newFolder},
+  {label:'文本文档',icon:'file',disabled:!curWritable,fn:newTextFile},
+  {label:'上传文件…',icon:'upload',disabled:!curWritable,fn:()=>$('fileIn').click()}
  ];
 }
 function sortMenuItems(){
@@ -2642,6 +2821,33 @@ function pickDir(title,onOk){
   show();
  });
 }
+// quickShare 单击即分享：一个文件不加密码、不限次数立即创建，弹层只给
+// 链接与复制按钮；文件夹仍走完整 shareModal（文件夹分享要浏览整棵子树，
+// 让主人先看清范围）。失败或留空都退回完整对话框。
+async function quickShare(path){
+ const j=await api('/api/share/create','POST',{files:[path]});
+ if(!j||j.code!==200){shareModal([path]);return}
+ loadStatus();
+ const id=(j.data&&j.data.id!=null)?j.data.id:'';
+ const link=location.origin+'/@s/'+id;
+ frameModal('快速分享',b=>{
+  b.append(el('p','mtext',path));
+  b.append(el('p','mtext','无需密码、永久有效，点过的人即可下载。要加密码或限时，用右键菜单里的「分享设置…」。'));
+  const row=el('div','shlink');
+  row.append(el('span','',link));
+  const cp=btn('复制链接','primary');
+  cp.onclick=()=>copyText(link);
+  row.append(cp);
+  b.append(row);
+  const acts=el('div','macts');
+  const more=btn('分享设置…');
+  more.onclick=()=>shareModal([path]);
+  const done=btn('完成','primary');
+  done.onclick=closeModal;
+  acts.append(more,done);
+  b.append(acts);
+ });
+}
 function shareModal(paths){
  frameModal('创建分享',b=>{
   const files=el('div','shfiles');
@@ -2850,6 +3056,8 @@ $('setSwitch').onchange=()=>setRemote($('setSwitch').checked);
 $('hiddenSwitch').onchange=()=>setHidden($('hiddenSwitch').checked);
 $('accSave').onclick=saveAccount;
 $('tokenReset').onclick=resetTokenFlow;
+$('stAdd').onclick=()=>storageModal(null);
+$('rootSave').onclick=saveRootStorage;
 $('portApply').onclick=applyPort;
 $('fileIn').onchange=()=>{
  const arr=$('fileIn').files?[...$('fileIn').files]:[];
@@ -2865,7 +3073,15 @@ $('cbCut').onclick=doCut;
 $('cbCopy').onclick=doCopy;
 $('cbPaste').onclick=doPaste;
 $('cbRename').onclick=()=>{if(selected.size)batchRename([...selected])};
-$('cbShare').onclick=()=>{if(selected.size)shareModal([...selected].map(n=>joinPath(curPath,n)))};
+$('cbShare').onclick=()=>{
+ if(!selected.size)return;
+ // 单个文件走快速分享（无密码、即建即复制），其余走完整对话框。
+ if(selected.size===1){
+  const it=items.find(i=>selected.has(i.name));
+  if(it&&!it.is_dir){quickShare(joinPath(curPath,it.name));return}
+ }
+ shareModal([...selected].map(n=>joinPath(curPath,n)));
+};
 $('cbDel').onclick=()=>{if(selected.size)confirmDelete([...selected])};
 $('cbUpload').onclick=()=>$('fileIn').click();
 // 地址行

@@ -14,6 +14,7 @@ import (
 
 	"sunvale/diskhealth"
 	"sunvale/internal/fsentry"
+	"sunvale/internal/remote/driver"
 	"sunvale/internal/searchquery"
 )
 
@@ -273,6 +274,9 @@ type App struct {
 	// store is the persisted 快速访问 pins, 最近使用的文件 and 回收站
 	// restore log (statestore.go).
 	store *persistedState
+	// driverCache keeps one remote storage driver per storage id, so an
+	// SMB session is not re-dialed per request (remote_storage.go).
+	driverCache map[uint]driver.Driver
 	// undo is the Ctrl+Z stack of file operations (undo.go).
 	undo []undoOp
 	// dropTookOwnDrag is set when a target of this window took the drag

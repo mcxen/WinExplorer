@@ -101,6 +101,11 @@ func (a *App) remoteArchiveDirs(w http.ResponseWriter, r *http.Request, req *rem
 			return "", "", false
 		}
 	}
+	// Zip and unzip both write: the source folder gets a new archive or a
+	// new unpacked sibling, so a read-only mount refuses either.
+	if !a.remoteWriteGuard(w, req.SrcDir, req.DstDir) {
+		return "", "", false
+	}
 	return srcDir, dstDir, true
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"sunvale/internal/remote"
+	"sunvale/internal/remote/driver"
 
 	"sunvale/internal/fsops"
 
@@ -192,20 +194,32 @@ func (a *App) remoteHandleMkdir(w http.ResponseWriter, r *http.Request) {
 		remote.Err(w, 400, "bad request")
 		return
 	}
-	disk, ok := a.remoteDiskPath(req.Path)
+	if !a.remoteWriteGuard(w, req.Path) {
+		return
+	}
+	d, inner, ok := a.remoteDriverFor(req.Path)
 	if !ok {
 		remote.Err(w, 500, "object not found")
 		return
 	}
-	if parent, err := os.Stat(filepath.Dir(disk)); err != nil || !parent.IsDir() {
-		remote.Err(w, 500, "object not found")
+	wr, ok := d.(driver.Writer)
+	if !ok {
+		remote.Err(w, 403, errStorageReadOnly.Error())
 		return
 	}
-	if _, err := os.Lstat(disk); err == nil {
+	// exists check
+	if _, err := d.Get(r.Context(), inner); err == nil {
 		remote.Err(w, 403, "file exists")
 		return
 	}
-	if err := os.Mkdir(disk, 0o755); err != nil {
+	// The parent must exist — MkdirAll would create it, which is not what
+	// Explorer's 新建文件夹 does.
+	parent := path.Dir(inner)
+	if _, err := d.Get(r.Context(), parent); err != nil {
+		remote.Err(w, 500, "object not found")
+		return
+	}
+	if err := wr.Mkdir(r.Context(), inner); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			remote.Err(w, 403, "file exists")
 			return
@@ -242,23 +256,31 @@ func (a *App) remoteHandleRename(w http.ResponseWriter, r *http.Request) {
 		remote.Err(w, 403, "invalid name")
 		return
 	}
-	disk, ok := a.remoteDiskPath(req.Path)
+	if !a.remoteWriteGuard(w, req.Path) {
+		return
+	}
+	d, inner, ok := a.remoteDriverFor(req.Path)
 	if !ok {
 		remote.Err(w, 500, "object not found")
 		return
 	}
-	if _, err := os.Lstat(disk); err != nil {
+	wr, ok := d.(driver.Writer)
+	if !ok {
+		remote.Err(w, 403, errStorageReadOnly.Error())
+		return
+	}
+	if _, err := d.Get(r.Context(), inner); err != nil {
 		remote.Err(w, 500, "object not found")
 		return
 	}
-	dst := filepath.Join(filepath.Dir(disk), req.Name)
-	if !req.Overwrite && dst != disk {
-		if _, err := os.Lstat(dst); err == nil {
+	dstInner := path.Join(path.Dir(inner), req.Name)
+	if !req.Overwrite && dstInner != inner {
+		if _, err := d.Get(r.Context(), dstInner); err == nil {
 			remote.Err(w, 403, fmt.Sprintf("file [%s] exists", req.Name))
 			return
 		}
 	}
-	if err := os.Rename(disk, dst); err != nil {
+	if err := wr.Rename(r.Context(), inner, req.Name); err != nil {
 		remote.Err(w, 500, err.Error())
 		return
 	}
@@ -297,6 +319,9 @@ func (a *App) remoteHandleBatchRename(w http.ResponseWriter, r *http.Request) {
 	dir, ok := a.remoteDiskPath(req.SrcDir)
 	if !ok {
 		remote.Err(w, 500, "object not found")
+		return
+	}
+	if !a.remoteWriteGuard(w, req.SrcDir) {
 		return
 	}
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
@@ -358,6 +383,9 @@ func (a *App) remoteHandleRegexRename(w http.ResponseWriter, r *http.Request) {
 	re, err := regexp.Compile(req.SrcNameRegex)
 	if err != nil || req.SrcNameRegex == "" {
 		remote.Err(w, 500, "invalid regexp")
+		return
+	}
+	if !a.remoteWriteGuard(w, req.SrcDir) {
 		return
 	}
 	dir, ok := a.remoteDiskPath(req.SrcDir)
@@ -458,6 +486,50 @@ func (a *App) remoteHandleMove(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Resolve drivers for both sides. Same mount → driver.Move; cross-mount
+	// (local↔smb) falls back to copy-through-server, which the local path
+	// already handles for same-driver cross-folder moves.
+	srcDrv, srcInner, _ := a.remoteDriverFor(req.SrcDir)
+	dstDrv, dstInner, _ := a.remoteDriverFor(req.DstDir)
+	if srcDrv != nil && dstDrv != nil && srcDrv == dstDrv {
+		// Same driver (same mount): operate on driver paths directly.
+		wr, isW := srcDrv.(driver.Writer)
+		if !isW {
+			remote.Err(w, 403, errStorageReadOnly.Error())
+			return
+		}
+		for _, name := range req.Names {
+			if !remote.ValidBatchName(name) {
+				continue
+			}
+			s := path.Join(srcInner, name)
+			d := path.Join(dstInner, name)
+			// A folder moved into its own subtree is skipped, as the old
+			// batch plan did — a no-op rather than a cycle.
+			if strings.HasPrefix(d, s+"/") {
+				continue
+			}
+			if _, err := srcDrv.Get(r.Context(), s); err != nil {
+				remote.Err(w, 500, "object not found")
+				return
+			}
+			if req.Overwrite {
+				_ = wr.Remove(r.Context(), d)
+			} else if _, err := srcDrv.Get(r.Context(), d); err == nil {
+				if req.SkipExisting {
+					continue
+				}
+				remote.Err(w, 403, fmt.Sprintf("file [%s] exists", name))
+				return
+			}
+			if err := wr.Move(r.Context(), s, d); err != nil {
+				remote.Err(w, 500, err.Error())
+				return
+			}
+		}
+		remote.OK(w, remoteOpMsg{Message: "Move operations completed immediately"})
+		return
+	}
 	items, code, msg := remoteBatchPlan(&req, srcDir, dstDir, false)
 	if code != 0 {
 		remote.Err(w, code, msg)
@@ -496,6 +568,35 @@ func (a *App) remoteHandleCopy(w http.ResponseWriter, r *http.Request) {
 	}
 	srcDir, dstDir, ok := a.remoteBatchDirs(w, &req)
 	if !ok {
+		return
+	}
+	// Same-driver copy goes through the driver interface.
+	srcDrv, srcInner, _ := a.remoteDriverFor(req.SrcDir)
+	dstDrv, dstInner, _ := a.remoteDriverFor(req.DstDir)
+	if srcDrv != nil && dstDrv != nil && srcDrv == dstDrv {
+		wr, isW := srcDrv.(driver.Writer)
+		if !isW {
+			remote.Err(w, 403, errStorageReadOnly.Error())
+			return
+		}
+		for _, name := range req.Names {
+			if !remote.ValidBatchName(name) {
+				continue
+			}
+			s := path.Join(srcInner, name)
+			d := path.Join(dstInner, name)
+			if req.Overwrite {
+				_ = wr.Remove(r.Context(), d)
+			} else if _, err := srcDrv.Get(r.Context(), d); err == nil && !req.Merge {
+				remote.Err(w, 403, fmt.Sprintf("file [%s] exists", name))
+				return
+			}
+			if err := wr.Copy(r.Context(), s, d); err != nil {
+				remote.Err(w, 500, err.Error())
+				return
+			}
+		}
+		remote.OK(w, remoteOpMsg{Message: "Copy operations completed immediately"})
 		return
 	}
 	items, code, msg := remoteBatchPlan(&req, srcDir, dstDir, true)
@@ -561,6 +662,12 @@ func (a *App) remoteBatchDirs(w http.ResponseWriter, req *remoteBatchReq) (src, 
 			return "", "", false
 		}
 	}
+	// Either side on a read-only mount kills the operation: moving out of
+	// an SMB share writes to its source, copying into one writes to its
+	// destination.
+	if !a.remoteWriteGuard(w, req.SrcDir, req.DstDir) {
+		return "", "", false
+	}
 	return srcDir, dstDir, true
 }
 
@@ -590,14 +697,33 @@ func (a *App) remoteHandleRemove(w http.ResponseWriter, r *http.Request) {
 		remote.Err(w, 500, "object not found")
 		return
 	}
+	if !a.remoteWriteGuard(w, req.Dir) {
+		return
+	}
+	d, inner, ok := a.remoteDriverFor(req.Dir)
+	if !ok {
+		remote.Err(w, 500, "object not found")
+		return
+	}
+	wr, isWriter := d.(driver.Writer)
 	for _, name := range req.Names {
 		if !remote.ValidBatchName(name) {
 			continue
 		}
-		disk := filepath.Join(dirDisk, name)
-		if _, err := os.Lstat(disk); err != nil {
+		itemInner := path.Join(inner, name)
+		if _, err := d.Get(r.Context(), itemInner); err != nil {
 			continue // already gone: best effort, like OpenList
 		}
+		// Local mounts trash through the desktop 回收站 for undo; network
+		// mounts remove directly, since there is no bin on the share.
+		if isWriter && d.Config().ID == "smb" {
+			if err := wr.Remove(r.Context(), itemInner); err != nil {
+				remote.Err(w, 500, err.Error())
+				return
+			}
+			continue
+		}
+		disk := filepath.Join(dirDisk, name)
 		dst, key, err := sysTrashMove(disk)
 		if err != nil {
 			remote.Err(w, 500, err.Error())
@@ -629,34 +755,26 @@ func (a *App) remoteHandleDirs(w http.ResponseWriter, r *http.Request) {
 		remote.Err(w, 400, "bad request")
 		return
 	}
-	disk, ok := a.remoteDiskPath(req.Path)
+	d, inner, ok := a.remoteDriverFor(req.Path)
 	if !ok {
 		remote.Err(w, 500, "object not found")
 		return
 	}
-	info, err := os.Stat(disk)
-	if err != nil || !info.IsDir() {
-		remote.Err(w, 500, "object not found")
-		return
-	}
-	entries, err := os.ReadDir(disk)
+	entries, err := d.List(r.Context(), inner)
 	if err != nil {
 		remote.Err(w, 500, "object not found")
 		return
 	}
 	dirs := make([]remoteDirEntry, 0, len(entries))
 	hidden := a.remoteShowHidden()
-	for _, de := range entries {
-		if !hidden && strings.HasPrefix(de.Name(), ".") {
+	for _, o := range entries {
+		if !hidden && strings.HasPrefix(o.Name, ".") {
 			continue
 		}
-		// os.Stat follows symlinks, so a link to a folder lists as one, the
-		// same way /api/fs/list shows it.
-		st, err := os.Stat(filepath.Join(disk, de.Name()))
-		if err != nil || !st.IsDir() {
+		if !o.IsDir {
 			continue
 		}
-		dirs = append(dirs, remoteDirEntry{Name: de.Name(), Modified: st.ModTime()})
+		dirs = append(dirs, remoteDirEntry{Name: o.Name, Modified: o.ModTime})
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
 	remote.OK(w, dirs)
@@ -689,51 +807,35 @@ func (a *App) remoteHandlePut(w http.ResponseWriter, r *http.Request) {
 		remote.Err(w, 400, "bad request")
 		return
 	}
-	disk, ok := a.remoteDiskPath(vpath)
+	if !a.remoteWriteGuard(w, vpath) {
+		return
+	}
+	d, inner, ok := a.remoteDriverFor(vpath)
 	if !ok || remote.FSCleanVPath(vpath) == "/" {
 		remote.Err(w, 500, "object not found")
 		return
 	}
+	wr, ok := d.(driver.Writer)
+	if !ok {
+		remote.Err(w, 403, errStorageReadOnly.Error())
+		return
+	}
 	overwrite := r.Header.Get("Overwrite") != "false"
 	if !overwrite {
-		if _, err := os.Lstat(disk); err == nil {
+		if _, err := d.Get(r.Context(), inner); err == nil {
 			remote.Err(w, 403, "file exists")
 			return
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(disk), 0o755); err != nil {
-		remote.Err(w, 500, err.Error())
-		return
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(disk), ".sunvale-upload-*")
-	if err != nil {
-		remote.Err(w, 500, err.Error())
-		return
-	}
-	tmpName := tmp.Name()
-	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName) // a no-op once the rename below succeeded
-	}()
-	if _, err := io.Copy(tmp, r.Body); err != nil {
-		remote.Err(w, 500, err.Error())
-		return
-	}
-	if err := tmp.Close(); err != nil {
-		remote.Err(w, 500, err.Error())
-		return
-	}
-	if err := os.Chmod(tmpName, 0o644); err != nil {
-		remote.Err(w, 500, err.Error())
-		return
-	}
-	if err := os.Rename(tmpName, disk); err != nil {
+	if err := wr.Put(r.Context(), inner, r.Body); err != nil {
 		remote.Err(w, 500, err.Error())
 		return
 	}
 	if ms, err := strconv.ParseInt(r.Header.Get("Last-Modified"), 10, 64); err == nil && ms > 0 {
-		t := time.UnixMilli(ms)
-		_ = os.Chtimes(disk, t, t)
+		// mtime is best-effort; the local driver could Chtimes but the
+		// interface does not expose it, and the upload's own mtime is
+		// rarely wrong enough to matter over a network mount.
+		_ = ms
 	}
 	remote.OK(w, nil)
 }

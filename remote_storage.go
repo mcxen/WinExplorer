@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"sunvale/internal/remote"
+	"sunvale/internal/remote/driver"
 )
 
 // remote_storage.go is the OpenList-compatible storage API: the
@@ -161,13 +164,59 @@ func (a *App) remoteRootMount() (remoteStorage, bool) {
 	return remoteStorage{}, false
 }
 
-// storageDiskRoot is the disk folder a storage serves.
+// storageDiskRoot is the disk folder a local storage serves. SMB storages
+// have no disk root (they speak the protocol), so this returns "" for them;
+// callers that only care about local mounts check Driver first.
 func storageDiskRoot(s remoteStorage) string {
+	if s.Driver == "smb" {
+		return ""
+	}
 	var add localStorageAddition
 	if err := json.Unmarshal([]byte(s.Addition), &add); err != nil || add.Root == "" {
 		return remoteFSHome()
 	}
 	return add.Root
+}
+
+// driverFor returns the driver for a storage, building and caching it on
+// first use. A driver that fails to init is still returned (its operations
+// will error), so the storage stays in the list with a failed status —
+// OpenList's create-on-init-failure semantics, so a share that is down at
+// create time can be fixed and enabled without losing its config.
+func (a *App) driverFor(s remoteStorage) driver.Driver {
+	if a.driverCache == nil {
+		a.driverCache = map[uint]driver.Driver{}
+	}
+	if d, ok := a.driverCache[s.ID]; ok {
+		return d
+	}
+	d := buildDriver(s)
+	a.driverCache[s.ID] = d
+	return d
+}
+
+// buildDriver constructs a driver from its stored config without caching.
+func buildDriver(s remoteStorage) driver.Driver {
+	switch s.Driver {
+	case "smb":
+		var add driver.SMBAddition
+		_ = json.Unmarshal([]byte(s.Addition), &add)
+		return driver.NewSMB(add)
+	default:
+		return &driver.Local{Root: storageDiskRoot(s)}
+	}
+}
+
+// dropDriver removes a storage's cached driver, called on update/delete so
+// a reconfigured mount does not keep its old connection.
+func (a *App) dropDriver(id uint) {
+	if a.driverCache == nil {
+		return
+	}
+	if d, ok := a.driverCache[id]; ok {
+		_ = d.Drop(context.Background())
+		delete(a.driverCache, id)
+	}
 }
 
 // remoteMountFor finds the storage whose mount path holds vpath, longest
@@ -210,6 +259,18 @@ func (a *App) remoteMountFor(vpath string) (remoteStorage, string, bool) {
 	return best, inner, true
 }
 
+// remoteDriverFor resolves vpath to its mount's driver and the path inside
+// the mount. ok is false when no enabled mount serves vpath. The returned
+// driver is cached per storage; the inner path is what the driver operates
+// on (relative to the mount root).
+func (a *App) remoteDriverFor(vpath string) (driver.Driver, string, bool) {
+	mount, inner, ok := a.remoteMountFor(remote.FSCleanVPath(vpath))
+	if !ok {
+		return nil, "", false
+	}
+	return a.driverFor(mount), inner, true
+}
+
 // remoteDiskPathIn maps a path inside a storage to its disk path. ok is
 // false when the path would escape the mount.
 func remoteDiskPathIn(s remoteStorage, inner string) (string, bool) {
@@ -243,6 +304,27 @@ func storageRespOf(s remoteStorage) *remoteStorage {
 
 // ---- handlers -------------------------------------------------------------
 
+// remoteStoragesOrdered returns the configured mounts, lowest Order first —
+// the homepage's storage row and the management page's list both read this
+// way, so a pinned mount (the page's 置顶) leads the row.
+func (a *App) remoteStoragesOrdered() []remoteStorage {
+	list := a.remoteStorages()
+	out := make([]remoteStorage, len(list))
+	copy(out, list)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Order != out[j].Order {
+			// Order 0 is "never ranked": it keeps its store order, after the
+			// pinned ones rather than before them.
+			if out[i].Order == 0 || out[j].Order == 0 {
+				return out[j].Order == 0
+			}
+			return out[i].Order < out[j].Order
+		}
+		return false
+	})
+	return out
+}
+
 // remoteHandleFSStorageList implements GET /api/fs/storage_list: the
 // enabled mounts as folders, which is the list the homepage shows above
 // the root mount's own files. Disabled mounts stay off the homepage — a
@@ -254,7 +336,7 @@ func (a *App) remoteHandleFSStorageList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var objs []remoteObj
-	for _, s := range a.remoteStorages() {
+	for _, s := range a.remoteStoragesOrdered() {
 		if s.Disabled {
 			continue
 		}
@@ -322,8 +404,8 @@ func (a *App) remoteHandleStorageGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // remoteStorageReadReq decodes a storage body and validates the parts the
-// app can honour: a mount path, the local driver, and an addition that
-// names a folder.
+// app can honour: a mount path, and a driver the app serves — local for a
+// disk folder, smb for an OS-mounted network share (smb_storage.go).
 func remoteStorageReadReq(r *http.Request) (remoteStorage, error) {
 	var s remoteStorage
 	if err := remote.ReadReq(r, &s); err != nil {
@@ -332,7 +414,7 @@ func remoteStorageReadReq(r *http.Request) (remoteStorage, error) {
 	if s.Driver == "" {
 		s.Driver = "local"
 	}
-	if s.Driver != "local" {
+	if s.Driver != "local" && s.Driver != "smb" {
 		return s, errStorageDriver
 	}
 	return s, nil
@@ -343,7 +425,7 @@ type storageErr string
 func (e storageErr) Error() string { return string(e) }
 
 const (
-	errStorageDriver = storageErr("仅支持本机路径（local 驱动）")
+	errStorageDriver = storageErr("仅支持本机路径（local）与已挂载的 SMB 共享（smb）")
 	errStorageMount  = storageErr("挂载路径不能为空")
 	errStorageRoot   = storageErr("目录不存在或不是文件夹")
 	errStorageTaken  = storageErr("该挂载路径已被占用")
@@ -357,6 +439,16 @@ func validateStorage(s *remoteStorage) error {
 	s.MountPath = remote.FSCleanVPath(s.MountPath)
 	if s.MountPath != "/" {
 		s.MountPath = strings.TrimSuffix(s.MountPath, "/")
+	}
+	if s.Driver == "smb" {
+		if err := validateSMBAddition(s); err != nil {
+			return err
+		}
+		s.Modified = time.Now()
+		if s.Status == "" {
+			s.Status = "work"
+		}
+		return nil
 	}
 	var add localStorageAddition
 	if err := json.Unmarshal([]byte(s.Addition), &add); err != nil || strings.TrimSpace(add.Root) == "" {
@@ -550,21 +642,24 @@ func (a *App) remoteHandleStorageLoadAll(w http.ResponseWriter, r *http.Request)
 // remoteHandleDriverList implements GET /api/driver/list: every driver the
 // create page may pick, keyed by name, as OpenList answers.
 func (a *App) remoteHandleDriverList(w http.ResponseWriter, r *http.Request) {
-	remote.OK(w, map[string]localDriverInfo{"local": localDriver()})
+	remote.OK(w, map[string]localDriverInfo{"local": localDriver(), "smb": smbDriver()})
 }
 
 // remoteHandleDriverNames implements GET /api/driver/names.
 func (a *App) remoteHandleDriverNames(w http.ResponseWriter, r *http.Request) {
-	remote.OK(w, []string{"local"})
+	remote.OK(w, []string{"local", "smb"})
 }
 
-// remoteHandleDriverInfo implements GET /api/driver/info?driver=local.
+// remoteHandleDriverInfo implements GET /api/driver/info?driver=….
 func (a *App) remoteHandleDriverInfo(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("driver") != "local" {
+	switch r.URL.Query().Get("driver") {
+	case "local":
+		remote.OK(w, localDriver())
+	case "smb":
+		remote.OK(w, smbDriver())
+	default:
 		remote.Err(w, 404, "driver not found")
-		return
 	}
-	remote.OK(w, localDriver())
 }
 
 // localDriver is the local driver's description: one field, the folder.

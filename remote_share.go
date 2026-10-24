@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -8,9 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -248,12 +247,12 @@ func (a *App) remoteHandleShareCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, f := range req.Files {
 		vpath := remote.FSCleanVPath(f)
-		disk, ok := a.remoteDiskPath(vpath)
+		sd, sInner, ok := a.remoteDriverFor(vpath)
 		if !ok {
 			remote.Err(w, 500, "file not found")
 			return
 		}
-		if _, err := os.Stat(disk); err != nil {
+		if _, err := sd.Get(r.Context(), sInner); err != nil {
 			remote.Err(w, 500, "file not found")
 			return
 		}
@@ -588,11 +587,15 @@ func remoteShareEncodePath(sub string) string {
 // object shape, but never a download sign — share downloads go through /sd
 // links, not signed /p ones.
 func (a *App) remoteShareObj(vpath, disk string) (remoteObj, bool) {
-	st, err := os.Stat(disk)
+	d, inner, ok := a.remoteDriverFor(vpath)
+	if !ok {
+		return remoteObj{}, false
+	}
+	o, err := d.Get(context.Background(), inner)
 	if err != nil {
 		return remoteObj{}, false
 	}
-	obj := a.remoteFSObj(path.Base(vpath), vpath, disk, st)
+	obj := a.remoteFSObj(path.Base(vpath), vpath, o)
 	obj.Sign = ""
 	return obj, true
 }
@@ -644,26 +647,20 @@ func (a *App) remoteShareFSList(w http.ResponseWriter, r *http.Request, vpath, p
 			remote.Err(w, 500, "object not found")
 			return
 		}
-		disk, ok := a.remoteDiskPath(vp)
+		sd, sInner, ok := a.remoteDriverFor(vp)
 		if !ok {
 			remote.Err(w, 500, "object not found")
 			return
 		}
-		info, err := os.Stat(disk)
-		if err != nil || !info.IsDir() {
-			remote.Err(w, 500, "object not found")
-			return
-		}
-		entries, err := os.ReadDir(disk)
+		entries, err := sd.List(r.Context(), sInner)
 		if err != nil {
 			remote.Err(w, 500, "object not found")
 			return
 		}
 		objs = make([]remoteObj, 0, len(entries))
-		for _, de := range entries {
-			name := de.Name()
-			diskName := filepath.Join(disk, name)
-			obj, ok := a.remoteShareObj(path.Join(vp, name), diskName)
+		for _, o := range entries {
+			name := o.Name
+			obj, ok := a.remoteShareObj(path.Join(vp, name), "")
 			if !ok {
 				continue // unreadable entry: leave it out, keep the listing alive
 			}
@@ -725,17 +722,17 @@ func (a *App) remoteShareFSGet(w http.ResponseWriter, r *http.Request, vpath, pa
 			remote.Err(w, 500, "object not found")
 			return
 		}
-		disk, ok := a.remoteDiskPath(vp)
+		d, inner, ok := a.remoteDriverFor(vp)
 		if !ok {
 			remote.Err(w, 500, "object not found")
 			return
 		}
-		st, err := os.Stat(disk)
+		o, err := d.Get(r.Context(), inner)
 		if err != nil {
 			remote.Err(w, 500, "object not found")
 			return
 		}
-		obj := a.remoteFSObj(path.Base(vp), vp, disk, st)
+		obj := a.remoteFSObj(path.Base(vp), vp, o)
 		obj.Sign = ""
 		data.remoteObj = obj
 		if !obj.IsDir {
@@ -775,33 +772,33 @@ func (a *App) remoteHandleShareDown(w http.ResponseWriter, r *http.Request) {
 		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
-	disk, ok := a.remoteDiskPath(vp)
+	sd, sInner, ok := a.remoteDriverFor(vp)
 	if !ok {
 		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
-	info, err := os.Stat(disk)
+	o, err := sd.Get(r.Context(), sInner)
 	if err != nil {
 		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
-	if info.IsDir() {
+	if o.IsDir {
 		remote.HTMLFail(w, http.StatusInternalServerError, "not a file")
 		return
 	}
-	f, err := os.Open(disk)
+	f, err := sd.Open(r.Context(), sInner)
 	if err != nil {
 		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	defer f.Close()
 	a.remoteShareCountAccess(sid, r)
-	name := filepath.Base(disk)
+	name := o.Name
 	w.Header().Set("Content-Disposition", fmt.Sprintf(
 		`attachment; filename="%s"; filename*=utf-8''%s`,
 		url.PathEscape(name), url.PathEscape(name)))
-	w.Header().Set("Etag", fmt.Sprintf(`"%x-%x"`, info.ModTime().Unix(), info.Size()))
-	http.ServeContent(w, r, name, info.ModTime(), f)
+	w.Header().Set("Etag", fmt.Sprintf(`"%x-%x"`, o.ModTime.Unix(), o.Size))
+	http.ServeContent(w, r, name, o.ModTime, f)
 }
 
 // remoteShareAccessPurge drops the access dedup entries of a share id, so a

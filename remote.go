@@ -308,6 +308,7 @@ func (a *App) remoteMux() http.Handler {
 	mux.HandleFunc("/api/storage/delete", a.remoteHandleStorageDelete)
 	mux.HandleFunc("/api/storage/enable", a.remoteHandleStorageEnable)
 	mux.HandleFunc("/api/storage/disable", a.remoteHandleStorageDisable)
+	mux.HandleFunc("/api/storage/order", a.remoteHandleStorageOrder)
 	mux.HandleFunc("/api/storage/load_all", a.remoteHandleStorageLoadAll)
 	mux.HandleFunc("/api/driver/list", a.remoteHandleDriverList)
 	mux.HandleFunc("/api/driver/names", a.remoteHandleDriverNames)

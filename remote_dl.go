@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -51,21 +49,17 @@ func (a *App) remoteServeDownload(w http.ResponseWriter, r *http.Request, prefix
 		remote.HTMLFail(w, http.StatusUnauthorized, remoteSignErrText(sign))
 		return
 	}
-	disk, ok := a.remoteDiskPath(vpath)
+	d, inner, ok := a.remoteDriverFor(vpath)
 	if !ok {
 		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
-	info, err := os.Stat(disk)
+	o, err := d.Get(r.Context(), inner)
 	if err != nil {
-		msg := "file not found"
-		if !os.IsNotExist(err) {
-			msg = err.Error()
-		}
-		remote.HTMLFail(w, http.StatusInternalServerError, msg)
+		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
-	if info.IsDir() {
+	if o.IsDir {
 		remote.HTMLFail(w, http.StatusInternalServerError, "not a file")
 		return
 	}
@@ -75,19 +69,19 @@ func (a *App) remoteServeDownload(w http.ResponseWriter, r *http.Request, prefix
 		remote.HTMLFail(w, http.StatusUnauthorized, remoteSignErrText(sign))
 		return
 	}
-	f, err := os.Open(disk)
+	f, err := d.Open(r.Context(), inner)
 	if err != nil {
 		remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
 		return
 	}
 	defer f.Close()
 
-	name := filepath.Base(disk)
+	name := o.Name
 	w.Header().Set("Content-Disposition", fmt.Sprintf(
 		`attachment; filename="%s"; filename*=utf-8''%s`,
 		url.PathEscape(name), url.PathEscape(name)))
-	w.Header().Set("Etag", fmt.Sprintf(`"%x-%x"`, info.ModTime().Unix(), info.Size()))
-	http.ServeContent(w, r, name, info.ModTime(), f)
+	w.Header().Set("Etag", fmt.Sprintf(`"%x-%x"`, o.ModTime.Unix(), o.Size))
+	http.ServeContent(w, r, name, o.ModTime, f)
 }
 
 // remoteSignErrText keeps OpenList's wording for a rejected sign: a sign

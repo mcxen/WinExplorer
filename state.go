@@ -216,6 +216,9 @@ type App struct {
 	fieldFocused bool
 	// quickLook is the 空格 quick preview modal (quicklook.go).
 	quickLook bool
+	// quickLookFile, when set, is what the open quick preview shows instead
+	// of the selection (an OpenUI MediaList card).
+	quickLookFile string
 	// imgQV is zoom/pan for the image Space viewer (imageview.go).
 	imgQV imgQuickView
 	// vidQV is scrub/keyframe state for the video Space viewer (videoview.go).

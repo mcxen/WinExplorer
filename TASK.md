@@ -77,6 +77,7 @@
 | OPENUI2 | OpenUI 扩展控件 + 六场景演示 + 演示路径沙箱 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI2 | FORM1 | `demo/openui-scenes` → `main` |
 | OPENUI3 | OpenUI 列表/图片/视频控件 + 媒体演示场景 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI3 | OPENUI2 | `feat/openui-media` → `main` |
 | OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
+| OPENUI-MEDIA | OpenUI 图文列表 MediaList：左缩略图卡 + 右标题正文 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MEDIA | OPENUI3 | `main` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
@@ -126,6 +127,14 @@
 - **范围**：`assistant_markdown.go`（`assistOpenPlaceholder` / `assistOpenSkelBar` / `assistOpenReveal`）；`docs/UI.md` §6；截图 `docs/assets/shots/OPENUI-SKEL/`；本文。
 - **参考**：mygo `ui.BorderDashed`（`examples/gallery` 虚线放置区）、`Element.Loop("pulse", …, Bounce(EaseInOut))`（`ui/widgets.go` 占位说明）；本仓 `marquee.go:StrokeDashed`、`aifx.go` 呼吸节拍 `aiFxPulse`。
 - **验收**：加载态可见虚线框+呼吸条；闭合后变为真实 OpenUI；高度跳变 ≤2 DIP；`gofmt`/`go build`/`vet`/`test` 与 Windows 交叉编译通过；合入 `main` 并 push（禁止 force-push）。
+
+### OPENUI-MEDIA — 图文列表 MediaList
+- **目标**：助手 OpenUI 可画 ChatGPT 式图文步骤列表：每行左侧圆角缩略图卡（图片 / 视频关键帧+播放角标 / 文档缩略，失败退回文件图标），右侧粗体标题（可编号）+ 正文；点缩略图打开快速预览。
+- **范围**：`internal/assistant/openui_media.go`（`MediaList`/`MediaItem` 解析、kind 推断）、`openui.go` 分派、`prompt.go`；`assistant_openui_media.go`（绘制、http(s) 缓存、`openQuickLookPath`）、`quicklook.go`/`preview.go`/`state.go`（`quickLookFile` 覆盖）；`docs/specs/08-forms.md`、`docs/UI.md`；截图 `docs/assets/shots/OPENUI-MEDIA/04-medialist.png`、`05-medialist-quicklook.png`；离线演示：`SUNVALE_OPENUI_DEMO=1` 下发送含「图文」或 `medialist` 的消息（`SUNVALE_DEMO_MEDIA_DIR` 可指向真实样例）。
+- **交付**：语法 `MediaList(items, title?, "numbered"?)`，`MediaItem(media, title, text, kind?, n?)` 或对象 `{media, kind, title, text, n}`；系统提示已写明用法；流式时沿用 OPENUI-SKEL 骨架。
+- **验收**：解析（位置参数/对象/kind 推断/编号）与绘制（标题、正文可见，点缩略图打开快速预览）单测通过；`go build` 与 `go test ./... -short` 通过；截图可见图片、视频角标、文档、图标回退四种卡片。
+- **已知限制**：http(s) 仅首次后台下载（≤16 MB），下载期间显示图标；远程视频/文档不抽帧（显示图标，下载完成后按本地文件处理）；Office 文档缩略依赖系统缩略图，多数退回文件图标。
+- **状态**：已完成，合入 `main`。
 
 ### OPENUI3 — 列表 / 图片 / 视频
 

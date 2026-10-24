@@ -88,3 +88,24 @@
 - `internal/forms` 新 kind：`note`/`badge`/`keyvalue`/`rating`/`chart`/`donut`/`accordion`（`Field.Tone` 着色；图表数据用 `Options` 里的 `「标签: v1, v2」` 行表示系列，见 `chartFieldData`）。展示类 kind 不要求 `id`，也不进提交消息。
 - 演示场景 `disk`（磁盘概览看板）：Badge 健康 + KeyValue 容量 + Chart 近三月 + DonutChart 构成 + Note 建议 + Accordion SMART + RatingField 打分；`SUNVALE_OPENUI_DEMO=1` 说「磁盘 / 看板 / 概览」或斜杠 `/表单-磁盘概览看板` 注入。
 - 系统提示词列出全部新组件与看板优先规则；颜色始终由绘制层从主题 token 取（`openToneColor` + `openChartPalette`），程序里不携带颜色。
+
+## OPENUI-MEDIA — 图文列表 MediaList
+
+只读展示组件（不是表单字段），类似 ChatGPT 的图文步骤列表。
+
+```
+root = MediaList([m1, m2, m3], "剪辑步骤", "numbered")
+m1 = MediaItem("/abs/cover.png", "选封面", "用第二张做封面。", "image")
+m2 = MediaItem("/abs/clip.mp4", "剪开场", "保留前 5 秒。")
+m3 = {media: "https://example.com/a.png", kind: "image", title: "参考", text: "构图参考。", n: "3"}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `MediaList(items, title?, style?)` | `items` 为 MediaItem/对象数组（最多 30 行）；`title` 可选；`style` 为 `"numbered"` 时标题前自动编号 `1.` `2.`。别名 `MediaCards`。 |
+| `MediaItem(media, title, text, kind?, n?)` | 别名 `MediaCard`。对象写法键：`media`（`src`/`path`/`url`）、`kind`（`type`）、`title`、`text`（`body`/`desc`）、`n`（显式编号优先）。 |
+| `kind` | `image` / `video` / `doc`；省略或无法识别时按扩展名推断，`data:image/` 视为图片，其余为 `doc`。 |
+
+绘制：左侧 136×92 圆角缩略图卡（图片 Cover；视频走 `mediaThumb` 关键帧 + 播放角标；PDF/HTML 走首页/图标缩略；其余或加载失败显示文件图标），右侧 13px 粗体标题 + 12px 正文自动换行，行间 1px 分隔线。点击缩略图以该文件打开空格快速预览（`openQuickLookPath`，不改变选中项；←/→ 不切换）。`http(s)` 地址后台下载（≤16 MB、20 s 超时）到 `TempDir/sunvale-openui-media` 后显示与预览，下载前显示文件图标。流式未闭合时沿用 OPENUI-SKEL 骨架。
+
+截图：`docs/assets/shots/OPENUI-MEDIA/04-medialist.png`（列表）、`05-medialist-quicklook.png`（点缩略图打开快速预览）。

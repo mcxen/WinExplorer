@@ -258,3 +258,8 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **视频 `video` / `VideoField`**：关键帧（`ffmpeg`，见 `media.go:videoPosterImage`）+「打开播放」；无内嵌播放。限制写在本段与 `docs/specs/08-forms.md` OPENUI3。
 
 演示预设：`filelist` / `image` / `video`。截图 `docs/assets/shots/OPENUI-MEDIA/`。
+
+## OpenUI 图文列表（OPENUI-MEDIA）
+
+- **`MediaList(items, title?, "numbered"?)` + `MediaItem(media, title, text, kind?)`**：每行左 136×92 圆角缩略图卡（图片 / 视频关键帧 + 播放角标 / 文档首页，失败退回文件图标），右粗体标题（可编号）+ 正文换行；行间 1px 分隔线，无多余说明文字。
+- 点缩略图打开快速预览（不改选中）；`http(s)` 图片后台缓存后显示。语法见 `docs/specs/08-forms.md` OPENUI-MEDIA。截图 `docs/assets/shots/OPENUI-MEDIA/04-medialist.png`、`05-medialist-quicklook.png`；离线演示：`SUNVALE_OPENUI_DEMO=1` 下发送含「图文」或 `medialist` 的消息（`SUNVALE_DEMO_MEDIA_DIR` 可指向真实样例）。

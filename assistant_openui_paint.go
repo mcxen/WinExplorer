@@ -240,6 +240,8 @@ func (a *App) paintOpenView(c *ui.Context, v *ouiView, p *openPaint, depth int) 
 		a.paintOpenButton(c, v, p)
 	case "note", "badge", "keyvalue", "chart", "donut", "accordion", "divider":
 		a.paintOpenExtra(c, v, p, depth)
+	case "medialist":
+		a.paintOpenMediaList(c, v)
 	}
 }
 

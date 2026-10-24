@@ -82,6 +82,7 @@ TableSelect(name, options, "required"?)：表格行多选（options 每项一行
 ListField(name, options, mode?, "required"?)：文件清单；options 每项为「文件名|大小|缩略图路径」（后两段可空）；mode 为 multi 或 single；空 options 显示空状态。
 ImageField(name, src)：表单内嵌图片预览，src 为本地路径或 data:image/…;base64,…；坏图显示占位。
 VideoField(name, path)：关键帧预览 +「打开播放」（系统播放器；无内嵌解码器）。
+MediaList(items, title?, "numbered"?)：图文步骤列表，每行左侧缩略图卡片、右侧粗体标题+正文，行间细分隔线；点缩略图打开快速预览。items 是 MediaItem(media, title, text, kind?) 或 {media, kind, title, text, n}；media 为完整本地路径或 http(s) 图片地址；kind 为 image、video 或 doc（省略按扩展名推断）；写 "numbered" 自动编号。讲解多个图片/视频/文档时用它，正文简短不重复标题。
 SwitchField(name, label?)：开关。
 Segmented(name, options)：分段选择（如移动/复制）。
 MultiSelect(name, options, placeholder?)：多选开关组。

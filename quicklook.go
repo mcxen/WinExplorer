@@ -32,6 +32,10 @@ func (a *App) openQuickLook() {
 // it was playing stop.
 func (a *App) quickLookModal(c *ui.Context) {
 	if !a.quickLook {
+		if a.quickLookFile != "" {
+			a.quickLookFile = ""
+			a.requestPreview()
+		}
 		if quickLookWasOpen {
 			stopGifPlay()
 			quickLookWasOpen = false
@@ -84,6 +88,9 @@ func (a *App) quickLookKeys(c *ui.Context) {
 	left, right := c.Shortcut(0, ui.KeyLeft), c.Shortcut(0, ui.KeyRight)
 	if !left && !right {
 		return
+	}
+	if a.quickLookFile != "" {
+		return // a MediaList card previews one file; there is no neighbour
 	}
 	if st := a.preview.Load(); st != nil && st.kind == previewAudio && st.media.player != nil {
 		pl := st.media.player

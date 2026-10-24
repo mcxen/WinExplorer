@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"sunvale/internal/forms"
@@ -71,6 +73,10 @@ func (a *App) assistOpenUIDemoSubmit() bool {
 	if text == "" || a.assist.running {
 		return false
 	}
+	if strings.Contains(text, "图文") || strings.Contains(text, "medialist") {
+		a.assistInjectMediaDemo(text)
+		return true
+	}
 	id := openUIDemoMatch(text)
 	if id == "" {
 		return false
@@ -120,4 +126,53 @@ func (a *App) assistSlashOpenUIScenes() []assistSlashItem {
 		})
 	}
 	return items
+}
+
+// openUIMediaDemoProgram is the offline MediaList the 图文 demo keyword
+// injects: the sandbox's picture, clip, PDF and a note (icon fallback).
+// SUNVALE_DEMO_MEDIA_DIR may point at a folder of real samples instead.
+func openUIMediaDemoProgram() string {
+	root := forms.EnsureDemoSandbox()
+	pick := map[string]string{
+		"image": filepath.Join(root, "Downloads", "demo-photo.png"),
+		"video": filepath.Join(root, "Movies", "demo-clip.mp4"),
+		"doc":   filepath.Join(root, "Documents", "报告.pdf"),
+	}
+	if dir := os.Getenv("SUNVALE_DEMO_MEDIA_DIR"); dir != "" {
+		if ents, err := os.ReadDir(dir); err == nil {
+			for _, e := range ents {
+				ext := lowerExt(e.Name())
+				kind := ""
+				switch {
+				case isImageExt(ext):
+					kind = "image"
+				case isVideoExt(ext):
+					kind = "video"
+				case ext == "pdf":
+					kind = "doc"
+				}
+				if kind != "" {
+					pick[kind] = filepath.Join(dir, e.Name())
+				}
+			}
+		}
+	}
+	note := filepath.Join(root, "Downloads", "会议纪要.md")
+	q := func(s string) string { return strconv.Quote(filepath.ToSlash(s)) }
+	return "root = MediaList([m1, m2, m3, m4], \"整理素材\", \"numbered\")\n" +
+		"m1 = MediaItem(" + q(pick["image"]) + ", \"选定封面\", \"横图构图完整，色彩饱和度适中，适合作为相册封面；原图保留在下载文件夹。\", \"image\")\n" +
+		"m2 = MediaItem(" + q(pick["video"]) + ", \"截取开场片段\", \"保留前 5 秒作为片头，其余部分归档到影片文件夹。点缩略图可逐帧预览。\", \"video\")\n" +
+		"m3 = MediaItem(" + q(pick["doc"]) + ", \"核对报告\", \"第 1 页的数据与表格一致，可直接分享。\", \"doc\")\n" +
+		"m4 = MediaItem(" + q(note) + ", \"补充会议纪要\", \"没有可用缩略图时显示文件图标。\")\n"
+}
+
+func (a *App) assistInjectMediaDemo(userText string) {
+	body := "素材已按顺序整理：\n\n" + forms.FenceOpenUI(openUIMediaDemoProgram())
+	a.assist.turns = append(a.assist.turns,
+		aiTurn{Role: "user", Text: userText},
+		aiTurn{Role: "assistant", Text: body},
+	)
+	a.assist.draft = ""
+	a.assist.status = ""
+	a.assist.running = false
 }

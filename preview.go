@@ -92,6 +92,9 @@ func (a *App) singleSelectedAny() Entry {
 // singleSelected returns the single selected file, or "" when zero or many
 // are selected (the preview pane follows Explorer's one-file rule).
 func (a *App) singleSelected() Entry {
+	if a.quickLook && a.quickLookFile != "" {
+		return Entry{Path: a.quickLookFile, Name: filepath.Base(a.quickLookFile), Ext: lowerExt(a.quickLookFile)}
+	}
 	sel := a.selectedEntries()
 	if len(sel) != 1 || sel[0].IsDir {
 		return Entry{}

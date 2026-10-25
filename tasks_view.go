@@ -186,8 +186,13 @@ func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
 		tone = toneError
 	}
 	_, icon := archiveSnapTone(s)
-	ui.Row(c).FillWidth().MinWidth(0).Gap(14).Padding(12, 14).Radius(10).AlignItems(ui.Start).
-		Border(1, colorDivider()).Background(colorSurface()).Children(func() {
+	card := ui.Row(c).FillWidth().MinWidth(0).Gap(14).Padding(12, 14).Radius(10).AlignItems(ui.Start)
+	if visualV2 {
+		v2Raised(card.Background(colorSurface()))
+	} else {
+		card.Border(1, colorDivider()).Background(colorSurface())
+	}
+	card.Children(func() {
 		if gauge {
 			paintGauge(c, "tv-gauge-"+s.ID, s.Frac(), tone)
 		}

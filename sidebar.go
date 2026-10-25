@@ -574,6 +574,8 @@ func (a *App) navRowGlyph(c *ui.Context, r navRow) {
 // app lists places.
 func (a *App) paintNavRow(row ui.Element, r navRow) {
 	switch {
+	case r.sel && visualV2:
+		v2Chosen(row.Radius(v2RowRadius))
 	case r.sel:
 		row.Background(colorSelected())
 	case row.Hovered():

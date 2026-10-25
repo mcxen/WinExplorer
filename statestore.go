@@ -77,12 +77,14 @@ type appSettings struct {
 	ShowHidden bool   `json:"showHidden"`
 	// TreeNoExpand turns off 展开到打开的文件夹: navigating leaves the
 	// sidebar tree as the user opened it (Explorer's option off).
-	TreeNoExpand   bool `json:"treeNoExpand,omitempty"`
-	ShowExt        bool `json:"showExt"`
-	Compact        bool `json:"compact"`
-	ItemCheckboxes bool `json:"itemCheckboxes"`
-	PreviewOpen    bool `json:"previewOpen"`
-	Mode           int  `json:"mode"`
+	TreeNoExpand bool `json:"treeNoExpand,omitempty"`
+	// VisualStyle is 视觉风格: "" 经典, "v2" (visual.go).
+	VisualStyle    string `json:"visualStyle,omitempty"`
+	ShowExt        bool   `json:"showExt"`
+	Compact        bool   `json:"compact"`
+	ItemCheckboxes bool   `json:"itemCheckboxes"`
+	PreviewOpen    bool   `json:"previewOpen"`
+	Mode           int    `json:"mode"`
 	// ProgressStyle is the assistant task cards' look: bar (default) or
 	// gauge (PROG-STYLE).
 	ProgressStyle string `json:"progressStyle,omitempty"`

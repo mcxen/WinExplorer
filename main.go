@@ -337,12 +337,16 @@ func (a *App) view(c *ui.Context) {
 	}
 	// The frame theme carries the app's Windows 11 tokens to MyGo's widgets
 	// and the Onevra components, before anything under it builds.
+	a.syncVisual()
 	c.SetTheme(appTheme(c))
 	// The root paints the chrome color only where the window shows no
 	// material; with one, the bands that leave themselves clear let the
 	// Mica through, and the file pane's opaque content surface covers the
 	// rest.
 	root := windowBG(c, ui.Column(c).Fill())
+	if visualV2 && !c.Vibrancy() {
+		root.LinearGradient(v2Wash())
+	}
 	root.Children(func() {
 		a.tabStrip(c)
 		a.commandBar(c)
@@ -391,7 +395,20 @@ func (a *App) contentPanes(c *ui.Context) {
 		})
 		return
 	}
-	ui.Row(c).FillWidth().FillHeight().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+	row := ui.Row(c).FillWidth().FillHeight().MinHeight(0).AlignItems(ui.Stretch)
+	if visualV2 {
+		// v2: the file area, preview and assistant are one raised card on
+		// the wash.
+		ui.Box(c.Key("v2-gutter")).FillWidth().FillHeight().MinHeight(0).Padding(0, v2Gutter, v2Gutter, 2).Children(func() {
+			a.contentRow(c, v2Card(ui.Row(c).Fill().MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)))
+		})
+		return
+	}
+	a.contentRow(c, row)
+}
+
+func (a *App) contentRow(c *ui.Context, row ui.Element) {
+	row.Children(func() {
 		a.flipPane(c)
 		if a.previewOpen {
 			a.previewPane(c)

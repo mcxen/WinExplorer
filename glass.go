@@ -24,8 +24,8 @@ import (
 // windowBG gives e the chrome's token background where the window shows
 // no material, and leaves it clear — the material shows — where it does.
 func windowBG(c *ui.Context, e ui.Element) ui.Element {
-	if c.Vibrancy() {
-		return e
+	if c.Vibrancy() || visualV2 {
+		return e // v2: the root's wash shows through
 	}
 	return e.Background(colorWindow())
 }

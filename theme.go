@@ -25,6 +25,9 @@ func systemDark() bool {
 // in the same turn as the click, and the window never paints one appearance
 // while the widgets under it paint the other.
 func darkMode() bool {
+	if testDark != nil {
+		return *testDark
+	}
 	switch mygo.Theme.Source() {
 	case mygo.ThemeLight:
 		return false
@@ -33,6 +36,10 @@ func darkMode() bool {
 	}
 	return systemDark()
 }
+
+// testDark pins the appearance in headless shot tests (the app's theme
+// source cannot change before App.Run).
+var testDark *bool
 
 func pick(light, dark string) ui.Color {
 	if darkMode() {
@@ -120,6 +127,9 @@ func resolveTokens() {
 		tokHover = ui.RGBA(255, 255, 255, 0.06)
 	} else {
 		tokHover = ui.RGBA(0, 0, 0, 0.06)
+	}
+	if visualV2 {
+		resolveV2()
 	}
 }
 

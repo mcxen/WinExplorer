@@ -201,6 +201,17 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
+			ID: "visual", Title: "视觉风格", Description: "v2：柔和底色、浮起内容卡片（预览）",
+			Build: func(c *ui.Context) {
+				sv := 0
+				if a.store.settings().VisualStyle == "v2" {
+					sv = 1
+				}
+				if ui.Segmented(c, &sv, "经典", "v2").Shrink(0).Changed() {
+					a.applySettings(func(x *appSettings) { x.VisualStyle = []string{"", "v2"}[sv] })
+				}
+			},
+		}, {
 			ID: "progress", Title: "进度样式", Description: "助手任务卡",
 			Build: func(c *ui.Context) {
 				pv := 0

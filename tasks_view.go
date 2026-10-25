@@ -93,7 +93,20 @@ func taskStateLabel(s archiveTaskSnap) (string, ui.Color) {
 }
 
 func (a *App) tasksView(c *ui.Context) {
-	lists := taskViewLists()
+	var lists [4][]archiveTaskSnap
+	limit := taskListPage
+	if f := a.flip; f != nil {
+		// Mid-flip: the lists gathered when the flip began, and only the
+		// cards that fit, so the turning face builds the same light tree
+		// each frame.
+		if f.lists == nil {
+			l := taskViewLists()
+			f.lists = &l
+		}
+		lists, limit = *f.lists, flipCards
+	} else {
+		lists = taskViewLists()
+	}
 	if a.tasksTab < 0 || a.tasksTab > 3 {
 		a.tasksTab = 0
 	}
@@ -138,8 +151,23 @@ func (a *App) tasksView(c *ui.Context) {
 		gauge := a.assistProgressStyle() == progressStyleGauge
 		ui.Scroll(c.Key("list")).FillWidth().Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c.Key("cards")).FillWidth().Padding(12, 14).Gap(10).Children(func() {
-				for _, s := range lists[a.tasksTab] {
+				list := lists[a.tasksTab]
+				if a.tasksOpen["all"] && a.flip == nil {
+					limit = len(list)
+				}
+				for i, s := range list {
+					if i >= limit {
+						break
+					}
 					a.taskCard(c.Key("card-"+s.ID), s, gauge)
+				}
+				if n := len(list) - limit; n > 0 && a.flip == nil {
+					if components.Button(c.Key("more"), "显示其余 "+itoa(n)+" 项", components.ButtonGhost).Clicked() {
+						if a.tasksOpen == nil {
+							a.tasksOpen = map[string]bool{}
+						}
+						a.tasksOpen["all"] = true
+					}
 				}
 			})
 		})

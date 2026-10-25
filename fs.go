@@ -10,6 +10,18 @@ import (
 // visibleEntries filters hidden names and the search query, then lists
 // directories before files, each group ordered by the current sort.
 func (a *App) visibleEntries() []Entry {
+	if f := a.flip; f != nil {
+		// Mid-flip the front shows the listing as it was when the turn
+		// began: no filter or sort per frame (FLIP-PERF).
+		if f.entries == nil || f.path != a.cur().path {
+			f.entries, f.path = a.visibleEntriesLive(), a.cur().path
+		}
+		return f.entries[:len(f.entries):len(f.entries)]
+	}
+	return a.visibleEntriesLive()
+}
+
+func (a *App) visibleEntriesLive() []Entry {
 	t := a.cur()
 	// The gallery page's items come from its own scan, so selection,
 	// copy, delete and the status bar see the same photos the view shows.

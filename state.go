@@ -112,6 +112,9 @@ type marqueeState struct {
 type App struct {
 	// tasksFlipped turns the middle area to the task view (tasks_flip.go);
 	// tasksTab is its tab and tasksOpen its expanded member lists.
+	flip         *flipState // non-nil while the middle area is turning
+	flipLowEnd   bool       // frames ran over budget: crossfade, no blur
+	flipLanded   time.Time  // when the last flip landed (live-content fade)
 	tasksFlipped bool
 	tasksTab     int
 	tasksOpen    map[string]bool

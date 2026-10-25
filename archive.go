@@ -18,6 +18,7 @@ import (
 	"github.com/egoist/mygo"
 
 	"sunvale/internal/fsops"
+	"sunvale/internal/tasks"
 )
 
 // 归档支持：zip 与 tar 家族（含 gz/bz2）用标准库纯 Go 解压；xz 的
@@ -118,11 +119,12 @@ func archiveGo(fn func()) {
 }
 
 // doExtract 解压选中的每个归档到以其基础名命名的子文件夹。加密归档
-// 会按密码本顺序重试；归档套归档时自动连解（嵌套深度与个数有上限）。
-// 解压是后台活：选中的行立刻亮起呼吸灯，解开一个它的呼吸就换成新
-// 文件夹行的一次闪烁；全部结束时列表刷新、选中新文件夹，并给出是否
-// 把原归档移入回收站的下一步推荐。解不开的内层归档在状态栏点名，不
-// 拖累其它内容落地。
+// 会按密码本顺序重试；密码本失败（或为空）时在任务卡内联询问密码
+// （EXTRACT-ASK，可选写入密码本）；归档套归档时自动连解（嵌套深度与
+// 个数有上限），内层同样在书失败后询问。解压是后台活：选中的行立刻
+// 亮起呼吸灯，解开一个它的呼吸就换成新文件夹行的一次闪烁；全部结束
+// 时列表刷新、选中新文件夹，并给出是否把原归档移入回收站的下一步推
+// 荐。取消或留空则该归档失败；仍解不开的内层在状态栏点名。
 func (a *App) doExtract() {
 	sel := a.selectedEntries()
 	if len(sel) == 0 || specialPath(a.cur().path) {
@@ -140,6 +142,7 @@ func (a *App) doExtract() {
 		return
 	}
 	dir := a.cur().path
+	a.ensureArchivePasswordSavedHook()
 	candidates := archivePasswordCandidates(a.assist.passwords)
 	if a.lastArchivePassword != "" {
 		ordered := []string{a.lastArchivePassword}
@@ -159,16 +162,43 @@ func (a *App) doExtract() {
 	go a.extractArchives(dir, archives, candidates)
 }
 
+// ensureArchivePasswordSavedHook keeps the in-memory book and last-used
+// password in sync when EXTRACT-ASK saves or unlocks an archive.
+func (a *App) ensureArchivePasswordSavedHook() {
+	onArchivePasswordSaved = func(secret string) {
+		if secret == "" {
+			return
+		}
+		a.postAssist(func() {
+			a.lastArchivePassword = secret
+			for _, p := range a.assist.passwords {
+				if p.Secret == secret {
+					return
+				}
+			}
+			a.assist.passwords = append(a.assist.passwords, archivePassword{
+				ID: newID(), Label: "解压密码", Secret: secret,
+			})
+			if len(a.assist.passwords) > assistMaxArchivePasswords {
+				a.assist.passwords = a.assist.passwords[len(a.assist.passwords)-assistMaxArchivePasswords:]
+			}
+		})
+	}
+}
+
 // extractArchives runs the unpacks off the UI thread. Each archive's
 // breath comes down as it lands, and the folder it produced flashes once
 // the reload shows it. The window is updated in one posting at the end.
 func (a *App) extractArchives(dir string, archives []Entry, candidates []string) {
 	// Each archive is its own queued task (two per disk run at once); the
 	// toast and selection come when the last of the batch ends. 重试 of
-	// one archive reruns it alone and reports just that one.
+	// one archive reruns it alone and reports just that one. Passwords
+	// the user types (EXTRACT-ASK) prepend to the shared book for later
+	// archives in the same batch.
 	var mu sync.Mutex
 	left := len(archives)
 	outs := make([]extractOut, len(archives))
+	cands := append([]string(nil), candidates...)
 	for i, e := range archives {
 		i, e := i, e
 		runs := 0
@@ -176,9 +206,14 @@ func (a *App) extractArchives(dir string, archives []Entry, candidates []string)
 			mu.Lock()
 			runs++
 			again := runs > 1
+			book := append([]string(nil), cands...)
 			mu.Unlock()
-			o := extractOne(dir, e, candidates)
+			ask := extractPasswordAsk(t)
+			o := extractOne(dir, e, book, ask)
 			mu.Lock()
+			if o.pw != "" {
+				cands = reprioritize(o.pw, cands)
+			}
 			outs[i] = o
 			var batch []extractOut
 			if again {
@@ -195,6 +230,30 @@ func (a *App) extractArchives(dir string, archives []Entry, candidates []string)
 	}
 }
 
+// extractPasswordAsk is the task-card password prompt used after the book
+// fails. Cancel / empty fails that archive; a typed password is retried.
+func extractPasswordAsk(t *archiveTask) passwordPrompt {
+	if t == nil || t.r == nil {
+		return nil
+	}
+	r := t.r
+	return func(name, detail string) (string, bool, error) {
+		ans, err := r.Ask(tasks.Ask{
+			Kind:    tasks.AskKindPassword,
+			Item:    name,
+			Detail:  detail,
+			Options: []string{tasks.ChoiceSubmit, tasks.ChoiceCancel},
+		})
+		if err != nil {
+			return "", false, err
+		}
+		if ans.Choice == tasks.ChoiceCancel {
+			return "", false, errArchivePassword
+		}
+		return ans.Text, ans.Save, nil
+	}
+}
+
 // extractOut is one archive's result.
 type extractOut struct {
 	src, name, dst, pw string
@@ -203,7 +262,7 @@ type extractOut struct {
 	err                error
 }
 
-func extractOne(dir string, e Entry, candidates []string) extractOut {
+func extractOne(dir string, e Entry, candidates []string, ask passwordPrompt) extractOut {
 	o := extractOut{src: e.Path, name: e.Name}
 	defer aiFx.clearBusy(e.Path)
 	base, err := uniqueFreeName(dir, archiveExtName(e.Name), true)
@@ -212,7 +271,7 @@ func extractOne(dir string, e Entry, candidates []string) extractOut {
 		return o
 	}
 	dst := filepath.Join(dir, base)
-	password, nested, err := extractArchiveNested(e.Path, dst, candidates)
+	password, nested, err := extractArchiveNestedAsk(e.Path, dst, candidates, ask)
 	if err != nil {
 		_ = os.RemoveAll(dst)
 		o.err = err

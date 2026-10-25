@@ -84,6 +84,7 @@
 | FLIP-PERF | 任务视图翻转降卡顿：翻转期间冻结两面数据、预热任务视图、背面只建 8 张卡、边缘模糊、超 20ms 回退淡入淡出、落定 80ms 淡入；`TestFlipFrameTimes` 2000 文件 + 500 历史：p50 67.8→17.5ms、p95 149→27ms | 中 | 完成 | — | TASKSYS | — |
 | VISUAL2 | 视觉语言 v2：小圆角令牌、默认 v2、经典可切、纵向对齐 | 高 | 已完成 | [11](docs/specs/11-visual-language.md) | — | — |
 | ADDR-RECENT | 地址栏下拉：最近访问文件夹（标题·路径），点选导航 | 中 | 已完成 | — | — | — |
+| EXTRACT-ASK | 右键解压：密码本失败后任务卡询问密码（可写入密码本）；嵌套内层同样询问 | 高 | 已完成 | 本文 | ARCHIVE-PROG、TASKSYS T3 | `main` |
 | PROG-STYLE | 进度条样式优化与可选绿色仪表盘 | 中 | 已完成 | [09](docs/specs/09-archive-progress.md) PROG-STYLE | ARCHIVE-PROG | `main` |
 | ARCHIVE-PROG | 压缩 / 解压按字节进度：百分比、速度、当前文件、剩余时间、取消；助手实时进度卡 | 高 | 已完成 | [09](docs/specs/09-archive-progress.md) | OPENUI-MORE | `main` |
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
@@ -425,7 +426,15 @@
 - **范围**：`addressbar.go`（`addressRecentButton`/`addressRecentItems`）、`addressbar_ui_test.go`；`TASK.md`。
 - **验收**：`go test -run TestAddressRecentDropdown`；`go build`/`go vet`/`GOOS=windows go build`/`go test ./... -short`（跳过已知死锁 `TestCopyConflictCardAndQueueShots`）。
 
-### LOG1 — 诊断日志（尤其助手）
+#
+### EXTRACT-ASK — 解压密码询问
+- **目标**：右键 / `doExtract` / 任务解压时，加密归档在密码本全部失败（或为空）后，在任务卡内联询问密码；提交后重试；可选「写入密码本」；取消或留空则该归档失败。嵌套内层归档在书失败后同样询问。
+- **范围**：`internal/tasks/ask.go`（`AskKindPassword`、`Answer.Text/Save`）、`archive_password.go`（`extractWithPasswordsAsk`）、`archive_nested.go`、`archive.go`（`extractPasswordAsk`）、`tasks_view.go`（密码卡）、`archive_extract_ask_test.go`；`README.md`、本文。
+- **验收**：短测覆盖取消失败、内层询问、Ask 携带 Text/Save；`go build`/`go vet`/`GOOS=windows go build`/`go test ./... -short`。
+- **已知限制**：助手 `unzip` / 远程解压仍只走密码本、不弹 UI；无头测试里无 Reporter 时不询问（与冲突 Ask 一致）。
+- **状态**：已完成，合入 `main`。
+
+## LOG1 — 诊断日志（尤其助手）
 - **目标**：Windows GUI 程序无控制台，也能通过日志文件调试助手与任务。
 - **范围**：`internal/applog`（slog、轮转、脱敏、panic）、`applog_glue.go`、`main.go`、`assistant_run.go`、`assistant_mcp.go`、`assistant_openui_adapter.go`、`internal/assistant/openui.go`、`task_run.go`、`updatemirror.go`、`singleinstance.go`、`schedule_run.go`、`assistant_http.go`、`settingsdialog.go`、`assistant_error.go`、`statestore.go`；`docs/specs/12-logging.md`、`docs/UI.md`。
 - **验收**：日志写到 `%LOCALAPPDATA%\Sunvale\logs\sunvale.log`（macOS `~/Library/Logs/Sunvale`，Linux `~/.local/state/sunvale/logs`），5 MB × 5 轮转；main 第一行初始化，顶层与助手运行 panic 带栈；设置可调级别、打开文件夹、导出 zip；助手错误行“查看日志”；助手 run id、模型、Base URL、HTTP 状态 / 耗时 / 错误体片段、token 用量、工具调用与结果耗时、MCP、OpenUI 解析失败、定时触发均有记录且密钥脱敏；单测覆盖脱敏、轮转、级别过滤；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。

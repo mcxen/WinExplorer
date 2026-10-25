@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +14,10 @@ import (
 // archive password candidates, not accounts: every archive is tried with
 // the user's order from the pane. Secrets stay on disk in assistant.json
 // and are never put in a model message or a transcript.
+//
+// When the book fails (or is empty) for an encrypted archive, an optional
+// passwordPrompt can ask the user — right-click extract wires this to the
+// task card (EXTRACT-ASK); assistant / remote leave it nil.
 
 const assistMaxArchivePasswords = 40
 
@@ -39,10 +44,27 @@ func archivePasswordCandidates(entries []archivePassword) []string {
 	return out
 }
 
+// passwordPrompt asks for one more password after the book failed.
+// name is the archive base name; detail is the card hint. Empty password
+// or cancel should return errArchivePassword (or ErrCanceled). Save means
+// append the password to the book once it opens the archive.
+type passwordPrompt func(name, detail string) (password string, save bool, err error)
+
+// onArchivePasswordSaved, when set, learns a password that just opened an
+// archive (session book + last-used). Tests leave it nil.
+var onArchivePasswordSaved func(secret string)
+
 // extractWithPasswords tries no password first, then each saved candidate
 // in order. A failed try must not leave half a tree behind for the next
 // one, so every attempt gets a clean destination.
 func extractWithPasswords(archive, dstDir string, passwords []string) (string, error) {
+	return extractWithPasswordsAsk(archive, dstDir, passwords, nil)
+}
+
+// extractWithPasswordsAsk is extractWithPasswords plus an optional user
+// prompt after the book is exhausted. Wrong user passwords re-prompt
+// until cancel / empty.
+func extractWithPasswordsAsk(archive, dstDir string, passwords []string, ask passwordPrompt) (string, error) {
 	try := func(password string) error {
 		_ = os.RemoveAll(dstDir)
 		if err := os.MkdirAll(dstDir, 0o755); err != nil {
@@ -63,13 +85,92 @@ func extractWithPasswords(archive, dstDir string, passwords []string) (string, e
 			return password, nil
 		}
 	}
-	if archivePasswordError(last) {
+	if !archivePasswordError(last) {
+		return "", last
+	}
+	if ask == nil || !shouldAskArchivePassword(archive, last, len(passwords)) {
 		if len(passwords) == 0 {
 			return "", fmt.Errorf("%w；请先在助手密码本添加解压密码", errArchivePassword)
 		}
 		return "", fmt.Errorf("%w；密码本里的 %d 个密码都不对", errArchivePassword, len(passwords))
 	}
-	return "", last
+	name := filepath.Base(archive)
+	detail := "需要解压密码"
+	if len(passwords) > 0 {
+		detail = fmt.Sprintf("密码本 %d 个都不对，请输入密码", len(passwords))
+	}
+	for {
+		pw, save, err := ask(name, detail)
+		if err != nil {
+			return "", err
+		}
+		pw = strings.TrimSpace(pw)
+		if pw == "" {
+			return "", fmt.Errorf("%w", errArchivePassword)
+		}
+		last = try(pw)
+		if last == nil {
+			if save {
+				_ = saveAssistantArchivePassword(name, pw)
+			}
+			if onArchivePasswordSaved != nil {
+				onArchivePasswordSaved(pw)
+			}
+			return pw, nil
+		}
+		if !archivePasswordError(last) {
+			return "", last
+		}
+		detail = "密码不对，请重试"
+	}
+}
+
+// shouldAskArchivePassword decides whether to prompt the user. Clear
+// password/encrypted errors always ask; ambiguous ones (e.g. "not a valid
+// zip") ask only when the book was already tried, or a zip member is
+// marked encrypted — so a corrupt file with an empty book fails fast
+// instead of hanging the task card.
+func shouldAskArchivePassword(archive string, err error, bookTried int) bool {
+	if !archivePasswordError(err) {
+		return false
+	}
+	if archivePasswordClear(err) || bookTried > 0 {
+		return true
+	}
+	return zipMembersEncrypted(archive)
+}
+
+func archivePasswordClear(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	for _, part := range []string{
+		"password", "encrypted", "encryption", "wrong password",
+		"密码", "加密", "口令",
+	} {
+		if strings.Contains(s, part) {
+			return true
+		}
+	}
+	return false
+}
+
+func zipMembersEncrypted(archive string) bool {
+	if archiveKind(filepath.Base(archive)) != "zip" {
+		return false
+	}
+	r, err := zip.OpenReader(archive)
+	if err != nil {
+		return false
+	}
+	defer r.Close()
+	for _, f := range r.File {
+		if f.Flags&0x1 != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func archivePasswordError(err error) bool {

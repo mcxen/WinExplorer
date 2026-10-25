@@ -73,6 +73,9 @@ func taskSourceLabel(src string) string {
 
 func taskStateLabel(s archiveTaskSnap) (string, ui.Color) {
 	if s.Ask != nil {
+		if s.Ask.Kind == tasks.AskKindPassword {
+			return "待输入密码", tokWarning
+		}
 		return "待选择", tokWarning
 	}
 	switch s.State {
@@ -285,10 +288,14 @@ func (a *App) taskCardHead(c *ui.Context, s archiveTaskSnap, icon *ui.SVG, tone 
 }
 
 // taskNumbers is the dense line: percent, bytes, speed, ETA, items.
-// taskAsk is a name clash asked inline: the item, three choices and
-// whether to apply the choice to the rest of the run.
+// taskAsk is a mid-run question inline: name clash choices, or a password
+// field after the archive book failed (EXTRACT-ASK).
 func (a *App) taskAsk(c *ui.Context, s archiveTaskSnap) {
 	q := s.Ask
+	if q.Kind == tasks.AskKindPassword {
+		a.taskAskPassword(c, s)
+		return
+	}
 	ui.Row(c.Key("ask")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Padding(6, 8).Radius(6).
 		Background(tokWarning.Alpha(0.12)).Children(func() {
 		components.Icon(c, lucide.TriangleAlert()).Size(16, 16).TextColor(tokWarning).Shrink(0)
@@ -314,6 +321,46 @@ func (a *App) taskAsk(c *ui.Context, s archiveTaskSnap) {
 			}
 		}
 	})
+}
+
+// taskAskPassword is the EXTRACT-ASK card: password field, save-to-book
+// checkbox, 确定 / 取消. Empty cancel fails that archive.
+func (a *App) taskAskPassword(c *ui.Context, s archiveTaskSnap) {
+	q := s.Ask
+	if a.taskAskDraft == nil {
+		a.taskAskDraft = map[string]string{}
+	}
+	if a.tasksOpen == nil {
+		a.tasksOpen = map[string]bool{}
+	}
+	pw := a.taskAskDraft[s.ID]
+	save := a.tasksOpen[s.ID+"pwsav"]
+	ui.Column(c.Key("askpw")).FillWidth().MinWidth(0).Gap(6).Padding(6, 8).Radius(6).
+		Background(tokWarning.Alpha(0.12)).Children(func() {
+		ui.Row(c.Key("h")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Children(func() {
+			components.Icon(c, lucide.KeyRound()).Size(16, 16).TextColor(tokWarning).Shrink(0)
+			name := ui.Text(c.Key("n"), q.Item).FontSize(12.5).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+			components.Tooltip(c, name, q.Item)
+			ui.Text(c.Key("d"), q.Detail).FontSize(12).TextColor(colorMuted()).Shrink(0)
+		})
+		ui.Row(c.Key("in")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Children(func() {
+			components.TextBox(c.Key("pw"), &pw, components.TextBoxOptions{}).
+				Grow(1).MinWidth(120).Placeholder("解压密码").Password()
+			components.Checkbox(c.Key("sav"), &save, "写入密码本")
+			if components.Button(c.Key("ok"), "确定", components.ButtonPrimary).Clicked() {
+				_ = taskManager().Answer(s.ID, tasks.Answer{Choice: tasks.ChoiceSubmit, Text: pw, Save: save})
+				delete(a.taskAskDraft, s.ID)
+				delete(a.tasksOpen, s.ID+"pwsav")
+			}
+			if components.Button(c.Key("no"), "取消", components.ButtonSecondary).Clicked() {
+				_ = taskManager().Answer(s.ID, tasks.Answer{Choice: tasks.ChoiceCancel})
+				delete(a.taskAskDraft, s.ID)
+				delete(a.tasksOpen, s.ID+"pwsav")
+			}
+		})
+	})
+	a.taskAskDraft[s.ID] = pw
+	a.tasksOpen[s.ID+"pwsav"] = save
 }
 
 func taskNumbers(s archiveTaskSnap) string {

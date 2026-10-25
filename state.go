@@ -118,6 +118,8 @@ type App struct {
 	tasksFlipped bool
 	tasksTab     int
 	tasksOpen    map[string]bool
+	// taskAskDraft holds typed passwords for EXTRACT-ASK cards by task id.
+	taskAskDraft map[string]string
 	// addr is the address bar's edit and completion state (addressbar.go).
 	addr      addrState
 	tabs      []*tabState

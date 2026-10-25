@@ -84,11 +84,11 @@ func TestExtractArchiveNestedThreeLevels(t *testing.T) {
 func TestExtractNestedLockedInner(t *testing.T) {
 	src := nestedZipFixture(t)
 	old := extractWithPasswordsFn
-	extractWithPasswordsFn = func(archive, dst string, passwords []string) (string, error) {
+	extractWithPasswordsFn = func(archive, dst string, passwords []string, ask passwordPrompt) (string, error) {
 		if strings.HasSuffix(archive, "l3.zip") {
 			return "", fmt.Errorf("%w；4 个密码都不对", errArchivePassword)
 		}
-		return old(archive, dst, passwords)
+		return old(archive, dst, passwords, ask)
 	}
 	t.Cleanup(func() { extractWithPasswordsFn = old })
 
@@ -118,9 +118,9 @@ func TestExtractNestedReprioritizes(t *testing.T) {
 	src := nestedZipFixture(t)
 	old := extractWithPasswordsFn
 	var tries [][]string
-	extractWithPasswordsFn = func(archive, dst string, passwords []string) (string, error) {
+	extractWithPasswordsFn = func(archive, dst string, passwords []string, ask passwordPrompt) (string, error) {
 		tries = append(tries, append([]string(nil), passwords...))
-		pwd, err := old(archive, dst, passwords)
+		pwd, err := old(archive, dst, passwords, ask)
 		if err == nil {
 			pwd = "family-secret"
 		}

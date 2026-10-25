@@ -15,6 +15,9 @@ import (
 // lands, and the report names which inner archives stayed locked so the
 // caller can ask for one more secret instead of redoing everything.
 //
+// When a passwordPrompt is set (right-click extract), an inner archive the
+// book cannot open asks the user before joining Locked (EXTRACT-ASK).
+//
 // Nesting is bounded: archives that contain themselves (or just huge
 // trees) stop at nestedMaxDepth levels and nestedMaxCount inner archives.
 
@@ -25,15 +28,16 @@ const (
 
 // extractWithPasswordsFn is the one-archive engine the walker calls. It is
 // a variable so the nesting tests can drive password scenarios without a
-// 7-Zip on the machine.
-var extractWithPasswordsFn = extractWithPasswords
+// 7-Zip on the machine. The ask argument is forwarded for EXTRACT-ASK.
+var extractWithPasswordsFn = extractWithPasswordsAsk
 
 // nestedReport is what the walk beyond the top archive did.
 type nestedReport struct {
 	// Extracted is each inner archive that opened, path relative to the
 	// top destination, in opening order.
 	Extracted []string
-	// Locked is inner archives no password candidate opened.
+	// Locked is inner archives no password candidate opened (and the user
+	// canceled or left blank when asked).
 	Locked []string
 	// Failed is inner archives that failed for another reason, followed by
 	// the error's short form.
@@ -50,8 +54,14 @@ func (r nestedReport) any() bool {
 // returned as extractWithPasswords reports it; the walk's part never fails
 // the call — its outcome is the report.
 func extractArchiveNested(archive, dstDir string, passwords []string) (string, nestedReport, error) {
+	return extractArchiveNestedAsk(archive, dstDir, passwords, nil)
+}
+
+// extractArchiveNestedAsk is extractArchiveNested with an optional user
+// password prompt after the book fails (top and inner).
+func extractArchiveNestedAsk(archive, dstDir string, passwords []string, ask passwordPrompt) (string, nestedReport, error) {
 	var r nestedReport
-	password, err := extractWithPasswordsFn(archive, dstDir, passwords)
+	password, err := extractWithPasswordsFn(archive, dstDir, passwords, ask)
 	if err != nil {
 		return "", r, err
 	}
@@ -92,11 +102,13 @@ func extractArchiveNested(archive, dstDir string, passwords []string) (string, n
 					continue
 				}
 				sub = filepath.Join(dir, sub)
-				pwd, err := extractWithPasswordsFn(path, sub, ordered)
+				pwd, err := extractWithPasswordsFn(path, sub, ordered, ask)
 				if err != nil {
 					_ = os.RemoveAll(sub)
 					if errors.Is(err, errArchivePassword) {
 						r.Locked = append(r.Locked, rel)
+					} else if errors.Is(err, errArchiveCanceled) {
+						return password, r, err
 					} else {
 						r.Failed = append(r.Failed, rel+"："+err.Error())
 					}

@@ -3,7 +3,7 @@
 ## 现状盘点
 
 - `archive.go`：`doCompress`（选择 → ZIP，原同步）、`doExtract` → `extractArchives`（后台 goroutine，`aiFx` 呼吸灯）、`extractArchive`（zip/tar/tgz/tbz2 纯 Go；txz 走 bsdtar；7z/rar 走 7-Zip/unar）、`makeZip`/`addTree`/`addFile`。
-- `archive_password.go`：无密码 → 密码本逐个重试，每次清空目标；`archive_nested.go`：归档套归档自动连解。
+- `archive_password.go`：无密码 → 密码本逐个重试，每次清空目标；书失败后可选 `passwordPrompt`（EXTRACT-ASK 任务卡询问，可写入密码本）；`archive_nested.go`：归档套归档自动连解，内层同样可询问。
 - 助手工具 `zip_files` / `unzip`（`assistant_mcp.go`），过程中只有「正在压缩 / 正在解压」活动行。
 - 进度展示：OpenUI `ProgressBar`（表单内静态值，`forms_paint.go:paintFormProgress`）、Onevra `components.Progress`（支持不确定态）。无任务队列；状态栏只有「处理中 N 项」。
 

@@ -296,7 +296,7 @@ func (a *App) taskAsk(c *ui.Context, s archiveTaskSnap) {
 		a.taskAskPassword(c, s)
 		return
 	}
-	ui.Row(c.Key("ask")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Padding(6, 8).Radius(6).
+	ui.Row(c.Key("ask")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Padding(6, 8).Radius(innerRadius()).
 		Background(tokWarning.Alpha(0.12)).Children(func() {
 		components.Icon(c, lucide.TriangleAlert()).Size(16, 16).TextColor(tokWarning).Shrink(0)
 		name := ui.Text(c.Key("n"), q.Item).FontSize(12.5).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
@@ -335,7 +335,7 @@ func (a *App) taskAskPassword(c *ui.Context, s archiveTaskSnap) {
 	}
 	pw := a.taskAskDraft[s.ID]
 	save := a.tasksOpen[s.ID+"pwsav"]
-	ui.Column(c.Key("askpw")).FillWidth().MinWidth(0).Gap(6).Padding(6, 8).Radius(6).
+	ui.Column(c.Key("askpw")).FillWidth().MinWidth(0).Gap(6).Padding(6, 8).Radius(innerRadius()).
 		Background(tokWarning.Alpha(0.12)).Children(func() {
 		ui.Row(c.Key("h")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Children(func() {
 			components.Icon(c, lucide.KeyRound()).Size(16, 16).TextColor(tokWarning).Shrink(0)

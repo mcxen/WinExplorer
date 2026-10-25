@@ -130,7 +130,11 @@ input:focus{border-color:var(--accent)}
 .tbl.files tbody tr{height:30px}
 .tbl.files.compact tbody tr{height:22px}
 .tbl.files.compact td{padding:2px 10px}
-.tbl.files th{cursor:default}
+.tbl.files th{cursor:default;position:relative}
+/* 列宽拖拽：表头右缘的手柄，实时拖、localStorage 记住、双击恢复默认 */
+.colgrip{position:absolute;top:0;right:-5px;width:10px;height:100%;cursor:col-resize;touch-action:none;user-select:none;z-index:2}
+.colgrip::after{content:"";position:absolute;top:20%;bottom:20%;right:4px;width:2px;border-radius:1px;background:transparent}
+.colgrip:hover::after,.colgrip.drag::after{background:var(--accent)}
 .tbl.files th.sort{cursor:pointer;user-select:none}
 .tbl.files th.sort:hover{color:var(--text)}
 .tbl.files td.cName{max-width:360px}
@@ -1314,6 +1318,64 @@ function render(){
  else renderIcons(zone,vis,view);
  updateStatus();updateCmdbar();schedulePane();
 }
+// ---- 列宽拖拽：详细信息表头右缘手柄 ----
+// 宽度记在 localStorage（sunvale_colw：{date,type,size,loc}），名称列保持
+// 弹性伸展开与桌面端一致；双击手柄恢复该列默认（删键即回退）。
+const COLW_KEY='sunvale_colw';
+const COLW_MIN=56;
+function colWidths(){
+ try{return JSON.parse(localStorage.getItem(COLW_KEY))||{}}catch(e){return{}}
+}
+function saveColWidth(w){
+ try{localStorage.setItem(COLW_KEY,JSON.stringify(w))}catch(e){}
+}
+function colGrip(th,key){
+ const g=el('span','colgrip');
+ g.title='拖动改列宽，双击恢复默认';
+ let dragging=false;
+ g.addEventListener('pointerdown',ev=>{
+  ev.preventDefault();ev.stopPropagation();
+  dragging=true;
+  g.setPointerCapture(ev.pointerId);
+  g.classList.add('drag');
+  const startX=ev.clientX;
+  const startW=th.getBoundingClientRect().width;
+  const move=e2=>{
+   if(!dragging)return;
+   const w=Math.max(COLW_MIN,Math.round(startW+e2.clientX-startX));
+   th.style.width=w+'px';
+  };
+  const up=e2=>{
+   if(!dragging)return;
+   dragging=false;
+   g.classList.remove('drag');
+   g.removeEventListener('pointermove',move);
+   g.removeEventListener('pointerup',up);
+   g.removeEventListener('pointercancel',up);
+   const w=colWidths();
+   w[key]=parseInt(th.style.width,10)||0;
+   saveColWidth(w);
+  };
+  g.addEventListener('pointermove',move);
+  g.addEventListener('pointerup',up);
+  g.addEventListener('pointercancel',up);
+ });
+ g.addEventListener('dblclick',ev=>{
+  ev.stopPropagation();
+  const w=colWidths();
+  delete w[key];
+  saveColWidth(w);
+  th.style.width='';
+ });
+ th.append(g);
+}
+function applyColWidths(htr){
+ const w=colWidths();
+ htr.querySelectorAll('th[data-k]').forEach(th=>{
+  const k=th.dataset.k;
+  if(w[k])th.style.width=w[k]+'px';
+ });
+}
 function renderDetails(zone,vis){
  const t=document.createElement('table');
  t.className='tbl files'+(compact?' compact':'');
@@ -1329,7 +1391,12 @@ function renderDetails(zone,vis){
   thCk.append(ck);
  }
  htr.append(thCk,el('th','colIco',''));
- if(globalSearch)htr.append(el('th','cLoc','位置'));
+ if(globalSearch){
+  const thLoc=el('th','cLoc','位置');
+  thLoc.dataset.k='loc';
+  colGrip(thLoc,'loc');
+  htr.append(thLoc);
+ }
  [['name','名称'],['date','修改日期'],['type','类型'],['size','大小']].forEach(([k,label])=>{
   const th=el('th','sort'+(k==='size'?' cNum cSize':' c'+k[0].toUpperCase()+k.slice(1)));
   th.append(el('span','',label));
@@ -1340,9 +1407,14 @@ function renderDetails(zone,vis){
    th.append(a);
   }
   th.onclick=()=>setSort(k);
+  if(k!=='name'){ // 名称列随窗口伸展，不设固定宽
+   th.dataset.k=k;
+   colGrip(th,k);
+  }
   htr.append(th);
  });
  htr.append(el('th','colOps',''));
+ applyColWidths(htr);
  thead.append(htr);
  const tb=document.createElement('tbody');
  vis.forEach((it,idx)=>{

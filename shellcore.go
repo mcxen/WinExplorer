@@ -203,7 +203,12 @@ func (s *shellCore) resolve(p string) string {
 
 // check refuses a path outside the run's root: the interpreter's open
 // handler guards redirections, this guards the coreutils' own opens.
+// /dev/null passes through like the open handler's own pass: dropping
+// output is hygiene, not an escape.
 func (s *shellCore) check(p string) (string, bool) {
+	if p == "/dev/null" {
+		return p, true
+	}
 	abs := s.resolve(p)
 	if abs != s.dir && !strings.HasPrefix(abs, s.dir+string(filepath.Separator)) {
 		s.errln("%s 在工作目录之外，已拒绝", p)

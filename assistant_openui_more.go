@@ -137,14 +137,14 @@ func (a *App) paintOpenFiles(c *ui.Context, v *ouiView) {
 func (a *App) paintOpenFileRow(c *ui.Context, it *ouiView) {
 	name, size, when, dir := openFileMeta(it)
 	local := openMediaLocal(it.Path)
-	row := ui.ButtonBase(c).FillWidth().MinWidth(0).Radius(6).Padding(6, 6).Label("打开 " + name)
+	row := ui.ButtonBase(c).FillWidth().MinWidth(0).Radius(innerRadius()).Padding(6, 6).Label("打开 " + name)
 	row.Children(func() {
 		ui.Row(c).FillWidth().MinWidth(0).Gap(10).AlignItems(ui.Center).Children(func() {
 			verb := "预览 "
 			if dir {
 				verb = "进入 "
 			}
-			icon := ui.ButtonBase(c.Key("icon")).Size(openFileIconBox, openFileIconBox).Shrink(0).Radius(6).Clip().
+			icon := ui.ButtonBase(c.Key("icon")).Size(openFileIconBox, openFileIconBox).Shrink(0).Radius(innerRadius()).Clip().
 				Label(verb + name)
 			icon.Children(func() {
 				var bm *ui.Bitmap

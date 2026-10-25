@@ -99,6 +99,8 @@ func TestRemoteManagePageIntegrity(t *testing.T) {
 		"/api/fs/'+op", "api/fs/remove", // move 与 copy 共用 batchOp 拼出的路径
 		"dragstart", "dragover", "dataTransfer",
 		"F2", "F5", "Backspace", "Alt+P", "sunvale_view", "sunvale_sort",
+		// 列宽拖拽：表头手柄、持久化键与光标
+		"colgrip", "sunvale_colw", "col-resize", "applyColWidths",
 		// 地址栏的历史与快捷键
 		"sunvale_addr_hist", "Ctrl+L", "Alt+D", "api/fs/dirs",
 		"scrollTop", "revealName",

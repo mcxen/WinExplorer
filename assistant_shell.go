@@ -74,6 +74,12 @@ func runBash(ctx context.Context, root, script string) (string, error) {
 		if errText != "" {
 			return text, fmt.Errorf("%s：%s", err.Error(), errText)
 		}
+		if text == "" {
+			// A silent failure is almost always a `cd` to a folder that is
+			// not there — the interpreter does not say so on stderr — so
+			// the message carries the one hint the model needs to retry.
+			return text, fmt.Errorf("%s：脚本失败且没有任何输出。提示：脚本已在工作目录里运行（~ 即工作目录），不需要 cd", err)
+		}
 		return text, err
 	}
 	return text, nil
@@ -151,9 +157,25 @@ func interpRunner(root string, out, errOut io.Writer) (*interp.Runner, error) {
 	)
 }
 
+// devNull is the null device as a file handle: reads hit EOF, writes
+// vanish. The shell idiom `2>/dev/null` must not depend on the file
+// existing — Windows has no /dev/null — so the interpreter's open gate
+// hands out this sink instead.
+type devNull struct{}
+
+func (devNull) Read([]byte) (int, error)    { return 0, io.EOF }
+func (devNull) Write(p []byte) (int, error) { return len(p), nil }
+func (devNull) Close() error                { return nil }
+
 // open is the interpreter's every-file gate: redirections and `>` writes
 // land here, so the sandbox cannot be stepped out of with `../../etc/passwd`.
+// /dev/null is the one pass-through: dropping output is hygiene, not an
+// escape, and the check must precede path resolution because "/dev/null"
+// is not absolute on Windows.
 func (g *shellRootGuard) open(ctx context.Context, path string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+	if path == "/dev/null" {
+		return devNull{}, nil
+	}
 	if path == "" {
 		return nil, fmt.Errorf("空路径")
 	}
@@ -174,7 +196,7 @@ func (g *shellRootGuard) open(ctx context.Context, path string, flag int, perm o
 func registerShellTool(s *sunvaleTools, server *mcp.Server) {
 	addSunvaleTool(s, server, &mcp.Tool{
 		Name:        "bash",
-		Description: "在工作目录里执行一段 POSIX shell 脚本（sh 语法：管道、重定向、通配符、for/if、&&/||）。内置 ls、cat、grep、find、sed、cp、mv、mkdir、rm、sort、wc、head、tail、du、stat、cut、uniq、tr、basename、dirname、date、seq 等命令，Windows 上同样可用；git、ffmpeg 等系统命令也能调用。只能读写工作目录内的路径，有超时。批量整理、统计、重命名前的核对用本工具，比逐个调文件工具快。",
+		Description: "在工作目录里执行一段 POSIX shell 脚本（sh 语法：管道、重定向、通配符、for/if、&&/||）。脚本始终以工作目录为当前目录运行（~ 即工作目录），不需要 cd。内置 ls、cat、grep、find、sed、cp、mv、mkdir、rm、sort、wc、head、tail、du、stat、cut、uniq、tr、basename、dirname、date、seq 等命令，Windows 上同样可用；git、ffmpeg 等系统命令也能调用。只能读写工作目录内的路径，有超时。批量整理、统计、重命名前的核对用本工具，比逐个调文件工具快。",
 	}, s.bash)
 }
 

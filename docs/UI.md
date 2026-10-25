@@ -44,6 +44,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 - **经典**：`appTheme.Radius = 6`（对话框由组件加倍为 12），`Spacing = 4`。行、按钮、标签圆角 4；地址栏/搜索 6；下拉/浮层 8；代码块与 OpenUI 占位 6。
 - **v2（默认，`visual.go`）**：内容卡 / 任务卡 `v2CardRadius = 8`；行 / 侧栏选中 / 主题 Radius `v2RowRadius = 4`（对话框加倍为 8）；地址栏/搜索 `v2InputRadius = 4`；内容卡外侧 gutter 8。详见 `docs/specs/11-visual-language.md`。
+- **圆角令牌**：代码不写死随风格变化的圆角。`cardRadius()`（页级卡：磁盘卡——经典 12 / v2 8）、`innerRadius()`（卡内软面：缩略图框、图表、徽标、助手卡——经典 6 / v2 4）、`fieldRadius()`（地址/搜索输入——经典 6 / v2 4）。胶囊与半高圆（清除按钮 8/16、播放 16 等）是几何形状，不随风格变化，仍写死。
 - 行内边距 `files.go:rowInset = 4`。
 - 设置 → 外观 → 视觉风格可切回经典。截图 `docs/assets/shots/VISUAL2/`。
 

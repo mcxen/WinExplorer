@@ -85,7 +85,7 @@ func (a *App) propertiesBody(c *ui.Context) {
 		}
 		// A picture shows itself small; other kinds show their facts only.
 		if st.bitmap != nil && (st.kind == previewImage) {
-			body := ui.Box(c).FillWidth().MaxHeight(220).Shrink(0).Radius(6).
+			body := ui.Box(c).FillWidth().MaxHeight(220).Shrink(0).Radius(innerRadius()).
 				Background(colorAddress()).Border(1, colorDivider()).Padding(8, 8).Clip()
 			body.Children(func() {
 				ui.Image(c, st.bitmap).Fit(ui.Contain)

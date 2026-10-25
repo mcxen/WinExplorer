@@ -552,7 +552,7 @@ func (a *App) usagePlaceRow(c *ui.Context, here *usageNode, flag *bool) {
 // usageMap is the treemap: cells squarified over the canvas, one
 // rectangle per child of the drill position.
 func (a *App) usageMap(c *ui.Context, res *usageScan, here *usageNode) {
-	shell := ui.Box(c).FillWidth().Height(280).Shrink(0).Radius(6).
+	shell := ui.Box(c).FillWidth().Height(280).Shrink(0).Radius(innerRadius()).
 		Border(1, colorDivider()).Background(colorContent()).Clip()
 	shell.Children(func() {
 		if res == nil || here == nil {

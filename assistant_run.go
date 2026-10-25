@@ -11,7 +11,6 @@ import (
 	"time"
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
-	officialmcp "github.com/cloudwego/eino-ext/components/tool/mcp/officialmcp"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -330,7 +329,7 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 	if err != nil {
 		return assistRunResult{}, err
 	}
-	tools, err := officialmcp.GetTools(ctx, &officialmcp.Config{Cli: sess, ServerName: "sunvale"})
+	tools, err := sunvaleRunTools(ctx, sess)
 	if err != nil {
 		return assistRunResult{}, err
 	}

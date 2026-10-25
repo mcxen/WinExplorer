@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	officialmcp "github.com/cloudwego/eino-ext/components/tool/mcp/officialmcp"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/egoist/mygo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -88,6 +90,20 @@ func sunvaleSession(ctx context.Context) (*mcp.ClientSession, error) {
 		mcpClient, mcpConnectErr = client.Connect(ctx, ct, nil)
 	})
 	return mcpClient, mcpConnectErr
+}
+
+// sunvaleRunTools is the one way runs turn the MCP session into Eino tools.
+// The result policy matters as much as the fetch: a tool's IsError result
+// (bad script, path refused) is information for the model to correct itself
+// on — that is why MCP has the flag — while officialmcp's default turns it
+// into a Go error that kills the whole run on the first failed call.
+func sunvaleRunTools(ctx context.Context, sess *mcp.ClientSession) ([]tool.BaseTool, error) {
+	asError := false
+	return officialmcp.GetTools(ctx, &officialmcp.Config{
+		Cli:          sess,
+		ServerName:   "sunvale",
+		ResultPolicy: &officialmcp.ResultPolicy{ErrorAsError: &asError},
+	})
 }
 
 func closeAssistantMCP() {

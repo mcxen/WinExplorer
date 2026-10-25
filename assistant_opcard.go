@@ -125,7 +125,7 @@ func (a *App) assistOpCard(c *ui.Context, i int, op *assistant.FileOp) {
 	}
 	card.Children(func() {
 		ui.Row(c).FillWidth().Padding(8, 10, 6, 10).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(24, 24).Radius(6).Shrink(0).Center().Background(tint.Alpha(0.12)).Children(func() {
+			ui.Box(c).Size(24, 24).Radius(innerRadius()).Shrink(0).Center().Background(tint.Alpha(0.12)).Children(func() {
 				components.Icon(c, look.icon).Size(14, 14).TextColor(tint)
 			})
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
@@ -154,7 +154,7 @@ func (a *App) assistOpBody(c *ui.Context, op *assistant.FileOp) {
 		opPreview(c, op.After)
 	case assistant.OpEdit:
 		lines := assistant.DiffHunks(assistant.DiffLines(op.Before, op.After), 1)
-		ui.Column(c).FillWidth().MinWidth(0).Radius(6).Padding(4, 0).Background(colorWindow()).Children(func() {
+		ui.Column(c).FillWidth().MinWidth(0).Radius(innerRadius()).Padding(4, 0).Background(colorWindow()).Children(func() {
 			for n, l := range lines {
 				if n == opDiffLines {
 					ui.Text(c, "…以及另外 "+itoa(len(lines)-n)+" 行").FontSize(11).TextColor(colorMuted()).Padding(2, 8)
@@ -202,7 +202,7 @@ func (a *App) assistOpBody(c *ui.Context, op *assistant.FileOp) {
 		})
 	}
 	if op.Status == assistant.OpPending && op.Danger {
-		ui.Row(c).FillWidth().Padding(6, 8).Radius(6).Gap(6).AlignItems(ui.Center).
+		ui.Row(c).FillWidth().Padding(6, 8).Radius(innerRadius()).Gap(6).AlignItems(ui.Center).
 			Background(t.Danger.Alpha(0.08)).Children(func() {
 			components.Icon(c, lucide.TriangleAlert).Size(13, 13).TextColor(t.Danger).Shrink(0)
 			note := op.Note
@@ -241,7 +241,7 @@ func (a *App) assistOpItem(c *ui.Context, op *assistant.FileOp, it assistant.OpI
 }
 
 func opFromTo(c *ui.Context, from, to string) {
-	ui.Row(c).FillWidth().MinWidth(0).Padding(6, 8).Radius(6).Gap(8).AlignItems(ui.Center).
+	ui.Row(c).FillWidth().MinWidth(0).Padding(6, 8).Radius(innerRadius()).Gap(8).AlignItems(ui.Center).
 		Background(colorWindow()).Children(func() {
 		ui.Text(c, from).FontSize(12).TextColor(colorMuted()).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
 		components.Icon(c, lucide.ArrowRight).Size(12, 12).TextColor(colorMuted()).Shrink(0)
@@ -252,7 +252,7 @@ func opFromTo(c *ui.Context, from, to string) {
 // opPreview shows the first lines of a new file's content.
 func opPreview(c *ui.Context, text string) {
 	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
-	ui.Column(c).FillWidth().MinWidth(0).Radius(6).Padding(6, 8).Gap(1).Background(colorWindow()).Children(func() {
+	ui.Column(c).FillWidth().MinWidth(0).Radius(innerRadius()).Padding(6, 8).Gap(1).Background(colorWindow()).Children(func() {
 		for n, l := range lines {
 			if n == opPreviewLines {
 				ui.Text(c, "…以及另外 "+itoa(len(lines)-n)+" 行").FontSize(11).TextColor(colorMuted())
@@ -534,7 +534,7 @@ func (a *App) assistantEmpty(c *ui.Context) {
 				card.Background(colorHover())
 			}
 			card.Children(func() {
-				ui.Box(c).Size(26, 26).Radius(6).Shrink(0).Center().Background(colorAccent().Alpha(0.1)).Children(func() {
+				ui.Box(c).Size(26, 26).Radius(innerRadius()).Shrink(0).Center().Background(colorAccent().Alpha(0.1)).Children(func() {
 					components.Icon(c, s.icon).Size(14, 14).TextColor(colorAccent())
 				})
 				ui.Column(c).Grow(1).MinWidth(0).Children(func() {

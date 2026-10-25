@@ -82,6 +82,42 @@ func TestRunBashSandbox(t *testing.T) {
 	}
 }
 
+// TestRunBashDevNull: `2>/dev/null` is shell hygiene, not an escape — the
+// null sink must pass the guard instead of refusing the script's one
+// redirect to silence a noisy command.
+func TestRunBashDevNull(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := runBash(context.Background(), dir, "du -sh . 2>/dev/null")
+	if err != nil {
+		t.Fatalf("redirect to /dev/null should not fail: %v", err)
+	}
+	if !strings.Contains(got, ".") {
+		t.Fatalf("du was silenced along with its stderr: %q", got)
+	}
+	// Reading the sink is EOF, not an error, and never leaks outside.
+	if got, err = runBash(context.Background(), dir, "cat /dev/null"); err != nil || got != "" {
+		t.Fatalf("cat /dev/null = %q, %v", got, err)
+	}
+}
+
+// TestRunBashCDSilentFailure: a `cd` to a folder that is not there fails
+// with no stderr at all; the error the model sees must still say enough
+// to retry without the cd — the bare "exit status 1" it replaced left
+// nothing to work with.
+func TestRunBashCDSilentFailure(t *testing.T) {
+	dir := t.TempDir()
+	_, err := runBash(context.Background(), dir, "cd ~/Downloads && ls")
+	if err == nil {
+		t.Fatal("the failed cd should surface as an error")
+	}
+	if !strings.Contains(err.Error(), "没有任何输出") || !strings.Contains(err.Error(), "工作目录") {
+		t.Fatalf("the silent failure kept its secret: %v", err)
+	}
+}
+
 // TestRunBashTimeout: a runaway script is stopped by the timeout.
 func TestRunBashTimeout(t *testing.T) {
 	if testing.Short() {

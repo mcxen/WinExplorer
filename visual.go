@@ -101,6 +101,26 @@ func fieldRadius() float32 {
 	return 6
 }
 
+// cardRadius is the page-card corner radius: a disk card, an occupant of
+// the content card. v2's content card is 8, so a 12-radius classic card
+// floating inside it would clash corners; classic keeps the dialog pair 12.
+func cardRadius() float32 {
+	if visualV2 {
+		return v2CardRadius
+	}
+	return 12
+}
+
+// innerRadius is the corner radius of the soft faces inside a card —
+// thumbnail boxes, charts, badges, assistant cards. Classic drew them at 6;
+// v2 tightens them to the row token so they stay under the card's 8.
+func innerRadius() float32 {
+	if visualV2 {
+		return v2RowRadius
+	}
+	return 6
+}
+
 // sidebarListPad is the top inset of the nav list. v2 matches the content
 // card's flush top so the first sidebar row lines up with the details header.
 func sidebarListPad() float32 {

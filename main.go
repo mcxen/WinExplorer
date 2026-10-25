@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,7 +17,8 @@ import (
 	"sunvale/internal/applog"
 )
 
-// bootStart is when the process started, for WINEXPLORER_TIMING=1.
+// bootStart is when the process started; the first-frame record in view()
+// measures perceived startup against it.
 var bootStart = time.Now()
 
 // apps is every open window's App, so closing a window can stop its
@@ -136,7 +138,7 @@ func main() {
 		// quit the taskbar no longer shows; a desktop without a tray
 		// area keeps every other behavior, so the failure is only logged.
 		if _, err := setupTray(); err != nil {
-			log.Printf("托盘初始化失败：%v", err)
+			slog.Warn("tray init failed", "err", err)
 		}
 		// Ctrl+K summons the search panel from any app, not only from a
 		// focused file window. A bind that fails leaves the window shortcut.
@@ -306,9 +308,9 @@ func (a *App) view(c *ui.Context) {
 		// landings.
 		diskhealth.SetOnUpdate(diskUpdateNotify)
 		diskUpdateOn(repaint)
-		if os.Getenv("WINEXPLORER_TIMING") != "" {
-			log.Printf("启动：%v 后第一帧", time.Since(bootStart))
-		}
+		// One Info record per launch: the diagnostic log is the right gate
+		// for a startup metric, not an environment variable.
+		slog.Info("first frame", "since_boot_ms", time.Since(bootStart).Milliseconds())
 	}
 	a.handleKeys(c)
 	a.updateSearch()

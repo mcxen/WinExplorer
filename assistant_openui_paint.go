@@ -156,7 +156,7 @@ func (a *App) openChosen(view *ouiView, turn int, key string) string {
 // the user read what the model wrote.
 func (a *App) paintOpenFailed(c *ui.Context, src, key string) {
 	st := &a.assist.open
-	ui.Column(c).FillWidth().MinWidth(0).Gap(4).Padding(8).Radius(6).Background(colorHover()).Children(func() {
+	ui.Column(c).FillWidth().MinWidth(0).Gap(4).Padding(8).Radius(innerRadius()).Background(colorHover()).Children(func() {
 		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 			components.Icon(c, lucide.TriangleAlert()).Size(14, 14).TextColor(colorMuted())
 			ui.Text(c, "这块界面没能画出来").FontSize(12).TextColor(colorMuted()).Grow(1).MinWidth(0)

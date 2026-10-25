@@ -200,7 +200,7 @@ func assistQuoteBlock(c *ui.Context, d *parser.Document, i int, o *markdown.Opti
 		return false
 	}
 	src := stripQuoteMarkers(d.String()[b.Start:b.End])
-	ui.Column(c).FillWidth().MinWidth(0).Padding(8, 10).Radius(6).BorderStartWidth(3).
+	ui.Column(c).FillWidth().MinWidth(0).Padding(8, 10).Radius(innerRadius()).BorderStartWidth(3).
 		BorderColor(colorDivider()).Background(colorSurface()).Children(func() {
 		markdown.View(c, src, o)
 	})
@@ -231,7 +231,7 @@ const assistCopyFeedbackDuration = 4 * time.Second
 // the code. The library's own block reads its labels from the system
 // locale; the pane is Chinese whatever the system says.
 func assistCodeBlock(c *ui.Context, md *assistMD, b *markdown.CodeBlockView) {
-	box := ui.Column(c).FillWidth().MinWidth(0).Radius(6).Border(1, colorDivider()).
+	box := ui.Column(c).FillWidth().MinWidth(0).Radius(innerRadius()).Border(1, colorDivider()).
 		Background(colorSurface()).Clip().Label("代码 " + b.Language)
 	box.Children(func() {
 		ui.Row(c).FillWidth().Padding(4, 6, 0, 10).AlignItems(ui.Center).Children(func() {

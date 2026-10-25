@@ -155,7 +155,7 @@ func (a *App) imageQuickViewport(c *ui.Context, st *previewState, maxW, maxH flo
 		cur = ui.CursorGrab
 	}
 	box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Clip().Cursor(cur).
-		Background(colorHover().Alpha(0.2)).Radius(6)
+		Background(colorHover().Alpha(0.2)).Radius(innerRadius())
 	if dx, dy, ok := box.Dragged(); ok && a.imgQV.zoom > imgZoomMin {
 		a.imgQV.panX += dx
 		a.imgQV.panY += dy

@@ -21,7 +21,8 @@
 
 ## 记录内容
 
-- 启动：pid、OS、GOARCH、Go 版本、可执行路径、日志路径；就绪后版本号、各显示器缩放（`mygo.Screen.Displays`）。
+- 启动：pid、OS、GOARCH、Go 版本、可执行路径、日志路径；第一帧绘制（`since_boot_ms`，无条件）；就绪后版本号、各显示器缩放（`mygo.Screen.Displays`）。
+- 托盘与全局搜索快捷键初始化失败：warn（其余行为不受影响）。
 - 单实例：获得锁 / 已在运行并唤起。
 - 更新：每条镜像线路成功 / 失败（耗时、错误），全部失败。
 - 任务内核：`runTask` 包装，task start / end / failed（kind、标题、来源、路径、耗时），panic 带栈。

@@ -17,7 +17,7 @@ import (
 // diskCard is one drive. The left column carries identity and the score
 // ring; the right column stacks the live chart, the checks and the facts.
 func (a *App) diskCard(c *ui.Context, d diskhealth.Disk, r diskhealth.Report) {
-	card := ui.Column(c).FillWidth().Radius(12).Padding(16).Gap(14).
+	card := ui.Column(c).FillWidth().Radius(cardRadius()).Padding(16).Gap(14).
 		Background(colorAddress()).Shrink(0)
 	card.Children(func() {
 		ui.Row(c).FillWidth().Gap(16).AlignItems(ui.Start).Children(func() {
@@ -317,7 +317,7 @@ func (a *App) diskCheckChip(c *ui.Context, ch diskhealth.Check) {
 	text := fmt.Sprintf("%s · %s · %s", ch.Name, ch.Value, ch.State)
 	badge := components.Badge(c, text)
 	badge.Background(tone.Alpha(0.12)).Border(1, tone.Alpha(0.35)).
-		TextColor(tone).Padding(4, 8).Radius(6)
+		TextColor(tone).Padding(4, 8).Radius(innerRadius())
 	if ch.Note != "" {
 		components.Tooltip(c, badge, ch.Note)
 	}
@@ -373,7 +373,7 @@ func (a *App) diskFactsRow(c *ui.Context, d diskhealth.Disk) {
 
 // diskFactTile is one labelled value in the facts row.
 func (a *App) diskFactTile(c *ui.Context, label, value string) {
-	tile := ui.Column(c).Shrink(0).MinWidth(96).Radius(6).
+	tile := ui.Column(c).Shrink(0).MinWidth(96).Radius(innerRadius()).
 		Background(colorContent()).Padding(8, 10).Gap(2)
 	tile.Children(func() {
 		ui.Text(c, label).FontSize(10).TextColor(colorMuted()).SingleLine()

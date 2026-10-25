@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino-ext/components/tool/mcp/officialmcp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/net/html"
 
@@ -319,5 +318,3 @@ func registerWebSearchTools(s *sunvaleTools, server *mcp.Server) {
 		Description: "读取一个网址的正文。web_search 得到链接后用它看全文；二进制内容不支持。",
 	}, s.webRead)
 }
-
-var _ = officialmcp.GetTools // anchor the tool-fetch import used by runs

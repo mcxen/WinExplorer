@@ -43,7 +43,7 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string, at time.Time) {
 	key := "assist-err-" + itoa(i)
 	ui.Column(c.Key(key)).FillWidth().MinWidth(0).Gap(4).Children(func() {
 		row := ui.ButtonBase(c).Key("toggle").FillWidth().MinWidth(0).Height(24).Gap(6).
-			AlignItems(ui.Center).Padding(0, 6).Radius(6).Label("出错了：" + first)
+			AlignItems(ui.Center).Padding(0, 6).Radius(innerRadius()).Label("出错了：" + first)
 		if row.Hovered() {
 			row.Background(colorHover())
 		}

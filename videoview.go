@@ -178,7 +178,7 @@ func (a *App) videoQuickViewport(c *ui.Context, st *previewState, maxW, maxH flo
 	}
 	bm := a.vidQV.frame
 	box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Clip().
-		Background(colorHover().Alpha(0.2)).Radius(6).Cursor(ui.CursorPointer)
+		Background(colorHover().Alpha(0.2)).Radius(innerRadius()).Cursor(ui.CursorPointer)
 	if bm == nil {
 		box.Children(func() {
 			msg := a.vidQV.err
@@ -272,7 +272,7 @@ func (a *App) videoQuickScrub(c *ui.Context, maxW float32) {
 
 // videoQuickOpenButton is the footer CTA — system player only.
 func (a *App) videoQuickOpenButton(c *ui.Context, st *previewState) {
-	btn := ui.ButtonBase(c).Height(32).FillWidth().MaxWidth(240).Radius(6).
+	btn := ui.ButtonBase(c).Height(32).FillWidth().MaxWidth(240).Radius(innerRadius()).
 		Background(colorAccent()).Label("用系统播放器打开").
 		Tooltip("用系统默认播放器打开")
 	btn.Children(func() {

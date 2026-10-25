@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -102,7 +102,9 @@ var boundSearchHotkey string
 // leaves the window shortcut in place.
 func registerSearchHotkey(acc string) {
 	if err := applySearchHotkey(acc); err != nil {
-		log.Printf("全局搜索快捷键：%v", err)
+		// The window shortcut still works, so this is a degradation, not a
+		// failure of the search itself.
+		slog.Warn("global search hotkey bind failed", "acc", acc, "err", err)
 	}
 }
 

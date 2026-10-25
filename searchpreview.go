@@ -63,7 +63,7 @@ func searchPreviewEmpty(c *ui.Context, height float32) {
 // decode is asynchronous and repaints when ready; other entries keep the
 // same large file glyph the quick-look fallback uses.
 func (a *App) searchPreviewThumb(c *ui.Context, e Entry) {
-	box := ui.Box(c).FillWidth().Height(searchPreviewThumb).Shrink(0).Radius(6).
+	box := ui.Box(c).FillWidth().Height(searchPreviewThumb).Shrink(0).Radius(innerRadius()).
 		Background(colorSurface()).Border(1, colorDivider()).Clip()
 	box.Children(func() {
 		if bm := mediaThumb(e.Path, searchPreviewThumb); bm != nil {

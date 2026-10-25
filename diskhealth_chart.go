@@ -25,7 +25,7 @@ func (a *App) diskChart(c *ui.Context, d diskhealth.Disk, r diskhealth.Report) {
 			ui.Text(c, liveRateLabel(d)).FontSize(11).TextColor(colorText()).Grow(1).SingleLine()
 		})
 		if len(samples) < 2 {
-			ui.Box(c).FillWidth().Height(96).Shrink(0).Radius(6).
+			ui.Box(c).FillWidth().Height(96).Shrink(0).Radius(innerRadius()).
 				Background(colorContent()).Children(func() {
 				ui.Text(c, "采样中，约 3 秒后出现曲线").
 					FontSize(11).TextColor(colorMuted()).Padding(10, 10)

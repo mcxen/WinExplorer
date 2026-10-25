@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	officialmcp "github.com/cloudwego/eino-ext/components/tool/mcp/officialmcp"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -135,6 +136,52 @@ func callTool(t *testing.T, sess *mcp.ClientSession, name string, args map[strin
 		t.Fatal(err)
 	}
 	return res
+}
+
+// TestSunvaleRunToolsToolErrorFlowsBack: a tool's IsError result is the
+// model's cue to correct itself, not a run-killer. The run tools must be
+// built with ErrorAsError off so Eino's ToolNode streams the text back —
+// the default policy is what turned one bad script into a dead run.
+func TestSunvaleRunToolsToolErrorFlowsBack(t *testing.T) {
+	dir := t.TempDir()
+	sunvaleToolState.bind(dir, false, nil, nil, false)
+	ctx := context.Background()
+	sess, err := sunvaleSession(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools, err := sunvaleRunTools(ctx, sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bash tool.InvokableTool
+	for _, tl := range tools {
+		info, err := tl.Info(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Name == "bash" {
+			it, ok := tl.(tool.InvokableTool)
+			if !ok {
+				t.Fatalf("bash tool is not invokable: %T", tl)
+			}
+			bash = it
+		}
+	}
+	if bash == nil {
+		t.Fatal("bash tool missing")
+	}
+	// The script that killed runs in the wild: a cd into a folder the
+	// sandbox does not have, followed by nothing on stderr. The call must
+	// return the message as an invoker-usable result, not an error — and
+	// the arguments travel as JSON, the way the ToolNode hands them over.
+	inv, err := bash.InvokableRun(ctx, `{"script":"cd ~/Downloads && ls"}`)
+	if err != nil {
+		t.Fatalf("a tool error must not come back as err: %v", err)
+	}
+	if !strings.Contains(inv, "没有任何输出") {
+		t.Fatalf("the error text never reached the model: %q", inv)
+	}
 }
 
 func callToolText(t *testing.T, sess *mcp.ClientSession, name string, args map[string]any) string {

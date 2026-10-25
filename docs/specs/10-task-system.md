@@ -1,6 +1,6 @@
 # 10 — 统一任务系统（TASKSYS，设计稿）
 
-状态：T1、T2 与 T4（翻转视图）已实现，其余为设计。实现按下方阶段拆分，每阶段一个提交（< 1000 行）。
+状态：T1–T4 已实现，T5–T7 为设计。实现按下方阶段拆分，每阶段一个提交（< 1000 行）。
 
 ## 1. 现状盘点
 
@@ -164,7 +164,7 @@ type Runner func(r Reporter) (Result, error)
 - **状态栏**：保留紧凑指示（细条 + 「N 个任务 · 百分比 · 速度 · 剩余」+ 失败红点），整条可点击翻转。
 - **通知**：窗口在后台时才发系统通知；前台只更新状态栏指示。
 
-截图：`docs/assets/shots/TASKSYS/04-flip-mid.png`（翻转中帧）、`05-tasks-extracting.png`（正在解压的子文件）、`06-tasks-failed.png`（失败详情）。早期方案 A/B 的示意（01–03）保留作对比。
+截图：`docs/assets/shots/TASKSYS/07-copy-conflict.png`（复制内联冲突）、`08-tasks-queued.png`（排队）、`04-flip-mid.png`（翻转中帧）、`05-tasks-extracting.png`（正在解压的子文件）、`06-tasks-failed.png`（失败详情）。早期方案 A/B 的示意（01–03）保留作对比。
 
 ## 6. 迁移计划
 
@@ -172,7 +172,7 @@ type Runner func(r Reporter) (Result, error)
 |---|---|---|
 | T1 内核 | `internal/tasks`：模型、状态机、Manager（槽、优先级、路径锁）、Reporter、事件节流；纯 Go 单测 | 状态机非法转移、槽上限、优先级、路径锁互斥、暂停阻塞 / 取消返回、节流 ≤ 1 次 / 150ms 的单测；`go test -race` 通过 |
 | T2 归档迁移 | `archive_progress.go` 改为 Reporter 适配；状态栏指示改读 Manager；助手任务卡订阅 Manager | ARCHIVE-PROG / PROG-STYLE 现有测试全部保留通过；暂停 / 继续 zip 解压 |
-| T3 复制 / 移动 / 删除后台化 | `doPaste`、拖放、`doDelete`、回收站操作改为 Task；`fsops` 增加 Reader 包装与逐项回调；冲突策略 Ask 内联 | 1 万个小文件复制期间 UI 帧时间 < 16ms；冲突内联选择；失败项记录；撤销可用 |
+| T3 复制 / 移动 / 删除后台化 | `doPaste`、拖放、`doDelete`、回收站操作改为 Task；`fsops` 增加 Reader 包装与逐项回调；冲突策略 Ask 内联 | 已完成：`fileops_task.go`（`fsops.Hooks` 逐项 / 字节回调）、`Reporter.Ask` / `Manager.Answer` 内联冲突（替换旧件进回收站，可撤销；撤销先删新建再还原移动）、压缩解压 `Submit` 排队、压缩重试；回收站内操作仍同步 |
 | T4 任务视图 | 中间区域翻转（3D 360ms EaseInOut，减弱动态为淡入淡出）、工具栏按钮、Ctrl+Shift+J、Esc、任务卡（子项进度、最近项、失败项、操作）、历史持久化 | 无头截图 04–06；翻转中帧；历史重启后仍在；无浮层 |
 | T5 重命名与助手工具 | 批量重命名、助手文件工具、`task_list/get/control`、`TaskProgress(task:)` | 助手可查询 / 取消自己发起的任务；控制用户任务需确认 |
 | T6 定时与插件 | `schedule_run` 建 Task；`plugintask.taskRunner` 改为 Manager 的薄封装；缩略图 / 大小借用 IO 槽 | 定时任务记录在任务历史可见；插件页状态不回退 |

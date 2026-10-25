@@ -79,7 +79,7 @@
 | OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
 | OPENUI-MEDIA | OpenUI 图文列表 MediaList：左缩略图卡 + 右标题正文 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MEDIA | OPENUI3 | `main` |
 | OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
-| TASKSYS | 统一任务系统：internal/tasks、中间区翻转任务视图、助手任务工具（T1–T7） | 高 | 进行中（T1、T2、T4 翻转） | [10](docs/specs/10-task-system.md) | ARCHIVE-PROG、PROG-STYLE | — |
+| TASKSYS | 统一任务系统：internal/tasks、中间区翻转任务视图、助手任务工具（T1–T7） | 高 | 进行中（T1–T4） | [10](docs/specs/10-task-system.md) | ARCHIVE-PROG、PROG-STYLE | — |
 | PROG-STYLE | 进度条样式优化与可选绿色仪表盘 | 中 | 已完成 | [09](docs/specs/09-archive-progress.md) PROG-STYLE | ARCHIVE-PROG | `main` |
 | ARCHIVE-PROG | 压缩 / 解压按字节进度：百分比、速度、当前文件、剩余时间、取消；助手实时进度卡 | 高 | 已完成 | [09](docs/specs/09-archive-progress.md) | OPENUI-MORE | `main` |
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
@@ -407,4 +407,5 @@
   - T7 远程：远程发起的复制 / 归档可见。
   - 每阶段 `go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过，单次提交 < 1000 行。
 - **已定**：位置改为中间文件区翻转；冲突、历史、托盘、并发、通知按设计稿默认。
-- **状态**：T1、T2、T4（翻转视图）进行中；T3、T5–T7 待做。
+- **状态**：T1–T4 已完成；T5–T7 待做。T3：粘贴 / 拖放 / 删除到回收站为后台任务（逐文件子进度、复制按字节、暂停取消、冲突内联、失败项、结束时入撤销栈）；压缩解压经 `Submit` 真正排队（每盘 2 个）；压缩可重试（保存原选择）；翻转中忽略指针。截图 `07-copy-conflict.png`、`08-tasks-queued.png`。
+- **T3 限制**：回收站内还原 / 永久删除 / 清空、助手 `trash_items` 等工具仍同步；上次运行的任务（历史）仅解压可重试；7z / rar 外部工具不可暂停。

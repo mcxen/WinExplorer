@@ -291,3 +291,6 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **动画** `tasks_flip.go:flipPane`：`RotateY` + `Perspective(1400)`，360ms `ui.EaseInOut`；0–90° 正面、90–180° 背面；明暗叠层 α = 0.22·sin(角度)。`ReduceMotion`：360ms 交叉淡入淡出。
 - **任务卡** `tasks_view.go`：标题 14 号 600、数字行 12.5 号、主进度条 10px（或仪表盘）、子项细条 5px；卡片 1px 分隔色描边、10px 圆角、12px 内边距、卡间距 10。
 - **状态色**：沿用 PROG-STYLE（进行中强调色 / 仪表盘绿、完成绿、失败红、取消与排队灰、暂停琥珀）。
+- **翻转中**：顶层透明遮罩（`flip-shield`）吃掉点击与悬停，两面都不响应。
+- **内联冲突**（T3）：任务卡内一行，琥珀 α0.12 底、6px 圆角；警示图标 + 文件名 + 「目标已存在」+ 「其余 N 项相同」复选框 + 替换 / 跳过（次要）/ 保留两者（主要）。状态标签「待选择」琥珀。仅用户发起询问；AI / 定时直接保留两者。
+- **排队卡**：进度条静止为空（不横扫），数字行「等待磁盘空位（每个磁盘同时 2 个）」。图标按种类：复制 Copy、移动 FolderInput、删除 Trash、归档 FileArchive。

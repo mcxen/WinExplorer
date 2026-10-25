@@ -59,5 +59,13 @@ func (a *App) flipPane(c *ui.Context) {
 				a.filePane(c)
 			}
 		})
+		if v > 0 && v < 1 {
+			// Mid-flip the face under the pointer is a moving picture:
+			// a shield on top takes clicks and hover so neither
+			// face acts on them until the turn has landed.
+			shield := ui.Box(c.Key("flip-shield")).Absolute().Top(0).Bottom(0).Left(0).Right(0)
+			shield.Clicked()
+			shield.Hovered()
+		}
 	})
 }

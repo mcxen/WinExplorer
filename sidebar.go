@@ -72,6 +72,9 @@ type navRow struct {
 	// sel marks the one row that shows where the tab is. A folder can be
 	// listed twice (pinned and in the tree); only one row lights up.
 	sel bool
+	// under marks the nearest shown ancestor of a current folder the tree
+	// does not show (展开到打开的文件夹 off).
+	under bool
 	// focus is the keyboard cursor's row. It is separate from sel: moving
 	// around the tree must not navigate the tab behind it.
 	focus bool
@@ -79,6 +82,18 @@ type navRow struct {
 
 // navCurrentRow is the row standing for path: the row the user clicked to
 // get there when it still lists path, else the first that does.
+// navAncestorRow is the deepest folder row that holds path, -1 if none.
+func navAncestorRow(rows []navRow, path string) int {
+	best, bestLen := -1, 0
+	for i, r := range rows {
+		if r.path == "" || specialPath(r.path) || !pathWithin(path, r.path) || len(r.path) <= bestLen {
+			continue
+		}
+		best, bestLen = i, len(r.path)
+	}
+	return best
+}
+
 func navCurrentRow(rows []navRow, path, clicked string) int {
 	first := -1
 	for i, r := range rows {
@@ -303,6 +318,12 @@ func (a *App) navRows() []navRow {
 	if a.navTree.row >= 0 {
 		rows[a.navTree.row].sel = true
 		a.navTree.activeDepth = rows[a.navTree.row].depth
+	} else if a.treeNoExpand() {
+		// The current folder is inside a closed branch: its nearest shown
+		// ancestor gets a faint mark instead.
+		if i := navAncestorRow(rows, a.cur().path); i >= 0 {
+			rows[i].under = true
+		}
 	}
 	for i := range rows {
 		rows[i].focus = a.navTree.focused && rows[i].key == a.navTree.cursor
@@ -557,6 +578,8 @@ func (a *App) paintNavRow(row ui.Element, r navRow) {
 		row.Background(colorSelected())
 	case row.Hovered():
 		row.Background(colorHover())
+	case r.under:
+		row.Background(colorSelected().Alpha(0.35))
 	}
 	if r.focus && a.navTree.focused {
 		// Keep the toolkit's focus on the row the logical cursor names. Its

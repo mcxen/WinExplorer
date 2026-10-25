@@ -204,13 +204,16 @@ func (a *App) navTreeFollow() {
 		return
 	}
 	a.navTree.noSync = ""
-	if specialPath(path) {
+	if specialPath(path) || a.treeNoExpand() {
+		// 展开到打开的文件夹 off: the tree keeps the user's own opening.
 		a.navTree.reveal = ""
 		return
 	}
 	a.navTree.reveal = path
 	a.navSync(path)
 }
+
+func (a *App) treeNoExpand() bool { return a.store != nil && a.store.settings().TreeNoExpand }
 
 // navTreeReveal shows the current folder's row when the tab moved there: the
 // pane's list keeps only what shows, so a row at the end of a long tree is

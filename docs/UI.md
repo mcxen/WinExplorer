@@ -285,6 +285,10 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **状态色**：进行中强调色（仪表盘绿 `tokSuccess`）/ 完成 `tokSuccess` / 失败 `tokDanger` / 取消 `colorMuted`。`ReduceMotion` 时全部静止。
 - **选择**：设置「进度样式」条形 / 仪表盘（助手任务卡）；OpenUI `{style: "gauge"}`；状态栏固定细条。
 
+## 侧栏树：展开到打开的文件夹（TREE-NOEXPAND）
+
+- 设置 → 查看 → 显示「展开到打开的文件夹」，默认开（保留现有跟随行为与其测试；Win11 资源管理器默认亦为开）。关：导航不展开祖先、不滚动定位，树保持手动展开；当前文件夹无行时，最近可见祖先行底色 = 选中色 α0.35。
+
 ## 任务视图翻转（TASKSYS）
 
 - **入口**：状态栏任务指示、工具栏「任务」、`Ctrl+Shift+J`；再次触发或 `Esc` 翻回。只翻中间文件区，侧栏 / 工具栏 / 助手不动。

@@ -75,6 +75,9 @@ type persistedState struct {
 type appSettings struct {
 	Appearance     string `json:"appearance,omitempty"`
 	ShowHidden     bool   `json:"showHidden"`
+	// TreeNoExpand turns off 展开到打开的文件夹: navigating leaves the
+	// sidebar tree as the user opened it (Explorer's option off).
+	TreeNoExpand bool `json:"treeNoExpand,omitempty"`
 	ShowExt        bool   `json:"showExt"`
 	Compact        bool   `json:"compact"`
 	ItemCheckboxes bool   `json:"itemCheckboxes"`

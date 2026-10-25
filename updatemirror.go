@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -109,12 +110,16 @@ func (t *mirrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 			target = mirror + target
 		}
+		start := time.Now()
 		resp, err := t.attempt(req, target)
 		if err == nil {
+			slog.Info("updater mirror ok", "mirror", mirror, "url", redactURL(target), "ms", time.Since(start).Milliseconds())
 			return resp, nil
 		}
+		slog.Warn("updater mirror failed, trying next", "mirror", mirror, "url", redactURL(target), "err", err, "ms", time.Since(start).Milliseconds())
 		errs = append(errs, fmt.Errorf("%s: %w", mirror, err))
 	}
+	slog.Error("updater: all mirrors failed", "err", errors.Join(errs...))
 	return nil, fmt.Errorf("所有更新线路均失败：%w", errors.Join(errs...))
 }
 

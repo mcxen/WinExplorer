@@ -62,6 +62,14 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string) {
 			}
 			a.assist.errOpen[i] = !open
 		}
+		// 查看日志 (applog_glue.go): the full request trace for this failure.
+		ui.Row(c).Key("log").FillWidth().Padding(0, 6).Children(func() {
+			if ui.ButtonBase(c).Key("view-log").Label("查看日志").Children(func() {
+				ui.Text(c, "查看日志").FontSize(11).TextColor(colorAccent())
+			}).Clicked() {
+				openLogFile()
+			}
+		})
 		if open {
 			ui.Scroll(c).Key("detail").FillWidth().MaxHeight(160).MinHeight(0).Children(func() {
 				ui.Text(c, text).FontSize(12).TextColor(colorText()).Wrap().Padding(0, 6)

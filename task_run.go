@@ -18,6 +18,7 @@ var taskAsync = func() bool { return mygo.App.IsReady() }
 // once the app runs, inline otherwise. Retry reruns fn as is, so fn must
 // work from its captured inputs alone.
 func runTask(spec tasks.Spec, fn tasks.Runner) string {
+	fn = loggedRunner(spec, fn)
 	m := taskManager()
 	if taskAsync() {
 		return m.Submit(spec, fn)

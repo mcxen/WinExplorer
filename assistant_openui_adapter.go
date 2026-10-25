@@ -1,6 +1,9 @@
 package main
 
-import assistant "sunvale/internal/assistant"
+import (
+	"strings"
+	assistant "sunvale/internal/assistant"
+)
 
 const (
 	openUIMarkerOpen = assistant.OpenUIMarkerOpen
@@ -17,7 +20,13 @@ type (
 
 func splitOpenUI(text string) (string, []string) { return assistant.SplitOpenUI(text) }
 
-func parseOpenUI(src string) *ouiView { return assistant.ParseOpenUI(src) }
+func parseOpenUI(src string) *ouiView {
+	v := assistant.ParseOpenUI(src)
+	if v == nil && strings.TrimSpace(src) != "" {
+		logOpenUIParseFail(src)
+	}
+	return v
+}
 
 func unclosedFence(text string) int { return assistant.UnclosedFence(text) }
 

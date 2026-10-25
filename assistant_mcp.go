@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"sunvale/internal/applog"
 	assistant "sunvale/internal/assistant"
 	"sunvale/internal/rename"
 )
@@ -505,6 +507,10 @@ func addSunvaleTool[In, Out any](s *sunvaleTools, server *mcp.Server, tool *mcp.
 	name := tool.Name
 	mcp.AddTool(server, tool, func(ctx context.Context, req *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		s.noteToolCall(name)
-		return handler(ctx, req, input)
+		start := time.Now()
+		defer applog.Recover("mcp tool "+name, true)
+		res, out, err := handler(ctx, req, input)
+		logMCPCall(name, input, start, res, err)
+		return res, out, err
 	})
 }

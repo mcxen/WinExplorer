@@ -116,6 +116,10 @@ type appSettings struct {
 	// defaultUpdateMirrors. A string keeps appSettings comparable.
 	UpdateMirrors string `json:"updateMirrors,omitempty"`
 
+	// LogLevel is the diagnostic log level (applog_glue.go): error, warn,
+	// info or debug. Empty means info.
+	LogLevel string `json:"logLevel,omitempty"`
+
 	ColName float32 `json:"colName,omitempty"`
 	ColDate float32 `json:"colDate,omitempty"`
 	ColType float32 `json:"colType,omitempty"`

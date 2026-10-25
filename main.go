@@ -13,6 +13,7 @@ import (
 	"github.com/oneo-me/onevra/source/components"
 
 	"sunvale/diskhealth"
+	"sunvale/internal/applog"
 )
 
 // bootStart is when the process started, for WINEXPLORER_TIMING=1.
@@ -49,6 +50,11 @@ func unregisterApp(a *App) {
 }
 
 func main() {
+	// 日志最先启动（applog_glue.go）：Windows GUI 程序没有控制台，
+	// 之后的启动错误和顶层 panic 都要落到日志文件里。
+	startLogging()
+	defer applog.Close()
+	defer applog.Recover("main", true)
 	// The updater plugin's window is native UI, as this app's windows
 	// are: it needs no webview.
 	mygo.Use(native.Plugin)
@@ -58,6 +64,7 @@ func main() {
 		return
 	}
 	store := loadState()
+	applyLogLevel(store.settings())
 	// 自动更新按镜像列表换线下载（updatemirror.go），签名校验仍由 mygo 完成。
 	installUpdateMirrors(store)
 	// The 外观 mode the settings dialog last saved, before any window
@@ -92,6 +99,7 @@ func main() {
 		// The appearance is known now, before any window builds: re-resolve
 		// the design tokens so the windows show the system theme.
 		resolveTokens()
+		logStartupEnv()
 		win := newAppWindow(app)
 		win.OnClosed(func() {
 			app.saveWindowSession()

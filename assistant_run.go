@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/egoist/mygo"
 
+	"sunvale/internal/applog"
 	assistant "sunvale/internal/assistant"
 	"sunvale/internal/rename"
 )
@@ -57,6 +59,10 @@ type assistRun struct {
 	onStatus   func(string)
 	onPending  func(string)
 	onSwitched func(model string)
+	// runID and origin tag this run's log records (applog_glue.go);
+	// origin is "pane" unless a caller (schedule, a2a, mcp) names itself.
+	runID  string
+	origin string
 }
 
 // assistRunResult is what a headless caller gets back. Text is the final
@@ -264,7 +270,36 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 // assistantRunMu so the global tool bind cannot be changed underneath a
 // turn. The returned events are ordinary transcript turns, which lets the
 // local pane and A2A render the same tool output.
-func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, error) {
+func runFileAssistant(ctx context.Context, run assistRun) (result assistRunResult, err error) {
+	if run.runID == "" {
+		run.runID = newRunID()
+	}
+	if run.origin == "" {
+		run.origin = "pane"
+	}
+	start := time.Now()
+	slog.Info("ai run start", "run", run.runID, "origin", run.origin, "provider", run.prov.Name,
+		"model", run.prov.Model, "base_url", redactURL(run.prov.BaseURL), "root", run.root,
+		"autopilot", run.autopilot, "history", len(run.hist), "files", len(run.files))
+	defer func() {
+		if p := recover(); p != nil {
+			applog.LogPanic("assistant run "+run.runID, p)
+			err = fmt.Errorf("助手运行异常：%v（详见日志）", p)
+		}
+		attrs := []any{"run", run.runID, "origin", run.origin, "model", run.prov.Model, applog.Since(start), "asked", result.Asked}
+		switch {
+		case errors.Is(err, errAssistantStopped):
+			slog.Info("ai run stopped", attrs...)
+		case err != nil:
+			slog.Error("ai run failed", append(attrs, "err", applog.Trunc(err.Error(), 2000))...)
+		default:
+			slog.Info("ai run end", attrs...)
+		}
+	}()
+	return runFileAssistantInner(ctx, run)
+}
+
+func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult, error) {
 	sunvaleToolState.bind(run.root, run.hidden, run.book, run.selected, run.autopilot)
 	sunvaleToolState.bindWeb(run.prefs.WebSearch, assistant.SkillDisabled(run.prefs, assistant.SkillWeb))
 	sunvaleToolState.bindMemory(run.memories)
@@ -277,6 +312,9 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		APIKey:  run.prov.APIKey,
 		BaseURL: run.prov.BaseURL,
 		Model:   run.prov.Model,
+		// The logging client traces status, latency and error bodies
+		// (applog_glue.go); it sets no timeout either.
+		HTTPClient: aiHTTPClient(run.runID),
 		// A client-wide deadline would cut a long stream off. Stop cancels
 		// this context, and that is what closes the socket.
 	})
@@ -338,6 +376,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 			break
 		}
 		if ev.Err != nil {
+			slog.Debug("ai event error", "run", run.runID, "err", ev.Err)
 			if assistantStopped(ctx, ev.Err) {
 				return result, errAssistantStopped
 			}
@@ -351,9 +390,12 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 		nextID++
 		msg := mv.Message
 		var streamErr error
+		msgStart := time.Now()
+		chunks := 0
 		if mv.IsStreaming && mv.MessageStream != nil {
 			toolSeen := map[string]bool{}
 			msg, streamErr = readMessageStream(ctx, mv.MessageStream, func(full, reasoning string) {
+				chunks++
 				if mv.Role == schema.Tool {
 					full = assistant.ToolText(full)
 					turn := aiTurn{Role: "tool", Text: full, Tool: mv.ToolName, Plan: planIDFrom(full)}
@@ -376,6 +418,7 @@ func runFileAssistant(ctx context.Context, run assistRun) (assistRunResult, erro
 				run.onPending(name)
 			})
 		}
+		logAssistMessage(run.runID, id, mv.Role, mv.ToolName, msg, mv.IsStreaming, chunks, msgStart, streamErr)
 		if streamErr != nil && !errors.Is(streamErr, errAssistantStopped) {
 			return result, streamErr
 		}

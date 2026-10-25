@@ -411,3 +411,10 @@
 - **已定**：位置改为中间文件区翻转；冲突、历史、托盘、并发、通知按设计稿默认。
 - **状态**：T1–T4 已完成；T5–T7 待做。T3：粘贴 / 拖放 / 删除到回收站为后台任务（逐文件子进度、复制按字节、暂停取消、冲突内联、失败项、结束时入撤销栈）；压缩解压经 `Submit` 真正排队（每盘 2 个）；压缩可重试（保存原选择）；翻转中忽略指针。截图 `07-copy-conflict.png`、`08-tasks-queued.png`。
 - **T3 限制**：回收站内还原 / 永久删除 / 清空、助手 `trash_items` 等工具仍同步；上次运行的任务（历史）仅解压可重试；7z / rar 外部工具不可暂停。
+
+### LOG1 — 诊断日志（尤其助手）
+- **目标**：Windows GUI 程序无控制台，也能通过日志文件调试助手与任务。
+- **范围**：`internal/applog`（slog、轮转、脱敏、panic）、`applog_glue.go`、`main.go`、`assistant_run.go`、`assistant_mcp.go`、`assistant_openui_adapter.go`、`internal/assistant/openui.go`、`task_run.go`、`updatemirror.go`、`singleinstance.go`、`schedule_run.go`、`assistant_http.go`、`settingsdialog.go`、`assistant_error.go`、`statestore.go`；`docs/specs/12-logging.md`、`docs/UI.md`。
+- **验收**：日志写到 `%LOCALAPPDATA%\Sunvale\logs\sunvale.log`（macOS `~/Library/Logs/Sunvale`，Linux `~/.local/state/sunvale/logs`），5 MB × 5 轮转；main 第一行初始化，顶层与助手运行 panic 带栈；设置可调级别、打开文件夹、导出 zip；助手错误行“查看日志”；助手 run id、模型、Base URL、HTTP 状态 / 耗时 / 错误体片段、token 用量、工具调用与结果耗时、MCP、OpenUI 解析失败、定时触发均有记录且密钥脱敏；单测覆盖脱敏、轮转、级别过滤；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
+- **已知限制**：流式响应仅记首包耗时；脱敏为规则匹配；非 Go 运行时的原生崩溃不记录。
+- **状态**：已完成，合入 `main`。

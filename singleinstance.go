@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -66,7 +66,7 @@ func installSingleInstance() bool {
 		sleep:      func() { time.Sleep(100 * time.Millisecond) },
 	})
 	if !ok {
-		log.Printf("晴谷已在运行，已唤起已有窗口")
+		slog.Info("single-instance: already running, raised existing window")
 		return false
 	}
 	// Another launch: bring a window back from the tray and to the front.
@@ -76,5 +76,6 @@ func installSingleInstance() bool {
 			trayMainApp()
 		}
 	})
+	slog.Info("single-instance: lock acquired")
 	return true
 }

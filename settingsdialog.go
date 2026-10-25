@@ -101,6 +101,7 @@ func (a *App) settingsModal(c *ui.Context) {
 // at once, so the settings page edits what the user sees immediately.
 func (a *App) applySettings(fn func(s *appSettings)) {
 	a.store.updateSettings(fn)
+	applyLogLevel(a.store.settings())
 	appsMu.Lock()
 	all := slices.Clone(apps)
 	appsMu.Unlock()
@@ -131,6 +132,7 @@ func (a *App) settingsCategories() []components.SettingsCategory {
 		{ID: "assistant", Title: "助手", Icon: lucide.Bot(), Groups: a.settingsAssistantGroups()},
 		{ID: "schedule", Title: "定时任务", Icon: lucide.AlarmClock(), Groups: a.settingsScheduleGroups()},
 		{ID: "updates", Title: "更新", Icon: lucide.RefreshCw(), Groups: a.settingsUpdateGroups()},
+		{ID: "logs", Title: "日志", Icon: lucide.FileText(), Groups: a.settingsLogGroups()},
 	}
 }
 

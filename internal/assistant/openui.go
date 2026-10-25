@@ -184,9 +184,15 @@ func UnclosedFence(text string) int {
 // cannot be read at all returns nil, which the painter draws as prose.
 // The parse is panic-guarded: a pathological program must not take the
 // pane's frame down with it.
+// OnParsePanic, when set, hears a panic ParseOpenUI swallowed (the app logs it).
+var OnParsePanic func(any)
+
 func ParseOpenUI(src string) (view *OUIView) {
 	defer func() {
-		if recover() != nil {
+		if p := recover(); p != nil {
+			if OnParsePanic != nil {
+				OnParsePanic(p)
+			}
 			view = nil
 		}
 	}()

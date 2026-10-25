@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -189,7 +190,9 @@ func runScheduleAssistant(j schedule.Job) (string, string, string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	slog.Info("schedule assistant run", "job", j.ID, "name", j.Name, "folder", folder, "timeout_s", int(timeout.Seconds()))
 	run := assistRun{
+		origin:    "schedule:" + j.ID,
 		prov:      prov,
 		root:      folder,
 		book:      disk.ArchivePasswords,

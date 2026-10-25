@@ -73,14 +73,7 @@ func archiveVolume(path string) string {
 // startArchiveTask registers a run; total may be 0 (unknown, set later).
 func startArchiveTask(kind, path, origin string, total int64) *archiveTask {
 	m := taskManager()
-	k := tasks.KindExtract
-	if kind == "compress" {
-		k = tasks.KindCompress
-	}
-	r := m.Begin(tasks.Spec{
-		Kind: k, Title: archiveVerb(kind) + " " + filepath.Base(path), Source: tasks.Source(origin),
-		Path: path, IO: "disk", Volume: archiveVolume(path),
-	})
+	r := m.Begin(archiveSpec(kind, path, origin))
 	t := &archiveTask{r: r, Kind: kind, Path: path}
 	if total > 0 {
 		r.SetTotal(tasks.UnitBytes, total, 0)
@@ -214,6 +207,7 @@ type archiveTaskSnap struct {
 	// OpenUI TaskProgress the model wrote).
 	Title, Meta string
 	Static      bool
+	Ask         *tasks.Ask
 }
 
 func snapFromTask(s tasks.Snapshot) archiveTaskSnap {
@@ -226,9 +220,13 @@ func snapFromTask(s tasks.Snapshot) archiveTaskSnap {
 		Finished: s.State.Finished(), Canceled: s.State == tasks.Canceled, Err: s.Err, Start: s.Created,
 		Recent: s.Recent, Failed: s.Failed, FailedCount: s.FailedCount,
 	}
-	if s.Path == "" {
+	if s.Path == "" || (s.Kind != tasks.KindCompress && s.Kind != tasks.KindExtract) {
 		out.Title = s.Title
+		if s.Path != "" {
+			out.Name = strings.TrimPrefix(s.Title, archiveVerb(kind)+" ")
+		}
 	}
+	out.Ask = s.Ask
 	if s.State == tasks.Partial && out.Err == "" {
 		out.Err = itoa(s.FailedCount) + " 项失败"
 	}

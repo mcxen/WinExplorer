@@ -327,7 +327,7 @@ type zipArgs struct {
 	Names   []string `json:"names" jsonschema:"要打包的名称，相对当前文件夹"`
 }
 
-func (s *sunvaleTools) zipFiles(_ context.Context, _ *mcp.CallToolRequest, args zipArgs) (*mcp.CallToolResult, any, error) {
+func (s *sunvaleTools) zipFiles(ctx context.Context, _ *mcp.CallToolRequest, args zipArgs) (*mcp.CallToolResult, any, error) {
 	root, _ := s.bound()
 	dst, err := resolveInRoot(root, args.Archive)
 	if err != nil {
@@ -351,10 +351,11 @@ func (s *sunvaleTools) zipFiles(_ context.Context, _ *mcp.CallToolRequest, args 
 	if len(entries) == 0 {
 		return mcpErr(fmt.Errorf("没有要打包的项目")), nil, nil
 	}
-	t := startArchiveTask("compress", dst, "ai", entriesSize(entries))
-	archiveChanged()
-	err = makeZip(dst, entries)
-	t.finish(err)
+	// Queued like the user's own: it waits for a disk slot, then runs.
+	_, err = runTaskWait(ctx, archiveSpec("compress", dst, "ai"), archiveRunner("compress", dst, func(t *archiveTask) error {
+		t.reset(entriesSize(entries))
+		return makeZip(dst, entries)
+	}))
 	if err != nil {
 		_ = os.Remove(dst)
 		return mcpErr(err), nil, nil
@@ -367,7 +368,7 @@ type unzipArgs struct {
 	Dest    string `json:"dest,omitempty" jsonschema:"解压到的新文件夹，相对当前文件夹；空则用归档名"`
 }
 
-func (s *sunvaleTools) unzip(_ context.Context, _ *mcp.CallToolRequest, args unzipArgs) (*mcp.CallToolResult, any, error) {
+func (s *sunvaleTools) unzip(ctx context.Context, _ *mcp.CallToolRequest, args unzipArgs) (*mcp.CallToolResult, any, error) {
 	root, _ := s.bound()
 	src, err := resolveInRoot(root, args.Archive)
 	if err != nil {
@@ -387,10 +388,12 @@ func (s *sunvaleTools) unzip(_ context.Context, _ *mcp.CallToolRequest, args unz
 	}
 	passwords := archivePasswordCandidates(s.archivePasswordBook())
 	aiFx.markBusy(src)
-	t := startArchiveTask("extract", src, "ai", 0)
-	archiveChanged()
-	_, nested, err := extractArchiveNested(src, dst, passwords)
-	t.finish(err)
+	var nested nestedReport
+	_, err = runTaskWait(ctx, archiveSpec("extract", src, "ai"), archiveRunner("extract", src, func(*archiveTask) error {
+		var err error
+		_, nested, err = extractArchiveNested(src, dst, passwords)
+		return err
+	}))
 	if err != nil {
 		_ = os.RemoveAll(dst)
 		return mcpErr(err), nil, nil

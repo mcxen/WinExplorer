@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/egoist/mygo"
 
@@ -63,20 +64,33 @@ func (a *App) doCompress() {
 	if len(sel) == 1 {
 		stem = strings.TrimSuffix(sel[0].Name, filepath.Ext(sel[0].Name))
 	}
-	name, err := uniqueFreeName(a.cur().path, stem+".zip", false)
+	dir := a.cur().path
+	name, err := uniqueFreeName(dir, stem+".zip", false)
 	if err != nil {
 		a.statusMsg = "压缩失败：" + err.Error()
 		return
 	}
-	dst := filepath.Join(a.cur().path, name)
-	t := startArchiveTask("compress", dst, "user", 0)
-	archiveGo(func() {
+	dst := filepath.Join(dir, name)
+	sel = append([]Entry(nil), sel...)
+	first := true
+	// The runner keeps the original selection: 重试 packs the same items
+	// again, under a fresh name if the first attempt's file is in the way.
+	queueArchive("compress", dst, "user", func(t *archiveTask) error {
+		if !first {
+			if _, err := os.Lstat(dst); err == nil {
+				if n, err := uniqueFreeName(dir, name, false); err == nil {
+					dst, name = filepath.Join(dir, n), n
+					t.rebind(dst)
+				}
+			}
+		}
+		first = false
 		t.reset(entriesSize(sel))
 		err := makeZip(dst, sel)
 		if err != nil {
 			_ = os.Remove(dst)
 		}
-		t.finish(err)
+		dst, name := dst, name
 		a.postAssist(func() {
 			switch {
 			case errors.Is(err, errArchiveCanceled):
@@ -89,6 +103,7 @@ func (a *App) doCompress() {
 				a.statusMsg = "已创建 " + name
 			}
 		})
+		return err
 	})
 }
 
@@ -148,52 +163,89 @@ func (a *App) doExtract() {
 // breath comes down as it lands, and the folder it produced flashes once
 // the reload shows it. The window is updated in one posting at the end.
 func (a *App) extractArchives(dir string, archives []Entry, candidates []string) {
-	var failed []string
-	var extracted []string
-	var inner int
-	var locked []string
-	var canceled []string
-	lastPw := ""
-	for _, e := range archives {
-		base, err := uniqueFreeName(dir, archiveExtName(e.Name), true)
-		if err != nil {
-			failed = append(failed, e.Name)
-			aiFx.clearBusy(e.Path)
-			continue
-		}
-		dst := filepath.Join(dir, base)
-		t := startArchiveTask("extract", e.Path, "user", 0)
-		password, nested, err := extractArchiveNested(e.Path, dst, candidates)
-		t.finish(err)
-		if errors.Is(err, errArchiveCanceled) {
-			_ = os.RemoveAll(dst)
-			canceled = append(canceled, e.Name)
-			aiFx.clearBusy(e.Path)
-			continue
-		}
-		if err != nil {
-			_ = os.RemoveAll(dst)
-			failed = append(failed, e.Name)
-			aiFx.clearBusy(e.Path)
-			continue
-		}
-		if password != "" {
-			lastPw = password
-		}
-		inner += len(nested.Extracted)
-		locked = append(locked, nested.Locked...)
-		extracted = append(extracted, dst)
-		aiFx.clearBusy(e.Path)
-		aiFx.markRenamed(e.Path, dst)
-	}
-	srcs := make([]string, len(archives))
+	// Each archive is its own queued task (two per disk run at once); the
+	// toast and selection come when the last of the batch ends. 重试 of
+	// one archive reruns it alone and reports just that one.
+	var mu sync.Mutex
+	left := len(archives)
+	outs := make([]extractOut, len(archives))
 	for i, e := range archives {
-		srcs[i] = e.Path
+		i, e := i, e
+		runs := 0
+		queueArchive("extract", e.Path, "user", func(t *archiveTask) error {
+			mu.Lock()
+			runs++
+			again := runs > 1
+			mu.Unlock()
+			o := extractOne(dir, e, candidates)
+			mu.Lock()
+			outs[i] = o
+			var batch []extractOut
+			if again {
+				batch = []extractOut{o}
+			} else if left--; left == 0 {
+				batch = append([]extractOut(nil), outs...)
+			}
+			mu.Unlock()
+			if batch != nil {
+				a.postAssist(func() { a.extractSummary(batch) })
+			}
+			return o.err
+		})
 	}
-	a.postAssist(func() {
-		if lastPw != "" {
-			a.lastArchivePassword = lastPw
+}
+
+// extractOut is one archive's result.
+type extractOut struct {
+	src, name, dst, pw string
+	inner              int
+	locked             []string
+	err                error
+}
+
+func extractOne(dir string, e Entry, candidates []string) extractOut {
+	o := extractOut{src: e.Path, name: e.Name}
+	defer aiFx.clearBusy(e.Path)
+	base, err := uniqueFreeName(dir, archiveExtName(e.Name), true)
+	if err != nil {
+		o.err = err
+		return o
+	}
+	dst := filepath.Join(dir, base)
+	password, nested, err := extractArchiveNested(e.Path, dst, candidates)
+	if err != nil {
+		_ = os.RemoveAll(dst)
+		o.err = err
+		return o
+	}
+	o.dst, o.pw = dst, password
+	o.inner = len(nested.Extracted)
+	o.locked = nested.Locked
+	aiFx.markRenamed(e.Path, dst)
+	return o
+}
+
+// extractSummary reloads, selects what came out and says how it went.
+func (a *App) extractSummary(outs []extractOut) {
+	var failed, extracted, locked, canceled, srcs []string
+	var inner int
+	for _, o := range outs {
+		srcs = append(srcs, o.src)
+		switch {
+		case errors.Is(o.err, errArchiveCanceled):
+			canceled = append(canceled, o.name)
+		case o.err != nil:
+			failed = append(failed, o.name)
+		default:
+			if o.pw != "" {
+				a.lastArchivePassword = o.pw
+			}
+			inner += o.inner
+			locked = append(locked, o.locked...)
+			extracted = append(extracted, o.dst)
 		}
+	}
+	{
 		a.reload()
 		if len(extracted) > 0 {
 			a.cur().selected = map[string]bool{}
@@ -221,7 +273,7 @@ func (a *App) extractArchives(dir string, archives []Entry, candidates []string)
 		if len(failed) == 0 && len(extracted) > 0 {
 			a.extractSources = srcs
 		}
-	})
+	}
 }
 
 // extractArchive 把 archive 解压到 dstDir（已存在且为空）。

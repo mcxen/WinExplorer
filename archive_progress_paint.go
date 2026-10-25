@@ -16,8 +16,15 @@ import (
 const archiveRepaint = 200 * time.Millisecond
 
 func archiveVerb(kind string) string {
-	if kind == "compress" {
+	switch kind {
+	case "compress":
 		return "压缩"
+	case "copy":
+		return "复制"
+	case "move":
+		return "移动"
+	case "delete":
+		return "删除"
 	}
 	return "解压"
 }
@@ -71,6 +78,14 @@ func archiveSnapTone(s archiveTaskSnap) (ui.Color, *ui.SVG) {
 		return tokDanger, lucide.CircleAlert()
 	case s.Finished:
 		return tokSuccess, lucide.Check()
+	}
+	switch s.Kind {
+	case "copy":
+		return colorAccent(), lucide.Copy()
+	case "move":
+		return colorAccent(), lucide.FolderInput()
+	case "delete":
+		return colorAccent(), lucide.Trash()
 	}
 	return colorAccent(), lucide.FileArchive()
 }

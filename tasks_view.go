@@ -72,6 +72,9 @@ func taskSourceLabel(src string) string {
 }
 
 func taskStateLabel(s archiveTaskSnap) (string, ui.Color) {
+	if s.Ask != nil {
+		return "待选择", tokWarning
+	}
 	switch s.State {
 	case tasks.Running:
 		return "进行中", colorAccent()
@@ -163,7 +166,11 @@ func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
 		ui.Column(c.Key("body")).Grow(1).MinWidth(0).Gap(6).Children(func() {
 			a.taskCardHead(c, s, icon, tone)
 			if !gauge {
-				paintProgressBar(c, "tv-bar-"+s.ID, s.Frac(), tone, 10)
+				frac := s.Frac()
+				if s.State == tasks.Queued {
+					frac = 0 // waiting, not working: no sweep
+				}
+				paintProgressBar(c, "tv-bar-"+s.ID, frac, tone, 10)
 			}
 			ui.Text(c.Key("nums"), taskNumbers(s)).FontSize(12.5).TextColor(colorMuted()).SingleLine().Ellipsis("…").MinWidth(0)
 			if s.Cur != "" {
@@ -180,6 +187,9 @@ func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
 					}
 					ui.Text(c.Key("s"), sz).FontSize(12).TextColor(colorMuted()).Shrink(0).Width(130)
 				})
+			}
+			if s.Ask != nil {
+				a.taskAsk(c, s)
 			}
 			if s.Err != "" && s.State != tasks.Canceled && s.State != tasks.Partial {
 				ui.Text(c.Key("err"), s.Err).FontSize(12.5).TextColor(tokDanger).Wrap().Selectable()
@@ -220,9 +230,9 @@ func (a *App) taskCardHead(c *ui.Context, s archiveTaskSnap, icon *ui.SVG, tone 
 			if btn("cancel", lucide.X(), "取消") {
 				_ = m.Cancel(s.ID)
 			}
-		} else if s.Kind == string(tasks.KindExtract) && s.Path != "" && s.State != tasks.Done {
+		} else if s.State != tasks.Done && s.Kind != string(tasks.KindScript) {
 			if btn("retry", lucide.RotateCcw(), "重试") {
-				a.retryExtract(s.Path)
+				a.retryTask(s)
 			}
 		}
 		if s.Path != "" {
@@ -234,7 +244,41 @@ func (a *App) taskCardHead(c *ui.Context, s archiveTaskSnap, icon *ui.SVG, tone 
 }
 
 // taskNumbers is the dense line: percent, bytes, speed, ETA, items.
+// taskAsk is a name clash asked inline: the item, three choices and
+// whether to apply the choice to the rest of the run.
+func (a *App) taskAsk(c *ui.Context, s archiveTaskSnap) {
+	q := s.Ask
+	ui.Row(c.Key("ask")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Padding(6, 8).Radius(6).
+		Background(tokWarning.Alpha(0.12)).Children(func() {
+		components.Icon(c, lucide.TriangleAlert()).Size(16, 16).TextColor(tokWarning).Shrink(0)
+		name := ui.Text(c.Key("n"), q.Item).FontSize(12.5).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
+		components.Tooltip(c, name, q.Item+" "+q.Detail)
+		ui.Text(c.Key("d"), q.Detail).FontSize(12).TextColor(colorMuted()).Shrink(0)
+		all := a.tasksOpen[s.ID+"all"]
+		if q.Rest > 0 {
+			components.Checkbox(c.Key("all"), &all, "其余 "+itoa(q.Rest)+" 项相同")
+			if a.tasksOpen == nil {
+				a.tasksOpen = map[string]bool{}
+			}
+			a.tasksOpen[s.ID+"all"] = all
+		}
+		labels := map[string]string{tasks.ChoiceReplace: "替换", tasks.ChoiceSkip: "跳过", tasks.ChoiceKeep: "保留两者"}
+		for i, opt := range q.Options {
+			style := components.ButtonSecondary
+			if i == len(q.Options)-1 {
+				style = components.ButtonPrimary
+			}
+			if components.Button(c.Key("o"+opt), labels[opt], style).Clicked() {
+				_ = taskManager().Answer(s.ID, tasks.Answer{Choice: opt, All: all})
+			}
+		}
+	})
+}
+
 func taskNumbers(s archiveTaskSnap) string {
+	if s.State == tasks.Queued {
+		return "等待磁盘空位（每个磁盘同时 2 个）"
+	}
 	out := archiveMeta(s)
 	if s.ItemsTotal > 0 {
 		out += " · " + itoa(s.ItemsDone) + " / " + itoa(s.ItemsTotal) + " 项"
@@ -311,6 +355,19 @@ func (a *App) openTaskLocation(path string) {
 	a.tasksFlipped = false
 	a.navigate(filepath.Dir(path))
 	a.selectOnly(path)
+}
+
+// retryTask reruns a task from its stored inputs; a task from an earlier
+// session has none, so an extract falls back to unpacking the path again.
+func (a *App) retryTask(s archiveTaskSnap) {
+	if _, err := taskManager().Retry(s.ID); err == nil {
+		return
+	}
+	if s.Kind == string(tasks.KindExtract) && s.Path != "" {
+		a.retryExtract(s.Path)
+		return
+	}
+	a.statusMsg = "无法重试：任务来自上次运行"
 }
 
 // retryExtract unpacks the archive again, as 解压 on it would.

@@ -360,11 +360,11 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 	}
 	runner := adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent, EnableStreaming: true})
 	iter := runner.Run(ctx, assistModelHistory(run), adk.WithSessionValues(map[string]any{
-		"folder":    sessionPlain(run.root),
+		"folder":    run.root,
 		"mode":      mode,
-		"selection": sessionPlain(selectionText(run.selected)),
+		"selection": selectionText(run.selected),
 		"memory":    memoryPrompt(memories),
-		"frequent":  sessionPlain(freqPromptText(run.freqPaths)),
+		"frequent":  freqPromptText(run.freqPaths),
 	}))
 	var result assistRunResult
 	nextID := 0
@@ -555,14 +555,6 @@ func selectionText(paths []string) string {
 		text += fmt.Sprintf("\n还有 %d 个", more)
 	}
 	return text
-}
-
-// sessionPlain keeps path text out of the f-string braces. The instruction
-// is the template; a folder named with a brace would otherwise be a hole.
-func sessionPlain(s string) string {
-	s = strings.ReplaceAll(s, "{", "(")
-	s = strings.ReplaceAll(s, "}", ")")
-	return s
 }
 
 // assistHistory is the tail of this session. Older turns stay on screen and

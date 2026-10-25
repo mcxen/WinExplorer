@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cloudwego/eino/adk"
@@ -25,7 +26,8 @@ func (m captureModel) WithTools([]*schema.ToolInfo) (model.ToolCallingChatModel,
 
 // AST-FSTRING: literal braces with session values must not hit FString.
 func TestGenModelInputLiteralBraces(t *testing.T) {
-	ins := `当前文件夹是 {folder}。用法 {style: "gauge"} {cols: n} {media,...}`
+	tricky := ` {style} {x: "y"} {{.Foo}} %s %v ${x} {{folder}}`
+	ins := `当前文件夹是 {folder}。用法 {style: "gauge"} {cols: n} {media,...}` + tricky
 	var sys string
 	ctx := context.Background()
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
@@ -36,8 +38,8 @@ func TestGenModelInputLiteralBraces(t *testing.T) {
 		t.Fatal(err)
 	}
 	it := adk.NewRunner(ctx, adk.RunnerConfig{Agent: agent}).Run(ctx,
-		[]adk.Message{schema.UserMessage("总结一下这个文件夹里的文档")},
-		adk.WithSessionValues(map[string]any{"folder": `C:\docs`, "mode": "x"}))
+		[]adk.Message{schema.UserMessage("总结一下" + tricky)},
+		adk.WithSessionValues(map[string]any{"folder": `C:\docs\{a}%s`, "mode": "{folder}"}))
 	for {
 		ev, ok := it.Next()
 		if !ok {
@@ -47,7 +49,7 @@ func TestGenModelInputLiteralBraces(t *testing.T) {
 			t.Fatal(ev.Err)
 		}
 	}
-	want := `当前文件夹是 C:\docs。用法 {style: "gauge"} {cols: n} {media,...}`
+	want := `当前文件夹是 C:\docs\{a}%s。用法 {style: "gauge"} {cols: n} {media,...}` + strings.ReplaceAll(tricky, "{folder}", `C:\docs\{a}%s`)
 	if sys != want {
 		t.Fatalf("system = %q", sys)
 	}

@@ -73,16 +73,16 @@ type persistedState struct {
 // (state.go's ViewMode), and the details view's user-set column widths —
 // zero keeps the default width.
 type appSettings struct {
-	Appearance     string `json:"appearance,omitempty"`
-	ShowHidden     bool   `json:"showHidden"`
+	Appearance string `json:"appearance,omitempty"`
+	ShowHidden bool   `json:"showHidden"`
 	// TreeNoExpand turns off 展开到打开的文件夹: navigating leaves the
 	// sidebar tree as the user opened it (Explorer's option off).
-	TreeNoExpand bool `json:"treeNoExpand,omitempty"`
-	ShowExt        bool   `json:"showExt"`
-	Compact        bool   `json:"compact"`
-	ItemCheckboxes bool   `json:"itemCheckboxes"`
-	PreviewOpen    bool   `json:"previewOpen"`
-	Mode           int    `json:"mode"`
+	TreeNoExpand   bool `json:"treeNoExpand,omitempty"`
+	ShowExt        bool `json:"showExt"`
+	Compact        bool `json:"compact"`
+	ItemCheckboxes bool `json:"itemCheckboxes"`
+	PreviewOpen    bool `json:"previewOpen"`
+	Mode           int  `json:"mode"`
 	// ProgressStyle is the assistant task cards' look: bar (default) or
 	// gauge (PROG-STYLE).
 	ProgressStyle string `json:"progressStyle,omitempty"`

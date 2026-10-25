@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"image/png"
 	"os"
 	"path/filepath"
-	"image/png"
 	"testing"
 	"time"
 

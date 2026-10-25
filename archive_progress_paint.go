@@ -148,13 +148,31 @@ func openTaskSnap(v *ouiView) archiveTaskSnap {
 // paintArchiveStatus is the status bar strip for the newest live task:
 // a 90 DIP bar, "解压 a.zip 42% · 8 MB/s · 剩余 0:12" and a cancel cross.
 // It reports whether anything was painted.
-func paintArchiveStatus(c *ui.Context) bool {
+func paintArchiveStatus(c *ui.Context, open func()) bool {
 	live := archiveSnaps(func(s archiveTaskSnap) bool { return !s.Finished })
 	if len(live) == 0 {
 		return false
 	}
 	s := live[len(live)-1]
 	ui.Row(c.Key("archive-status")).Gap(6).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
+		ob := ui.ButtonBase(c.Key("open")).Radius(4).Padding(2, 4).Shrink(1).MinWidth(0).Label("任务视图")
+		ob.Children(func() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).MinWidth(0).Children(func() { paintArchiveStatusBody(c, s, live) })
+		})
+		if ob.Clicked() && open != nil {
+			open()
+		}
+		if components.IconButton(c.Key("x"), lucide.X(), "取消"+archiveVerb(s.Kind)+" "+s.Name, components.IconButtonPlain).
+			Size(20, 20).Clicked() {
+			archiveTaskByID(s.ID).cancel()
+		}
+	})
+	c.After(archiveRepaint)
+	return true
+}
+
+func paintArchiveStatusBody(c *ui.Context, s archiveTaskSnap, live []archiveTaskSnap) {
+	{
 		ui.Box(c.Key("barbox")).Width(90).Shrink(0).Children(func() {
 			paintProgressBar(c, "sbar-"+s.key(), s.Frac(), toneRunning, 4).Label(archiveVerb(s.Kind) + "进度")
 		})
@@ -171,13 +189,7 @@ func paintArchiveStatus(c *ui.Context) bool {
 			tip += "\n" + s.Cur
 		}
 		components.Tooltip(c, t, tip)
-		if components.IconButton(c.Key("x"), lucide.X(), "取消"+archiveVerb(s.Kind)+" "+s.Name, components.IconButtonPlain).
-			Size(20, 20).Clicked() {
-			archiveTaskByID(s.ID).cancel()
-		}
-	})
-	c.After(archiveRepaint)
-	return true
+	}
 }
 
 // paintAssistArchiveTasks lists the assistant's tasks since since (the

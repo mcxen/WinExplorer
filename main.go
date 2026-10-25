@@ -384,7 +384,7 @@ func (a *App) contentPanes(c *ui.Context) {
 		return
 	}
 	ui.Row(c).FillWidth().FillHeight().MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-		a.filePane(c)
+		a.flipPane(c)
 		if a.previewOpen {
 			a.previewPane(c)
 		}
@@ -429,6 +429,10 @@ func (a *App) handleKeys(c *ui.Context) {
 	// bindings here never fire while it is open. Outside it ←/→ belong to
 	// the pane's keyboard navigation.
 	switch {
+	case c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyJ), c.Shortcut(ui.Cmd|ui.Shift, ui.KeyJ):
+		a.toggleTasksView()
+	case a.tasksFlipped && c.Shortcut(0, ui.KeyEscape):
+		a.tasksFlipped = false
 	case c.Shortcut(0, ui.KeyBackspace):
 		a.up()
 	case c.Shortcut(ui.Alt, ui.KeyLeft), c.Shortcut(ui.Cmd, ui.KeyBracketLeft):

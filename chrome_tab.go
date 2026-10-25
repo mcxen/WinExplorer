@@ -426,6 +426,7 @@ func (a *App) commandBar(c *ui.Context) {
 
 		a.commandMenu(c, lucide.ArrowDownWideNarrow, "排序", "排序", a.sortMenu)
 		a.commandMenu(c, lucide.LayoutGrid, "查看", "查看", a.viewMenu)
+		a.commandIconButton(c, lucide.ListChecks, "任务 (Ctrl+Shift+J)", true, a.toggleTasksView)
 		a.commandIconButton(c, lucide.Bot, "助手", true, a.toggleAssistant)
 
 		a.moreButton(c)

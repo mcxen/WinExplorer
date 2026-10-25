@@ -110,6 +110,11 @@ type marqueeState struct {
 // fields are reached through cur() so the rest of the code reads a.path as
 // before.
 type App struct {
+	// tasksFlipped turns the middle area to the task view (tasks_flip.go);
+	// tasksTab is its tab and tasksOpen its expanded member lists.
+	tasksFlipped bool
+	tasksTab     int
+	tasksOpen    map[string]bool
 	// addr is the address bar's edit and completion state (addressbar.go).
 	addr      addrState
 	tabs      []*tabState

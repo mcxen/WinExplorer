@@ -209,7 +209,9 @@ func (t *task) sampleLocked(now time.Time) {
 	}
 	t.samples = append(t.samples, sample{now, t.snap.Done})
 	cut := 0
-	for cut < len(t.samples)-1 && now.Sub(t.samples[cut].at) > speedSpan {
+	// Keep the newest sample at or past the window's edge, so a quiet
+	// stretch still leaves two points to measure from.
+	for cut < len(t.samples)-2 && now.Sub(t.samples[cut+1].at) >= speedSpan {
 		cut++
 	}
 	t.samples = t.samples[cut:]

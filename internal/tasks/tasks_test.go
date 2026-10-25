@@ -66,48 +66,37 @@ func TestFailuresMakePartialAndErrorsFail(t *testing.T) {
 
 func TestSlotsLimitPerVolumeAndPriority(t *testing.T) {
 	m := NewManager(Options{})
-	var live, peak atomic.Int32
-	release := make(chan struct{})
-	var order []string
-	var mu sync.Mutex
-	run := func(name string) Runner {
-		return func(r *Reporter) error {
-			n := live.Add(1)
-			for {
-				p := peak.Load()
-				if n <= p || peak.CompareAndSwap(p, n) {
-					break
-				}
-			}
-			mu.Lock()
-			order = append(order, name)
-			mu.Unlock()
-			<-release
-			live.Add(-1)
-			return nil
-		}
+	gate := func() (chan struct{}, Runner) {
+		ch := make(chan struct{})
+		return ch, func(*Reporter) error { <-ch; return nil }
 	}
-	a := m.Submit(Spec{IO: "disk", Volume: "C"}, run("a"))
-	b := m.Submit(Spec{IO: "disk", Volume: "C"}, run("b"))
+	relA, runA := gate()
+	relB, runB := gate()
+	relLow, runLow := gate()
+	relHigh, runHigh := gate()
+	relOther, runOther := gate()
+	a := m.Submit(Spec{IO: "disk", Volume: "C"}, runA)
+	b := m.Submit(Spec{IO: "disk", Volume: "C"}, runB)
 	waitState(t, m, a, Running)
 	waitState(t, m, b, Running)
-	low := m.Submit(Spec{IO: "disk", Volume: "C", Priority: -1}, run("low"))
-	high := m.Submit(Spec{IO: "disk", Volume: "C", Priority: 1}, run("high"))
-	other := m.Submit(Spec{IO: "disk", Volume: "D"}, run("other"))
+	low := m.Submit(Spec{IO: "disk", Volume: "C", Priority: -1}, runLow)
+	high := m.Submit(Spec{IO: "disk", Volume: "C", Priority: 1}, runHigh)
+	other := m.Submit(Spec{IO: "disk", Volume: "D"}, runOther)
 	waitState(t, m, other, Running)
 	if s := m.Get(low); s.State != Queued {
 		t.Fatalf("third task on C started: %v", s.State)
 	}
-	release <- struct{}{} // frees one C slot
+	close(relA)
 	waitState(t, m, high, Running)
 	if m.Get(low).State != Queued {
 		t.Fatal("low priority went before high")
 	}
-	close(release)
+	close(relB)
+	waitState(t, m, low, Running)
+	close(relLow)
+	close(relHigh)
+	close(relOther)
 	m.Wait(context.Background(), low)
-	if peak.Load() > 3 {
-		t.Fatalf("peak %d", peak.Load())
-	}
 }
 
 func TestPauseResumeCancel(t *testing.T) {

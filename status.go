@@ -26,7 +26,7 @@ func (a *App) statusBar(c *ui.Context) {
 		// The busy heat: while a run — the assistant's, or the user's own
 		// unpack — touches files the dot breathes beside the count; right
 		// after, the tally stays a few seconds.
-		if paintArchiveStatus(c) {
+		if paintArchiveStatus(c, a.toggleTasksView) {
 			// The archive strip says more than the busy count.
 		} else if n := aiFx.activeNow(); n > 0 {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(0).Children(func() {

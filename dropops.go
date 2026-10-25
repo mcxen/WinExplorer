@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sunvale/internal/fsops"
+	"sunvale/internal/tasks"
 
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
@@ -237,10 +238,7 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 	}
 	paths = local
 	copyMode := mods&(ui.Cmd|ui.Ctrl) != 0
-	moved := 0
-	var failed, skipped []string
-	var undoCreated []string
-	var undoMoved []undoMove
+	var skipped, srcs []string
 	for _, src := range paths {
 		if src == "" || src == pathThisPC {
 			continue
@@ -256,87 +254,40 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 		if !copyMode && filepath.Dir(srcClean) == filepath.Clean(dstDir) {
 			continue // 原地移动是空操作
 		}
-		info, err := os.Lstat(srcClean)
-		if err != nil {
-			failed = append(failed, filepath.Base(src))
-			continue
-		}
-		name, err := uniqueFreeName(dstDir, filepath.Base(srcClean), info.IsDir())
-		if err != nil {
-			failed = append(failed, filepath.Base(src))
-			continue
-		}
-		dst := filepath.Join(dstDir, name)
-		placed := false
-		if copyMode {
-			if info.IsDir() {
-				if err := fsops.CopyDir(srcClean, dst); err != nil {
-					failed = append(failed, filepath.Base(src))
-					continue
-				}
-			} else if err := fsops.CopyFile(srcClean, dst, info); err != nil {
-				failed = append(failed, filepath.Base(src))
-				continue
-			}
-			undoCreated = append(undoCreated, dst)
-			placed = true
-		} else if err := os.Rename(srcClean, dst); err != nil {
-			// 跨设备（EXDEV）回退为复制后删除。
-			if info.IsDir() {
-				if derr := fsops.CopyDir(srcClean, dst); derr != nil {
-					failed = append(failed, filepath.Base(src))
-					continue
-				}
-				if rerr := os.RemoveAll(srcClean); rerr != nil {
-					failed = append(failed, filepath.Base(src))
-					continue
-				}
-			} else if derr := fsops.CopyFile(srcClean, dst, info); derr != nil {
-				failed = append(failed, filepath.Base(src))
-				continue
-			} else if rerr := os.Remove(srcClean); rerr != nil {
-				failed = append(failed, filepath.Base(src))
-				continue
-			}
-			undoMoved = append(undoMoved, undoMove{From: srcClean, To: dst})
-			placed = true
-		} else {
-			undoMoved = append(undoMoved, undoMove{From: srcClean, To: dst})
-			placed = true
-		}
-		if placed {
-			moved++
-		}
+		srcs = append(srcs, srcClean)
 	}
-	if n := len(undoCreated) + len(undoMoved); n > 0 {
-		desc := "移动"
-		if copyMode {
-			desc = "复制"
-		}
-		if n > 1 {
-			desc = fmt.Sprintf("%s %d 个项目", desc, n)
-		}
-		a.pushUndo(undoOp{Desc: desc, Created: undoCreated, Moved: undoMoved})
-	}
-	a.reload()
-	if moved > 0 {
-		verb := "移动"
-		if copyMode {
-			verb = "复制"
-		}
-		a.statusMsg = fmt.Sprintf("已%s %d 个项目到 %s", verb, moved, filepath.Base(dstDir))
-	}
+	note := ""
 	if len(skipped) > 0 {
-		a.statusMsg = "无法将文件夹移动到其自身：" + strings.Join(skipped, "、")
-	}
-	if len(failed) > 0 {
-		a.statusMsg = "无法" + map[bool]string{true: "复制", false: "移动"}[copyMode] +
-			"：" + strings.Join(failed, "、")
+		note = "无法将文件夹移动到其自身：" + strings.Join(skipped, "、")
 	}
 	if len(foreign) > 0 {
-		a.statusMsg = "已忽略无法放置的链接：" + strings.Join(foreign, "、")
+		note = "已忽略无法放置的链接：" + strings.Join(foreign, "、")
 	}
-	a.requestPreview()
+	if len(srcs) == 0 {
+		if note != "" {
+			a.statusMsg = note
+		}
+		return
+	}
+	kind := tasks.KindMove
+	if copyMode {
+		kind = tasks.KindCopy
+	}
+	a.startFileJob(fileJob{Kind: kind, Source: tasks.SourceUser, Srcs: srcs, DstDir: dstDir}, func(res fileJobResult) {
+		here := filepath.Clean(a.cur().path) == filepath.Clean(dstDir)
+		if !here {
+			res.Placed = nil
+		}
+		verb := res.Verb
+		a.finishFileJob(res, "无法"+verb+"：")
+		if len(res.Failed) == 0 && res.Err == nil && len(res.Undo.Created)+len(res.Undo.Moved) > 0 {
+			a.statusMsg = fmt.Sprintf("已%s %d 个项目到 %s", verb, len(srcs), filepath.Base(dstDir))
+		}
+		if note != "" {
+			a.statusMsg = note
+		}
+		a.requestPreview()
+	})
 }
 
 // localPath reports whether p names a place on this machine's file system,

@@ -42,7 +42,15 @@ func (a *App) doUndo() {
 	a.undo = a.undo[:len(a.undo)-1]
 
 	var failed []string
-	// Moves go back first, newest operation's moves in reverse order.
+	// Created files go first: a replace put the new copy where the old
+	// one (now in the bin) must come back.
+	for _, p := range op.Created {
+		if err := os.RemoveAll(p); err != nil {
+			failed = append(failed, filepath.Base(p))
+		}
+	}
+
+	// Then moves go back, newest operation's moves in reverse order.
 	for i := len(op.Moved) - 1; i >= 0; i-- {
 		m := op.Moved[i]
 		if _, err := os.Lstat(m.To); err != nil {
@@ -61,13 +69,6 @@ func (a *App) doUndo() {
 			failed = append(failed, filepath.Base(m.From))
 		}
 	}
-	// Then created files are removed.
-	for _, p := range op.Created {
-		if err := os.RemoveAll(p); err != nil {
-			failed = append(failed, filepath.Base(p))
-		}
-	}
-
 	a.reload()
 	a.clearSelection()
 	if len(failed) > 0 {

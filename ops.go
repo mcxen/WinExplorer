@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"sunvale/internal/fsops"
 	"sunvale/internal/rename"
+	"sunvale/internal/tasks"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
@@ -134,71 +136,52 @@ func (a *App) doPaste() {
 			}
 		}
 	}
-	var failed []string
-	var pasted []string
-	var moved []string
-	var undoCreated []string
-	var undoMoved []undoMove
+	var srcs []string
 	for _, src := range srcPaths {
-		if src == "" || src == pathThisPC {
-			continue
-		}
-		// Cutting into the folder that already holds the item is a no-op.
-		// Removing it afterwards would delete the only copy.
-		if cut && filepath.Clean(filepath.Dir(src)) == filepath.Clean(dstDir) {
-			pasted = append(pasted, src)
-			continue
-		}
-		name, err := fsops.PasteOne(src, dstDir)
-		if err != nil {
-			failed = append(failed, filepath.Base(src))
-			continue
-		}
-		dst := filepath.Join(dstDir, name)
-		pasted = append(pasted, dst)
-		if cut {
-			moved = append(moved, src)
-			undoMoved = append(undoMoved, undoMove{From: src, To: dst})
-		} else {
-			undoCreated = append(undoCreated, dst)
+		if src != "" && src != pathThisPC {
+			srcs = append(srcs, src)
 		}
 	}
-	if cut && len(failed) == 0 && len(moved) > 0 {
-		var removeFailed []string
-		for _, src := range moved {
-			if err := os.RemoveAll(src); err != nil {
-				removeFailed = append(removeFailed, filepath.Base(src))
-			}
-		}
-		if len(removeFailed) == 0 {
+	if len(srcs) == 0 {
+		return
+	}
+	kind := tasks.KindCopy
+	if cut {
+		kind = tasks.KindMove
+	}
+	// A background task: the list stays live, a name clash is asked in
+	// the task card, and the result lands when the run ends.
+	a.startFileJob(fileJob{Kind: kind, Source: tasks.SourceUser, Srcs: srcs, DstDir: dstDir}, func(res fileJobResult) {
+		if cut && len(res.Failed) == 0 && res.Err == nil {
 			// Only the app's own clipboard had the cut; the system's copy
 			// stays as it was.
 			a.clipPaths = nil
 			a.clipCut = false
-		} else {
-			failed = append(failed, removeFailed...)
 		}
+		a.finishFileJob(res, "粘贴失败：")
+	})
+}
+
+// finishFileJob files a copy/move/delete run's outcome: the undo entry,
+// the refreshed list with what landed selected, and the status line.
+func (a *App) finishFileJob(res fileJobResult, failPrefix string) {
+	for _, l := range res.Logs {
+		a.store.logTrash(l[0], l[1])
 	}
-	if n := len(undoMoved) + len(undoCreated); n > 0 {
-		desc := "复制"
-		if cut {
-			desc = "移动"
-		}
-		if n > 1 {
-			desc = fmt.Sprintf("%s %d 个项目", desc, n)
-		}
-		a.pushUndo(undoOp{Desc: desc, Created: undoCreated, Moved: undoMoved})
-	}
+	a.pushUndo(res.Undo)
 	a.reload()
-	if len(pasted) > 0 {
+	if len(res.Placed) > 0 {
 		a.cur().selected = map[string]bool{}
-		for _, p := range pasted {
+		for _, p := range res.Placed {
 			a.cur().selected[p] = true
 		}
-		a.cur().anchor = pasted[0]
+		a.cur().anchor = res.Placed[0]
 	}
-	if len(failed) > 0 {
-		a.statusMsg = "粘贴失败：" + strings.Join(failed, "、")
+	switch {
+	case len(res.Failed) > 0:
+		a.statusMsg = failPrefix + joinNames(res.Failed)
+	case errors.Is(res.Err, tasks.ErrCanceled):
+		a.statusMsg = "已取消" + res.Verb
 	}
 }
 
@@ -214,44 +197,16 @@ func (a *App) doDelete() {
 	if !a.confirmUnrecyclable(paths) {
 		return
 	}
-	var failed []string
-	var moved []undoMove
-	var desc string
-	for _, e := range sel {
-		if e.Path == "" || e.Path == pathThisPC || e.Path == "/" {
-			failed = append(failed, e.Name)
-			continue
-		}
-		dst, key, err := moveToTrash(e.Path)
-		if err != nil {
-			failed = append(failed, e.Name)
-			continue
-		}
-		if key != "" {
-			a.store.logTrash(e.Path, key)
-		}
-		if dst != "" {
-			moved = append(moved, undoMove{From: e.Path, To: dst})
-		}
-	}
-	if n := len(moved); n > 0 {
-		desc = "删除"
-		if n > 1 {
-			desc = fmt.Sprintf("删除 %d 个项目", n)
-		}
-		a.pushUndo(undoOp{Desc: desc, Moved: moved})
-	}
-	a.reload()
-	a.clearSelection()
 	a.cur().renaming = ""
 	a.cur().renameBuf = ""
-	// The outcome of the whole command, after reload has reset the pane:
-	// moved items toast with a 撤销 button, failures say what they were.
-	if len(failed) > 0 {
-		a.statusMsg = "无法删除：" + strings.Join(failed, "、")
-	} else if len(moved) > 0 {
-		a.statusMsg = "已将 " + itoa(len(moved)) + " 个项目移到回收站"
-	}
+	a.startFileJob(fileJob{Kind: tasks.KindDelete, Source: tasks.SourceUser, Srcs: paths}, func(res fileJobResult) {
+		res.Placed = nil
+		a.finishFileJob(res, "无法删除：")
+		a.clearSelection()
+		if len(res.Failed) == 0 && res.Trashed > 0 && res.Err == nil {
+			a.statusMsg = "已将 " + itoa(res.Trashed) + " 个项目移到回收站"
+		}
+	})
 }
 
 // trashDir is where this OS's trash lives (platform.go).

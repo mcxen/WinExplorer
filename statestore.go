@@ -78,7 +78,7 @@ type appSettings struct {
 	// TreeNoExpand turns off 展开到打开的文件夹: navigating leaves the
 	// sidebar tree as the user opened it (Explorer's option off).
 	TreeNoExpand bool `json:"treeNoExpand,omitempty"`
-	// VisualStyle is 视觉风格: "" 经典, "v2" (visual.go).
+	// VisualStyle is 视觉风格: "v2" (default for fresh installs), "" 经典 (visual.go).
 	VisualStyle    string `json:"visualStyle,omitempty"`
 	ShowExt        bool   `json:"showExt"`
 	Compact        bool   `json:"compact"`
@@ -141,7 +141,7 @@ func (s appSettings) networkWarmup() bool { return !s.NoNetworkWarmup }
 // newAppWithStore in main.go: the system's appearance, extensions shown,
 // everything else off, and the details view.
 func defaultSettings() *appSettings {
-	return &appSettings{ShowExt: true, Mode: int(ViewDetails)}
+	return &appSettings{ShowExt: true, Mode: int(ViewDetails), VisualStyle: "v2"}
 }
 
 // trashRecord maps a file in ~/.Trash back to the path it was deleted from.

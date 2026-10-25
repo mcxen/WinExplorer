@@ -82,6 +82,7 @@
 | TASKSYS | 统一任务系统：internal/tasks、中间区翻转任务视图、助手任务工具（T1–T7） | 高 | 进行中（T1–T4） | [10](docs/specs/10-task-system.md) | ARCHIVE-PROG、PROG-STYLE | — |
 | TREE-NOEXPAND | 设置「展开到打开的文件夹」：关闭后导航不展开侧栏树，保留手动展开，当前文件夹不可见时淡标最近可见祖先 | 低 | 完成 | — | — | — |
 | FLIP-PERF | 任务视图翻转降卡顿：翻转期间冻结两面数据、预热任务视图、背面只建 8 张卡、边缘模糊、超 20ms 回退淡入淡出、落定 80ms 淡入；`TestFlipFrameTimes` 2000 文件 + 500 历史：p50 67.8→17.5ms、p95 149→27ms | 中 | 完成 | — | TASKSYS | — |
+| VISUAL2 | 视觉语言 v2：小圆角令牌、默认 v2、经典可切、纵向对齐 | 高 | 已完成 | [11](docs/specs/11-visual-language.md) | — | — |
 | PROG-STYLE | 进度条样式优化与可选绿色仪表盘 | 中 | 已完成 | [09](docs/specs/09-archive-progress.md) PROG-STYLE | ARCHIVE-PROG | `main` |
 | ARCHIVE-PROG | 压缩 / 解压按字节进度：百分比、速度、当前文件、剩余时间、取消；助手实时进度卡 | 高 | 已完成 | [09](docs/specs/09-archive-progress.md) | OPENUI-MORE | `main` |
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
@@ -411,6 +412,12 @@
 - **已定**：位置改为中间文件区翻转；冲突、历史、托盘、并发、通知按设计稿默认。
 - **状态**：T1–T4 已完成；T5–T7 待做。T3：粘贴 / 拖放 / 删除到回收站为后台任务（逐文件子进度、复制按字节、暂停取消、冲突内联、失败项、结束时入撤销栈）；压缩解压经 `Submit` 真正排队（每盘 2 个）；压缩可重试（保存原选择）；翻转中忽略指针。截图 `07-copy-conflict.png`、`08-tasks-queued.png`。
 - **T3 限制**：回收站内还原 / 永久删除 / 清空、助手 `trash_items` 等工具仍同步；上次运行的任务（历史）仅解压可重试；7z / rar 外部工具不可暂停。
+
+
+### VISUAL2 — 视觉语言 v2（默认）
+- **目标**：采用 v2 视觉（mist 底、浮起内容卡、侧栏 chip、蓝强调），圆角更小（卡 8 / 行·按钮·输入 4 / 对话框 8）；v2 为默认，经典可切换；修工具栏/侧栏/列表/状态栏/任务卡纵向对齐。
+- **范围**：`visual.go`、`theme.go`、`statestore.go`、`settingsdialog.go`、`main.go`、`sidebar.go`、`tasks_view.go`、`chrome_nav.go`、`addressbar.go`、`archive_progress_paint.go`、`files.go`；`docs/specs/11-visual-language.md`、`docs/UI.md`；截图 `docs/assets/shots/VISUAL2/`。
+- **验收**：`go build`、`go vet`、`GOOS=windows go build`、`go test ./... -short`；设置可切经典；截图含 files/tasks × classic/v2 × light/dark。
 
 ### LOG1 — 诊断日志（尤其助手）
 - **目标**：Windows GUI 程序无控制台，也能通过日志文件调试助手与任务。

@@ -397,11 +397,10 @@ func (a *App) contentPanes(c *ui.Context) {
 	}
 	row := ui.Row(c).FillWidth().FillHeight().MinHeight(0).AlignItems(ui.Stretch)
 	if visualV2 {
-		// v2: the file area, preview and assistant are one raised card on
-		// the wash.
-		ui.Box(c.Key("v2-gutter")).FillWidth().FillHeight().MinHeight(0).Padding(0, v2Gutter, v2Gutter, 2).Children(func() {
-			a.contentRow(c, v2Card(ui.Row(c).Fill().MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)))
-		})
+		// v2: keep classic's FillHeight Row (cross-axis % height in the
+		// Split Column), gutter via Margin, card chrome on that same row.
+		row.Margin(0, v2Gutter, v2Gutter, 2)
+		a.contentRow(c, v2Card(row))
 		return
 	}
 	a.contentRow(c, row)

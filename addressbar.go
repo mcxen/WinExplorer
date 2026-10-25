@@ -52,7 +52,7 @@ type addrState struct {
 // addressField is the rounded bar: crumbs and refresh, or the editor.
 func (a *App) addressField(c *ui.Context) {
 	editing := a.cur().editingPath
-	field := ui.Row(c.Key("address-field")).Grow(1).Height(32).MinWidth(0).Radius(6).
+	field := ui.Row(c.Key("address-field")).Grow(1).Height(32).MinWidth(0).Radius(fieldRadius()).
 		AlignItems(ui.Center).Background(colorAddress()).Clip()
 	switch {
 	case editing && a.addr.errMsg != "":

@@ -14,6 +14,10 @@ import (
 func previewApp(t *testing.T) (*App, *ui.Tester, float32) {
 	t.Helper()
 	a, tt, _ := keynavWindow(t, 3)
+	// Divider hit geometry is measured in window DIPs against the classic
+	// flush-right pane; pin classic so v2's content-card margin does not
+	// shift the edge under the asserted coordinates.
+	a.applySettings(func(x *appSettings) { x.VisualStyle = "" })
 	a.previewOpen = true
 	// The bare test app starts with no width; the real window starts at 320
 	// (main.go's newAppWithStore).

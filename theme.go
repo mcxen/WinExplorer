@@ -186,11 +186,15 @@ func appTheme(c *ui.Context) *ui.Theme {
 		Focus:          tokAccent.Alpha(0.6),
 		Scrollbar:      tokText.Alpha(0.32),
 		ScrollbarWidth: 6,
-		// Radius 6 rounds a dialog (components.Dialog doubles it) to 12, and
-		// Spacing 4 is the unit the components size their paddings with.
+		// Radius 6 rounds a dialog (components.Dialog doubles it) to 12;
+		// v2 uses 4 so dialogs land at 8. Spacing 4 is the unit the
+		// components size their paddings with.
 		Radius:   6,
 		Spacing:  4,
 		FontSize: 12,
+	}
+	if visualV2 {
+		t.Radius = v2RowRadius
 	}
 	// The adjustments MyGo's own themes make for the desktop's preferences,
 	// so a text scale or a higher contrast setting still applies.

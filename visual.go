@@ -13,9 +13,10 @@ import "github.com/egoist/mygo/ui"
 var visualV2 bool
 
 const (
-	v2CardRadius = 12
-	v2RowRadius  = 6
-	v2Gutter     = 8 // wash around the content card
+	v2CardRadius  = 8
+	v2RowRadius   = 4
+	v2InputRadius = 4 // address / search fields
+	v2Gutter      = 8 // wash around the content card
 )
 
 // syncVisual re-resolves the tokens when 视觉风格 changed.
@@ -89,4 +90,22 @@ func v2Chosen(e ui.Element) ui.Element {
 // v2Card styles e as the content card.
 func v2Card(e ui.Element) ui.Element {
 	return v2Raised(e.Radius(v2CardRadius).Clip().Background(tokContent))
+}
+
+// fieldRadius is the address and search field corner radius: v2's tighter
+// input token, classic's 6.
+func fieldRadius() float32 {
+	if visualV2 {
+		return v2InputRadius
+	}
+	return 6
+}
+
+// sidebarListPad is the top inset of the nav list. v2 matches the content
+// card's flush top so the first sidebar row lines up with the details header.
+func sidebarListPad() float32 {
+	if visualV2 {
+		return 4
+	}
+	return 8
 }

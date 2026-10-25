@@ -201,7 +201,7 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
-			ID: "visual", Title: "视觉风格", Description: "v2：柔和底色、浮起内容卡片（预览）",
+			ID: "visual", Title: "视觉风格", Description: "v2（默认）：柔和底色、浮起内容卡片；经典为 Windows 11 扁平",
 			Build: func(c *ui.Context) {
 				sv := 0
 				if a.store.settings().VisualStyle == "v2" {

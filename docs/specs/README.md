@@ -17,6 +17,7 @@
 | 07 | [定时任务（SCH1 + SCH2）](07-scheduled-tasks.md) |
 | 08 | [规范表单组件](08-forms.md) |
 | 10 | [统一任务系统（TASKSYS，设计稿）](10-task-system.md) |
+| 11 | [视觉语言 v2（VISUAL2）](11-visual-language.md) |
 | 12 | [诊断日志（LOG1）](12-logging.md) |
 | 09 | [压缩 / 解压进度与进度样式（ARCHIVE-PROG、PROG-STYLE）](09-archive-progress.md) |
 

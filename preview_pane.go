@@ -284,7 +284,9 @@ func (a *App) previewResizeHandle(c *ui.Context) {
 	// file list and 3 into the pane, and goes no further: a wider target
 	// would take the preview's own clicks and scrolling, and would put the
 	// 1px line it draws (the middle of its box) wherever that width ends.
-	grip := ui.Box(c).Absolute().Top(0).Bottom(0).Left(-3).Width(7).
+	// Keep the grip inside the pane (Left 0): v2's content-card Clip would
+	// drop hits on an Absolute strip that overhangs into the file list.
+	grip := ui.Box(c).Absolute().Top(0).Bottom(0).Left(0).Width(6).
 		Cursor(ui.CursorResizeEW)
 	if dx, _, ok := grip.Dragged(); ok && dx != 0 {
 		a.previewW = clampPreviewWidth(a.previewW - dx)
@@ -293,7 +295,7 @@ func (a *App) previewResizeHandle(c *ui.Context) {
 		if !grip.Hovered() && !grip.Dragging() {
 			return
 		}
-		p.Fill(ui.Rect{X: r.X + (r.W-1)/2, Y: r.Y, W: 1, H: r.H}, colorAccent(), 0)
+		p.Fill(ui.Rect{X: r.X, Y: r.Y, W: 1, H: r.H}, colorAccent(), 0)
 	})
 }
 

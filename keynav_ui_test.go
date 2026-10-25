@@ -88,10 +88,12 @@ func TestArrowKeysScrollTheWindow(t *testing.T) {
 	}
 
 	// A screenful down moves the selection and keeps it in view.
+	page := a.navPage()
+	wantName := fmt.Sprintf("f%03d.txt", page)
 	tt.Key(0, ui.KeyPageDown)
-	navIs(t, a, "Page Down", "f021.txt")
+	navIs(t, a, "Page Down", wantName)
 	first, last = visible()
-	if row := entryIndexOf(a.visibleEntries(), filepath.Join(dir, "f021.txt")); row < first || row > last {
+	if row := entryIndexOf(a.visibleEntries(), filepath.Join(dir, wantName)); row < first || row > last {
 		t.Fatalf("the moved-to row %d is not in view (%d..%d)", row, first, last)
 	}
 }

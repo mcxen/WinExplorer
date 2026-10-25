@@ -275,7 +275,7 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 	if a.itemCheckboxes {
 		a.checkboxCell(c, e)
 	}
-	glyph := ui.Box(c).Size(icon, icon).Shrink(0)
+	glyph := ui.Box(c).Size(icon, icon).Shrink(0).Center()
 	glyph.Children(func() {
 		a.fileIcon(c, e, icon)
 	})

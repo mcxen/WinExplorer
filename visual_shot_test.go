@@ -14,8 +14,13 @@ import (
 func TestVisualStyleSwitch(t *testing.T) {
 	a, tt := tasksViewFixture(t)
 	t.Cleanup(func() { visualV2 = false; resolveTokens() })
+	// Fresh installs default to v2; pin classic first so the switch is visible.
+	a.applySettings(func(x *appSettings) { x.VisualStyle = "" })
 	tt.Frame()
 	classic := colorAccent()
+	if visualV2 {
+		t.Fatal("classic not applied")
+	}
 	a.applySettings(func(x *appSettings) { x.VisualStyle = "v2" })
 	tt.Frame()
 	if !visualV2 || colorAccent() == classic {

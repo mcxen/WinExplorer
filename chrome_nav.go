@@ -50,11 +50,14 @@ func (a *App) refreshButton(c *ui.Context) {
 // string: SearchField hard-codes its own and ignores Placeholder.
 func (a *App) searchField(c *ui.Context) {
 	field := ui.Row(c.Key("folder-search")).Width(220).Height(32).Shrink(0).
-		Padding(0, 8).Gap(6).Radius(6).AlignItems(ui.Center).
+		Padding(0, 8).Gap(6).Radius(fieldRadius()).AlignItems(ui.Center).
 		Background(colorAddress()).Border(1, colorDivider()).
 		Label("搜索")
 	field.Children(func() {
-		components.Icon(c, lucide.Search).Size(14, 14).TextColor(colorMuted())
+		// Match the input's 24 DIP height so the glyph shares its vertical center.
+		ui.Box(c).Size(14, 24).Shrink(0).Center().Children(func() {
+			components.Icon(c, lucide.Search).Size(14, 14).TextColor(colorMuted())
+		})
 		in := ui.TextInputBase(c, &a.cur().query).Grow(1).MinWidth(0).Height(24).
 			FontSize(12).Placeholder("搜索")
 		a.fieldFocused = in.FocusWithin()

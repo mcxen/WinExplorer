@@ -130,7 +130,7 @@ func (a *App) sidebar(c *ui.Context) {
 		a.navTree.list.Key = func(i int) any { return rows[i].key }
 		ui.List(c, &a.navTree.list, len(rows), func(i int) {
 			a.navPaneRow(c, rows[i])
-		}).Grow(1).FillWidth().MinHeight(0).Padding(8, 0, 12, 0)
+		}).Grow(1).FillWidth().MinHeight(0).Padding(sidebarListPad(), 0, 12, 0)
 		// The current folder's row has its place in the list by now: show it if
 		// the list has it out of sight.
 		a.navTreeReveal()
@@ -556,7 +556,7 @@ func navTwistSlot(c *ui.Context) {
 // navRowGlyph is a row's 16px icon: a place or volume glyph by kind, and the
 // folder glyph for a folder of the tree.
 func (a *App) navRowGlyph(c *ui.Context, r navRow) {
-	glyph := ui.Box(c).Size(16, 16).Shrink(0)
+	glyph := ui.Box(c).Size(16, 16).Shrink(0).Center()
 	glyph.Children(func() {
 		if r.file {
 			a.fileIcon(c, Entry{Name: r.label, Path: r.path}, 16)

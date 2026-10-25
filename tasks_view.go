@@ -186,7 +186,11 @@ func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
 		tone = toneError
 	}
 	_, icon := archiveSnapTone(s)
-	card := ui.Row(c).FillWidth().MinWidth(0).Gap(14).Padding(12, 14).Radius(10).AlignItems(ui.Start)
+	cardR := float32(10)
+	if visualV2 {
+		cardR = v2CardRadius
+	}
+	card := ui.Row(c).FillWidth().MinWidth(0).Gap(14).Padding(12, 14).Radius(cardR).AlignItems(ui.Start)
 	if visualV2 {
 		v2Raised(card.Background(colorSurface()))
 	} else {
@@ -208,10 +212,12 @@ func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
 			ui.Text(c.Key("nums"), taskNumbers(s)).FontSize(12.5).TextColor(colorMuted()).SingleLine().Ellipsis("…").MinWidth(0)
 			if s.Cur != "" {
 				ui.Row(c.Key("cur")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Children(func() {
-					a.fileIcon(c, Entry{Name: filepath.Base(s.Cur), Ext: lowerExt(s.Cur)}, 16)
+					ui.Box(c).Size(16, 16).Shrink(0).Center().Children(func() {
+						a.fileIcon(c, Entry{Name: filepath.Base(s.Cur), Ext: lowerExt(s.Cur)}, 16)
+					})
 					name := ui.Text(c.Key("n"), s.Cur).FontSize(12.5).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 					components.Tooltip(c, name, s.Cur)
-					ui.Box(c.Key("b")).Width(160).Shrink(0).Children(func() {
+					ui.Box(c.Key("b")).Width(160).Height(5).Shrink(0).AlignSelf(ui.Center).Children(func() {
 						paintProgressBar(c, "tv-cur-"+s.ID, s.CurFrac(), toneRunning, 5)
 					})
 					sz := formatBytes(s.CurDone)
@@ -234,7 +240,9 @@ func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
 
 func (a *App) taskCardHead(c *ui.Context, s archiveTaskSnap, icon *ui.SVG, tone progressTone) {
 	ui.Row(c.Key("head")).FillWidth().MinWidth(0).Gap(8).AlignItems(ui.Center).Children(func() {
-		components.Icon(c, icon).Size(18, 18).TextColor(tone.color(false)).Shrink(0)
+		ui.Box(c).Size(18, 18).Shrink(0).Center().Children(func() {
+			components.Icon(c, icon).Size(18, 18).TextColor(tone.color(false))
+		})
 		title := s.Title
 		if title == "" {
 			title = archiveVerb(s.Kind) + " " + s.Name

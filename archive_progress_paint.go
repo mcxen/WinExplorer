@@ -188,7 +188,7 @@ func paintArchiveStatus(c *ui.Context, open func()) bool {
 
 func paintArchiveStatusBody(c *ui.Context, s archiveTaskSnap, live []archiveTaskSnap) {
 	{
-		ui.Box(c.Key("barbox")).Width(90).Shrink(0).Children(func() {
+		ui.Box(c.Key("barbox")).Width(90).Height(4).Shrink(0).AlignSelf(ui.Center).Children(func() {
 			paintProgressBar(c, "sbar-"+s.key(), s.Frac(), toneRunning, 4).Label(archiveVerb(s.Kind) + "进度")
 		})
 		text := archiveVerb(s.Kind) + " " + s.Name

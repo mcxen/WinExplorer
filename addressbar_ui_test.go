@@ -44,7 +44,6 @@ func TestAddressBarTakesTypingEveryWayIn(t *testing.T) {
 		open func()
 	}{
 		{"空白处单击", func() { tt.ClickAt(emptyBarPoint(t, tt)) }},
-		{"编辑按钮", func() { tt.Click("编辑地址") }},
 		{"F4", func() { tt.Key(0, ui.KeyF4) }},
 		{"Ctrl+L", func() { tt.Key(ui.Ctrl, ui.KeyL) }},
 		{"Alt+D", func() { tt.Key(ui.Alt, ui.KeyD) }},
@@ -274,5 +273,50 @@ func TestBreadcrumbMenus(t *testing.T) {
 	m := tt.Menu()
 	if len(m) == 0 || m[len(m)-1] != "此电脑" {
 		t.Fatalf("overflow menu: %v", m)
+	}
+}
+
+// TestAddressRecentDropdown: the crumb-bar chevron lists persisted visits
+// (title · path); choosing one navigates there.
+func TestAddressRecentDropdown(t *testing.T) {
+	a, tt, root := tabsWindow(t, 1200, "alpha", "beta", "gamma")
+	alpha := filepath.Join(root, "alpha")
+	beta := filepath.Join(root, "beta")
+	gamma := filepath.Join(root, "gamma")
+	for _, p := range []string{alpha, beta, gamma} {
+		a.navigate(p)
+		tt.Frame()
+	}
+	// Back on alpha so beta/gamma appear in the menu (current is skipped).
+	a.navigate(alpha)
+	tt.Frame()
+	items := a.addressRecentItems()
+	if len(items) < 2 {
+		t.Fatalf("recent items = %v, want beta and gamma at least", items)
+	}
+	byPath := map[string]string{}
+	for _, it := range items {
+		byPath[it.path] = it.label
+	}
+	if byPath[beta] == "" || byPath[gamma] == "" {
+		t.Fatalf("menu missing beta/gamma: %v", items)
+	}
+	if !strings.Contains(byPath[beta], "beta") {
+		t.Fatalf("beta label %q should carry the folder title", byPath[beta])
+	}
+	// Same path the menu handler takes.
+	a.navigate(beta)
+	tt.Frame()
+	if a.cur().path != beta {
+		t.Fatalf("after choosing beta: at %s", a.cur().path)
+	}
+	got := a.store.visitList(0)
+	if !slices.Contains(got, alpha) || !slices.Contains(got, gamma) {
+		t.Fatalf("visitList missing alpha/gamma: %v", got)
+	}
+	if r, ok := tt.Find("最近访问"); !ok {
+		t.Fatalf("no recent chevron: %v", tt.Texts())
+	} else if r.W == 0 {
+		t.Fatalf("recent chevron has no size: %v", r)
 	}
 }

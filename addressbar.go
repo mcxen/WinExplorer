@@ -402,21 +402,67 @@ func (a *App) breadcrumbBar(c *ui.Context) {
 			ui.Box(c).Grow(1).MinWidth(8).Height(30).
 				Label("地址栏空白").OnClick(a.beginPathEdit)
 		})
-		edit := ui.ButtonBase(c).Size(24, 24).Radius(4).Shrink(0).
-			Label("编辑地址").Tooltip("编辑地址 (Ctrl+L)")
-		switch {
-		case edit.Pressed():
-			edit.Background(colorPressed())
-		case edit.Hovered():
-			edit.Background(colorHover())
-		}
-		edit.Children(func() {
-			components.Icon(c, lucide.ChevronDown).Size(12, 12).TextColor(colorMuted())
-		})
-		if edit.Clicked() {
-			a.beginPathEdit()
+		a.addressRecentButton(c)
+	})
+}
+
+// addressRecentLimit is how many visits the address-bar chevron lists.
+const addressRecentLimit = 15
+
+// addressRecentButton is the chevron at the end of the crumb bar: a dense
+// menu of recently visited folders (title · path). Picking one navigates.
+// Editing the address stays on blank-click / Ctrl+L / F4 / the bar menu.
+func (a *App) addressRecentButton(c *ui.Context) {
+	btn := ui.ButtonBase(c).Size(24, 24).Radius(4).Shrink(0).
+		Label("最近访问").Tooltip("最近访问")
+	switch {
+	case btn.Pressed():
+		btn.Background(colorPressed())
+	case btn.Hovered():
+		btn.Background(colorHover())
+	}
+	btn.Children(func() {
+		components.Icon(c, lucide.ChevronDown).Size(12, 12).TextColor(colorMuted())
+	})
+	btn.Menu(func(m *ui.Menu) {
+		for _, it := range a.addressRecentItems() {
+			if m.Item(it.label).Chosen() {
+				a.navigate(it.path)
+			}
 		}
 	})
+}
+
+type addressRecentItem struct{ label, path string }
+
+// addressRecentItems builds the chevron menu rows from persisted visits,
+// newest first, skipping the folder already on show.
+func (a *App) addressRecentItems() []addressRecentItem {
+	if a.store == nil {
+		return nil
+	}
+	cur := a.cur().path
+	known := knownFolderNames()
+	var out []addressRecentItem
+	for _, dir := range a.store.visitList(maxVisited) {
+		if dir == cur || !dirExists(dir) {
+			continue
+		}
+		title := filepath.Base(dir)
+		if n, ok := known[dir]; ok {
+			title = n
+		}
+		label := title
+		disp := pathDisplay(dir)
+		if disp != title {
+			label = title + " · " + disp
+		}
+		out = append(out, addressRecentItem{label: label, path: dir})
+		if len(out) >= addressRecentLimit {
+			break
+		}
+	}
+	return out
 }
 
 func (a *App) crumbButton(c *ui.Context, crumb Crumb, last bool) {

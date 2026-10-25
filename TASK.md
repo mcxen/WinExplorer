@@ -83,6 +83,7 @@
 | TREE-NOEXPAND | 设置「展开到打开的文件夹」：关闭后导航不展开侧栏树，保留手动展开，当前文件夹不可见时淡标最近可见祖先 | 低 | 完成 | — | — | — |
 | FLIP-PERF | 任务视图翻转降卡顿：翻转期间冻结两面数据、预热任务视图、背面只建 8 张卡、边缘模糊、超 20ms 回退淡入淡出、落定 80ms 淡入；`TestFlipFrameTimes` 2000 文件 + 500 历史：p50 67.8→17.5ms、p95 149→27ms | 中 | 完成 | — | TASKSYS | — |
 | VISUAL2 | 视觉语言 v2：小圆角令牌、默认 v2、经典可切、纵向对齐 | 高 | 已完成 | [11](docs/specs/11-visual-language.md) | — | — |
+| ADDR-RECENT | 地址栏下拉：最近访问文件夹（标题·路径），点选导航 | 中 | 已完成 | — | — | — |
 | PROG-STYLE | 进度条样式优化与可选绿色仪表盘 | 中 | 已完成 | [09](docs/specs/09-archive-progress.md) PROG-STYLE | ARCHIVE-PROG | `main` |
 | ARCHIVE-PROG | 压缩 / 解压按字节进度：百分比、速度、当前文件、剩余时间、取消；助手实时进度卡 | 高 | 已完成 | [09](docs/specs/09-archive-progress.md) | OPENUI-MORE | `main` |
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
@@ -418,6 +419,11 @@
 - **目标**：采用 v2 视觉（mist 底、浮起内容卡、侧栏 chip、蓝强调），圆角更小（卡 8 / 行·按钮·输入 4 / 对话框 8）；v2 为默认，经典可切换；修工具栏/侧栏/列表/状态栏/任务卡纵向对齐。
 - **范围**：`visual.go`、`theme.go`、`statestore.go`、`settingsdialog.go`、`main.go`、`sidebar.go`、`tasks_view.go`、`chrome_nav.go`、`addressbar.go`、`archive_progress_paint.go`、`files.go`；`docs/specs/11-visual-language.md`、`docs/UI.md`；截图 `docs/assets/shots/VISUAL2/`。
 - **验收**：`go build`、`go vet`、`GOOS=windows go build`、`go test ./... -short`；设置可切经典；截图含 files/tasks × classic/v2 × light/dark。
+
+### ADDR-RECENT — 地址栏最近访问
+- **目标**：地址栏面包屑右侧下拉列出最近访问文件夹（标题 · 路径），点选即导航；沿用已持久化的 `Visited`/`visitList`；高密度、无多余文案。编辑地址仍用空白处单击 / Ctrl+L / F4 / Alt+D / 右键菜单。
+- **范围**：`addressbar.go`（`addressRecentButton`/`addressRecentItems`）、`addressbar_ui_test.go`；`TASK.md`。
+- **验收**：`go test -run TestAddressRecentDropdown`；`go build`/`go vet`/`GOOS=windows go build`/`go test ./... -short`（跳过已知死锁 `TestCopyConflictCardAndQueueShots`）。
 
 ### LOG1 — 诊断日志（尤其助手）
 - **目标**：Windows GUI 程序无控制台，也能通过日志文件调试助手与任务。

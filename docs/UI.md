@@ -76,7 +76,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 - **标题栏/标签条**（`chrome_tab.go:tabStrip`、`tabItem`）：标签可拖动排序、中键关闭、双击空白新建、溢出时收窄并可横向滚动；标签悬停提示完整路径（`tabTooltip`）。特殊页的标签名见 §5。右侧空白区可拖动窗口（`DragWindow`）。
 - **命令栏**（`commandBar`）：新建、剪切/复制/粘贴/重命名/分享/删除、排序、查看、更多（`moreButton`）。图标按钮不可用时置灰。
-- **导航栏**：后退/前进/上一级/地址栏/刷新/文件夹搜索。地址栏两种状态：面包屑（`breadcrumbBar`，溢出折叠为「…」菜单 `crumbOverflow`，分隔箭头弹出子文件夹菜单 `crumbSeparator`）与编辑（`pathEditor`，补全下拉 `pathDropdown`，行内错误提示）。
+- **导航栏**：后退/前进/上一级/地址栏/刷新/文件夹搜索。地址栏两种状态：面包屑（`breadcrumbBar`，溢出折叠为「…」菜单 `crumbOverflow`，分隔箭头弹出子文件夹菜单 `crumbSeparator`；右侧下拉「最近访问」列出 `visitList` 中的文件夹「标题 · 路径」，点选导航，见 ADDR-RECENT）与编辑（`pathEditor`，补全下拉 `pathDropdown`，行内错误提示；进入编辑：空白处单击 / Ctrl+L / F4 / Alt+D）。
 - **侧栏**（`sidebar.go:sidebar`）：主文件夹、画廊、快速访问（可拖放固定）、最近位置、此电脑（卷 → 目录树）、回收站；虚拟列表。
 - **文件窗格**：详细信息（`files_details.go`）、列表（`files_list.go`）、小/中/大/超大图标（`files_icon.go`）、画廊（`gallery.go`）。
   - 文件类型图标（`icons.go:fileTint` / `drawPDFSheet` / `drawHTMLSheet`）：PDF 红标、HTML/HTM 浏览器橙标，常见 Office 扩展独立配色；详情/列表 16px 只用自绘。

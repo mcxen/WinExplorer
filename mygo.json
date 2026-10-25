@@ -1,7 +1,7 @@
 {
   "name": "Sunvale",
   "identifier": "com.mcxen.sunvale",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "out": "dist",
   "updates": {
     "publicKey": "j2gsimsIEc/O44jowQYfoJyH3gI5sRUF8GjVEI1guK8=",

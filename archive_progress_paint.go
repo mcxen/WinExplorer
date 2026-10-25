@@ -192,7 +192,7 @@ func (a *App) paintAssistArchiveTasks(c *ui.Context, since time.Time) {
 	ui.Column(c.Key("archive-tasks")).FillWidth().MinWidth(0).Gap(6).Children(func() {
 		gauge := a.assistProgressStyle() == progressStyleGauge
 		for _, s := range tasks {
-			cc := c.Key("t" + strconv.FormatInt(s.ID, 10))
+			cc := c.Key("t" + s.ID)
 			if gauge {
 				paintArchiveGaugeCard(cc, s)
 			} else {

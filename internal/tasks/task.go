@@ -199,6 +199,11 @@ func (t *task) snapshot(now time.Time) Snapshot {
 
 // sampleLocked records progress for the speed window.
 func (t *task) sampleLocked(now time.Time) {
+	if len(t.samples) == 0 && !t.snap.Started.IsZero() {
+		// The run's start is the window's first point, so a single report
+		// already has a rate.
+		t.samples = append(t.samples, sample{t.snap.Started, 0})
+	}
 	if n := len(t.samples); n > 0 && now.Sub(t.samples[n-1].at) < 100*time.Millisecond {
 		return
 	}

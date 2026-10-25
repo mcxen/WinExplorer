@@ -193,6 +193,7 @@ func newAppWindow(app *App) *mygo.Window {
 	archiveTasks.Lock()
 	archiveTasks.onChange = func() { app.postAssist(func() {}) }
 	archiveTasks.Unlock()
+	taskManager()
 	// Minimizing parks the window in the tray (tray.go) instead of the
 	// taskbar, so the process — and its background size statistics — keeps
 	// running out of sight.

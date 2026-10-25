@@ -282,7 +282,7 @@ func (m *Manager) Resume(id string) error {
 		return ErrState
 	}
 	t.paused, t.snap.State = false, Running
-	t.samples = nil
+	t.samples = []sample{{m.now(), t.snap.Done}}
 	close(t.resume)
 	t.mu.Unlock()
 	m.emit(Event{ID: id, Type: EventState})

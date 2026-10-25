@@ -239,7 +239,7 @@ func extractArchive(archive, dstDir string) error {
 		if st, err := f.Stat(); err == nil {
 			t.reset(st.Size())
 		}
-		var r io.Reader = withProgress(f, t)
+		var r io.Reader = withTotalProgress(f, t)
 		switch archiveKind(filepath.Base(archive)) {
 		case "tgz", "tar.gz":
 			if r, err = gzip.NewReader(r); err != nil {
@@ -313,14 +313,18 @@ func extractZip(archive, dstDir string) error {
 	t := archiveTaskFor(archive)
 	if t != nil {
 		var total int64
+		files := 0
 		for _, f := range zr.File {
 			total += int64(f.UncompressedSize64)
+			if !f.FileInfo().IsDir() {
+				files++
+			}
 		}
-		t.reset(total)
+		t.resetItems(total, files)
 	}
 	for _, f := range zr.File {
-		if t.isCanceled() {
-			return errArchiveCanceled
+		if err := t.wait(); err != nil {
+			return err
 		}
 		target, err := safeMember(dstDir, f.Name)
 		if err != nil {
@@ -338,7 +342,7 @@ func extractZip(archive, dstDir string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		t.setFile(f.Name)
+		t.setItem(f.Name, int64(f.UncompressedSize64))
 		if err := copyZipMember(f, target, t); err != nil {
 			return err
 		}
@@ -376,8 +380,8 @@ func extractTar(r io.Reader, dstDir string) error { return extractTarTask(r, dst
 func extractTarTask(r io.Reader, dstDir string, t *archiveTask) error {
 	tr := tar.NewReader(r)
 	for {
-		if t.isCanceled() {
-			return errArchiveCanceled
+		if err := t.wait(); err != nil {
+			return err
 		}
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -402,12 +406,12 @@ func extractTarTask(r io.Reader, dstDir string, t *archiveTask) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			t.setFile(h.Name)
+			t.setItem(h.Name, h.Size)
 			out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, h.FileInfo().Mode().Perm())
 			if err != nil {
 				return err
 			}
-			_, copyErr := io.Copy(out, tr)
+			_, copyErr := io.Copy(out, withItemProgress(tr, t))
 			closeErr := out.Close()
 			if copyErr != nil {
 				return copyErr
@@ -447,7 +451,7 @@ func makeZip(dst string, entries []Entry) error {
 	}
 	zw := zip.NewWriter(out)
 	t := archiveTaskFor(dst)
-	if t != nil && t.total.Load() <= 0 {
+	if t != nil && t.snap().Total <= 0 {
 		t.reset(entriesSize(entries))
 	}
 	var addErr error
@@ -511,10 +515,9 @@ func addTree(zw *zip.Writer, path, prefix string, isDir bool, t *archiveTask) er
 }
 
 func addFile(zw *zip.Writer, path, name string, t *archiveTask) error {
-	if t.isCanceled() {
-		return errArchiveCanceled
+	if err := t.wait(); err != nil {
+		return err
 	}
-	t.setFile(name)
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -524,6 +527,7 @@ func addFile(zw *zip.Writer, path, name string, t *archiveTask) error {
 	if err != nil {
 		return err
 	}
+	t.setItem(name, info.Size())
 	hdr := &zip.FileHeader{Name: name, Method: zip.Deflate, Modified: info.ModTime()}
 	hdr.SetMode(info.Mode().Perm())
 	w, err := zw.CreateHeader(hdr)

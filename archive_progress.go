@@ -1,135 +1,116 @@
 package main
 
 import (
-	"errors"
 	"io"
+	"os"
 	"path/filepath"
-	"sort"
+	"strings"
 	"sync"
-	"sync/atomic"
+	"testing"
 	"time"
+
+	"sunvale/internal/tasks"
 )
 
-// archive_progress.go is the byte-based progress of compress and extract
-// runs (ARCHIVE-PROG): one archiveTask per run, keyed by the archive path,
-// counted by wrapping the readers the zip/tar code copies through. The
-// status bar and the assistant transcript paint snapshots of it.
+// archive_progress.go puts compress and extract runs on the task kernel
+// (TASKSYS T2, internal/tasks): each run is a Begin task keyed by its
+// archive path, counted by wrapping the readers the zip/tar code copies
+// through — the whole run's bytes and the member being written — so the
+// task view, the status bar and the assistant's cards paint one record.
 
-var errArchiveCanceled = errors.New("已取消")
+var errArchiveCanceled = tasks.ErrCanceled
 
-// archiveTaskKeep is how long a finished task stays listed.
-const archiveTaskKeep = 10 * time.Minute
-
-// archiveNow is the clock; tests swap it.
+// archiveNow is the task clock; tests swap it.
 var archiveNow = time.Now
 
-type archiveTask struct {
-	ID     int64
-	Kind   string // compress | extract
-	Path   string // the archive (written or read)
-	Origin string // user | ai
-	Start  time.Time
-
-	done     atomic.Int64
-	total    atomic.Int64
-	canceled atomic.Bool
-
-	mu       sync.Mutex
-	cur      string
-	finished time.Time
-	err      string
-}
-
-// archiveTaskSnap is one painted state of a task.
-type archiveTaskSnap struct {
-	ID                 int64
-	Kind, Name, Origin string
-	Cur                string
-	Done, Total        int64
-	Speed              float64 // bytes per second
-	ETA                time.Duration
-	Elapsed            time.Duration
-	Finished, Canceled bool
-	Err                string
-	Start              time.Time
-	// Title and Meta override the verb + name and the numbers line (an
-	// OpenUI TaskProgress the model wrote).
-	Title, Meta string
-	Static      bool
-}
-
-// Frac is the done share in [0,1]; -1 when the total is unknown.
-func (s archiveTaskSnap) Frac() float64 {
-	if s.Total <= 0 {
-		if s.Finished && s.Err == "" {
-			return 1
-		}
-		return -1
-	}
-	f := float64(s.Done) / float64(s.Total)
-	if f > 1 {
-		f = 1
-	}
-	return f
-}
-
+// archiveTasks holds the window's task manager and the live archive runs.
 var archiveTasks struct {
 	sync.Mutex
-	next int64
-	list []*archiveTask
+	m    *tasks.Manager
+	live map[string]*archiveTask // clean archive path → run
 	// onChange repaints the window; nil in tests.
 	onChange func()
 }
 
-// startArchiveTask registers a run; total may be 0 (unknown, grows later).
-func startArchiveTask(kind, path, origin string, total int64) *archiveTask {
+// taskManager is the process-wide Manager, its history beside state.json
+// (kept in memory under go test).
+func taskManager() *tasks.Manager {
 	archiveTasks.Lock()
 	defer archiveTasks.Unlock()
-	archiveTasks.next++
-	t := &archiveTask{ID: archiveTasks.next, Kind: kind, Path: path, Origin: origin, Start: archiveNow()}
-	t.total.Store(total)
-	now := archiveNow()
-	keep := archiveTasks.list[:0]
-	for _, o := range archiveTasks.list {
-		o.mu.Lock()
-		old := !o.finished.IsZero() && now.Sub(o.finished) > archiveTaskKeep
-		o.mu.Unlock()
-		if !old {
-			keep = append(keep, o)
-		}
+	if archiveTasks.m == nil {
+		archiveTasks.m = newTaskManager()
 	}
-	archiveTasks.list = append(keep, t)
+	return archiveTasks.m
+}
+
+func newTaskManager() *tasks.Manager {
+	opt := tasks.Options{Now: func() time.Time { return archiveNow() }}
+	if dir, err := os.UserConfigDir(); err == nil && !testing.Testing() {
+		opt.HistoryPath = filepath.Join(dir, stateDirName, "tasks.json")
+	}
+	m := tasks.NewManager(opt)
+	m.Subscribe(func(tasks.Event) { archiveChanged() })
+	return m
+}
+
+// archiveTask is one run's handle: the kernel's Reporter plus its path.
+type archiveTask struct {
+	r    *tasks.Reporter
+	Kind string
+	Path string
+}
+
+// archiveVolume is the disk slot key: the volume name on Windows, the
+// first path element elsewhere.
+func archiveVolume(path string) string {
+	if v := filepath.VolumeName(path); v != "" {
+		return strings.ToUpper(v)
+	}
+	parts := strings.SplitN(strings.TrimPrefix(filepath.ToSlash(path), "/"), "/", 2)
+	return "/" + parts[0]
+}
+
+// startArchiveTask registers a run; total may be 0 (unknown, set later).
+func startArchiveTask(kind, path, origin string, total int64) *archiveTask {
+	m := taskManager()
+	k := tasks.KindExtract
+	if kind == "compress" {
+		k = tasks.KindCompress
+	}
+	r := m.Begin(tasks.Spec{
+		Kind: k, Title: archiveVerb(kind) + " " + filepath.Base(path), Source: tasks.Source(origin),
+		Path: path, IO: "disk", Volume: archiveVolume(path),
+	})
+	t := &archiveTask{r: r, Kind: kind, Path: path}
+	if total > 0 {
+		r.SetTotal(tasks.UnitBytes, total, 0)
+	}
+	archiveTasks.Lock()
+	if archiveTasks.live == nil {
+		archiveTasks.live = map[string]*archiveTask{}
+	}
+	archiveTasks.live[filepath.Clean(path)] = t
+	archiveTasks.Unlock()
 	return t
 }
 
 // archiveTaskFor finds the running task reading or writing path.
 func archiveTaskFor(path string) *archiveTask {
-	path = filepath.Clean(path)
 	archiveTasks.Lock()
 	defer archiveTasks.Unlock()
-	for i := len(archiveTasks.list) - 1; i >= 0; i-- {
-		t := archiveTasks.list[i]
-		if filepath.Clean(t.Path) == path {
-			t.mu.Lock()
-			live := t.finished.IsZero()
-			t.mu.Unlock()
-			if live {
-				return t
-			}
-		}
-	}
-	return nil
+	return archiveTasks.live[filepath.Clean(path)]
 }
 
-func archiveTaskByID(id int64) *archiveTask {
+// archiveTaskByID wraps a task id for its controls.
+func archiveTaskByID(id string) *archiveTask {
 	archiveTasks.Lock()
 	defer archiveTasks.Unlock()
-	for _, t := range archiveTasks.list {
-		if t.ID == id {
+	for _, t := range archiveTasks.live {
+		if t.r.ID() == id {
 			return t
 		}
 	}
-	return nil
+	return &archiveTask{r: nil, Path: id}
 }
 
 func archiveChanged() {
@@ -142,116 +123,168 @@ func archiveChanged() {
 }
 
 // reset starts a fresh attempt (a password retry re-reads the archive).
-func (t *archiveTask) reset(total int64) {
+func (t *archiveTask) reset(total int64) { t.resetItems(total, 0) }
+
+func (t *archiveTask) resetItems(total int64, items int) {
 	if t == nil {
 		return
 	}
-	t.done.Store(0)
-	if total > 0 {
-		t.total.Store(total)
+	u := tasks.UnitBytes
+	if total <= 0 {
+		u = tasks.UnitNone
 	}
+	t.r.SetTotal(u, total, items)
 }
 
-func (t *archiveTask) setFile(name string) {
+// setItem moves on to member name of size bytes (0 unknown).
+func (t *archiveTask) setItem(name string, size int64) {
 	if t == nil {
 		return
 	}
-	t.mu.Lock()
-	t.cur = name
-	t.mu.Unlock()
+	t.r.ItemDone()
+	t.r.Item(name, size)
 }
+
+func (t *archiveTask) setFile(name string) { t.setItem(name, 0) }
 
 func (t *archiveTask) add(n int64) {
-	if t != nil && n > 0 {
-		t.done.Add(n)
+	if t != nil {
+		t.r.Add(n)
 	}
 }
 
 func (t *archiveTask) cancel() {
-	if t != nil {
-		t.canceled.Store(true)
-		archiveChanged()
+	if t == nil {
+		return
 	}
+	id := t.r.ID()
+	if id == "" {
+		id = t.Path
+	}
+	_ = taskManager().Cancel(id)
 }
 
-func (t *archiveTask) isCanceled() bool { return t != nil && t.canceled.Load() }
+func (t *archiveTask) isCanceled() bool { return t != nil && t.r.Canceled() }
+
+// wait holds a paused run and reports a cancel.
+func (t *archiveTask) wait() error {
+	if t == nil {
+		return nil
+	}
+	return t.r.Wait()
+}
 
 // finish ends the run; err nil is success.
 func (t *archiveTask) finish(err error) {
 	if t == nil {
 		return
 	}
-	t.mu.Lock()
-	t.finished = archiveNow()
-	if err != nil {
-		t.err = err.Error()
-		if t.canceled.Load() || errors.Is(err, errArchiveCanceled) {
-			t.err = errArchiveCanceled.Error()
-		}
-	} else if tot := t.total.Load(); tot > 0 {
-		t.done.Store(tot)
+	t.r.ItemDone()
+	taskManager().End(t.r, err)
+	archiveTasks.Lock()
+	if archiveTasks.live[filepath.Clean(t.Path)] == t {
+		delete(archiveTasks.live, filepath.Clean(t.Path))
 	}
-	t.cur = ""
-	t.mu.Unlock()
-	archiveChanged()
+	archiveTasks.Unlock()
 }
 
 func (t *archiveTask) snap() archiveTaskSnap {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	s := archiveTaskSnap{
-		ID: t.ID, Kind: t.Kind, Name: filepath.Base(t.Path), Origin: t.Origin, Cur: t.cur,
-		Done: t.done.Load(), Total: t.total.Load(), Start: t.Start,
-		Finished: !t.finished.IsZero(), Canceled: t.canceled.Load(), Err: t.err,
-	}
-	end := archiveNow()
-	if s.Finished {
-		end = t.finished
-	}
-	s.Elapsed = end.Sub(t.Start)
-	if sec := s.Elapsed.Seconds(); sec > 0.2 {
-		s.Speed = float64(s.Done) / sec
-	}
-	if !s.Finished && s.Speed > 0 && s.Total > s.Done {
-		s.ETA = time.Duration(float64(s.Total-s.Done) / s.Speed * float64(time.Second))
-	}
-	return s
+	return snapFromTask(taskManager().Get(t.r.ID()))
 }
 
-// archiveSnaps lists tasks, oldest first, that keep(s) accepts.
-func archiveSnaps(keep func(archiveTaskSnap) bool) []archiveTaskSnap {
-	archiveTasks.Lock()
-	list := append([]*archiveTask(nil), archiveTasks.list...)
-	archiveTasks.Unlock()
-	var out []archiveTaskSnap
-	for _, t := range list {
-		if s := t.snap(); keep == nil || keep(s) {
-			out = append(out, s)
-		}
+// archiveTaskSnap is one painted state of a task.
+type archiveTaskSnap struct {
+	ID                    string
+	Kind, Name, Origin    string
+	Path                  string
+	State                 tasks.State
+	Cur                   string
+	CurDone, CurTotal     int64
+	Done, Total           int64
+	ItemsDone, ItemsTotal int
+	Speed                 float64 // bytes per second
+	ETA                   time.Duration
+	Elapsed               time.Duration
+	Finished, Canceled    bool
+	Err                   string
+	Start                 time.Time
+	Recent, Failed        []tasks.Item
+	FailedCount           int
+	// Title and Meta override the verb + name and the numbers line (an
+	// OpenUI TaskProgress the model wrote).
+	Title, Meta string
+	Static      bool
+}
+
+func snapFromTask(s tasks.Snapshot) archiveTaskSnap {
+	kind := string(s.Kind)
+	out := archiveTaskSnap{
+		ID: s.ID, Kind: kind, Name: filepath.Base(s.Path), Origin: string(s.Source), Path: s.Path,
+		State: s.State, Cur: s.Current, CurDone: s.CurDone, CurTotal: s.CurTotal,
+		Done: s.Done, Total: s.Total, ItemsDone: s.ItemsDone, ItemsTotal: s.ItemsTotal,
+		Speed: s.Speed, ETA: s.ETA, Elapsed: s.Elapsed(archiveNow()),
+		Finished: s.State.Finished(), Canceled: s.State == tasks.Canceled, Err: s.Err, Start: s.Created,
+		Recent: s.Recent, Failed: s.Failed, FailedCount: s.FailedCount,
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	if s.Path == "" {
+		out.Title = s.Title
+	}
+	if s.State == tasks.Partial && out.Err == "" {
+		out.Err = itoa(s.FailedCount) + " 项失败"
+	}
 	return out
 }
 
-// progressReader counts bytes through r into t and stops on cancel.
-type progressReader struct {
-	r io.Reader
-	t *archiveTask
-}
-
-func (p progressReader) Read(b []byte) (int, error) {
-	if p.t.isCanceled() {
-		return 0, errArchiveCanceled
+// Frac is the done share in [0,1]; -1 when the total is unknown.
+func (s archiveTaskSnap) Frac() float64 {
+	if s.Total <= 0 {
+		if s.Finished && s.Err == "" {
+			return 1
+		}
+		return -1
 	}
-	n, err := p.r.Read(b)
-	p.t.add(int64(n))
-	return n, err
+	return min(float64(s.Done)/float64(s.Total), 1)
 }
 
-// withProgress wraps r when t is set.
+// CurFrac is the current member's share, -1 when unknown.
+func (s archiveTaskSnap) CurFrac() float64 {
+	if s.CurTotal <= 0 {
+		return -1
+	}
+	return min(float64(s.CurDone)/float64(s.CurTotal), 1)
+}
+
+// archiveSnaps lists this session's tasks, oldest first, that keep(s)
+// accepts.
+func archiveSnaps(keep func(archiveTaskSnap) bool) []archiveTaskSnap {
+	var out []archiveTaskSnap
+	for _, t := range taskManager().List() {
+		if s := snapFromTask(t); keep == nil || keep(s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// withProgress counts r on the run and its member, pausing and stopping
+// with the task.
 func withProgress(r io.Reader, t *archiveTask) io.Reader {
 	if t == nil {
 		return r
 	}
-	return progressReader{r, t}
+	return t.r.Reader(r)
+}
+
+func withTotalProgress(r io.Reader, t *archiveTask) io.Reader {
+	if t == nil {
+		return r
+	}
+	return t.r.TotalReader(r)
+}
+
+func withItemProgress(r io.Reader, t *archiveTask) io.Reader {
+	if t == nil {
+		return r
+	}
+	return t.r.ItemReader(r)
 }

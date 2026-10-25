@@ -17,12 +17,12 @@ import (
 func isolateArchiveTasks(t *testing.T) {
 	t.Helper()
 	archiveTasks.Lock()
-	old := archiveTasks.list
-	archiveTasks.list = nil
+	oldM, oldLive := archiveTasks.m, archiveTasks.live
+	archiveTasks.m, archiveTasks.live = nil, nil
 	archiveTasks.Unlock()
 	t.Cleanup(func() {
 		archiveTasks.Lock()
-		archiveTasks.list = old
+		archiveTasks.m, archiveTasks.live = oldM, oldLive
 		archiveTasks.Unlock()
 	})
 }
@@ -183,5 +183,52 @@ func TestOpenUITaskProgressPaints(t *testing.T) {
 		if !tt.HasText(want) {
 			t.Fatalf("missing %q in %v", want, tt.Texts())
 		}
+	}
+}
+
+func TestArchiveExtractReportsMembers(t *testing.T) {
+	isolateArchiveTasks(t)
+	root, entries, _ := archiveFixture(t)
+	dst := filepath.Join(root, "m.zip")
+	if err := makeZip(dst, entries); err != nil {
+		t.Fatal(err)
+	}
+	tk := startArchiveTask("extract", dst, "user", 0)
+	if err := extractZip(dst, filepath.Join(root, "mx")); err != nil {
+		t.Fatal(err)
+	}
+	tk.finish(nil)
+	s := tk.snap()
+	if s.ItemsTotal != 2 || s.ItemsDone != 2 || len(s.Recent) != 2 {
+		t.Fatalf("items %+v", s)
+	}
+	sizes := map[string]int64{}
+	for _, it := range s.Recent {
+		sizes[it.Name] = it.Size
+	}
+	if sizes["src/a.bin"] != 70_000 || sizes["src/sub/b.bin"] != 30_000 {
+		t.Fatalf("recent %+v", s.Recent)
+	}
+}
+
+func TestArchivePauseHoldsExtract(t *testing.T) {
+	isolateArchiveTasks(t)
+	root, entries, _ := archiveFixture(t)
+	dst := filepath.Join(root, "p.zip")
+	_ = makeZip(dst, entries)
+	tk := startArchiveTask("extract", dst, "user", 0)
+	if err := taskManager().Pause(tk.r.ID()); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- extractZip(dst, filepath.Join(root, "px")) }()
+	select {
+	case <-done:
+		t.Fatal("extract ran while paused")
+	case <-time.After(60 * time.Millisecond):
+	}
+	_ = taskManager().Resume(tk.r.ID())
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

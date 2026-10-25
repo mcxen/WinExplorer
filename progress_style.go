@@ -301,8 +301,8 @@ func paintArchiveGaugeCard(c *ui.Context, s archiveTaskSnap) {
 
 // key names a snap's animation slot.
 func (s archiveTaskSnap) key() string {
-	if s.ID != 0 {
-		return "t" + strconv.FormatInt(s.ID, 10)
+	if s.ID != "" {
+		return "t" + s.ID
 	}
 	return "o" + s.Title
 }

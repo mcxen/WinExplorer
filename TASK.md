@@ -79,7 +79,7 @@
 | OPENUI-SKEL | OpenUI 加载骨架：虚线占位 + 呼吸条 + 平滑替换 | 高 | 已完成 | 本文 / `docs/UI.md` §6 | OPENUI2 | `feat/openui-loading-skel` → `main` |
 | OPENUI-MEDIA | OpenUI 图文列表 MediaList：左缩略图卡 + 右标题正文 | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MEDIA | OPENUI3 | `main` |
 | OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
-| TASKSYS | 统一任务系统：internal/tasks、任务面板、助手任务工具（T1–T7） | 高 | 设计 | [10](docs/specs/10-task-system.md) | ARCHIVE-PROG、PROG-STYLE | — |
+| TASKSYS | 统一任务系统：internal/tasks、中间区翻转任务视图、助手任务工具（T1–T7） | 高 | 进行中（T1、T2、T4 翻转） | [10](docs/specs/10-task-system.md) | ARCHIVE-PROG、PROG-STYLE | — |
 | PROG-STYLE | 进度条样式优化与可选绿色仪表盘 | 中 | 已完成 | [09](docs/specs/09-archive-progress.md) PROG-STYLE | ARCHIVE-PROG | `main` |
 | ARCHIVE-PROG | 压缩 / 解压按字节进度：百分比、速度、当前文件、剩余时间、取消；助手实时进度卡 | 高 | 已完成 | [09](docs/specs/09-archive-progress.md) | OPENUI-MORE | `main` |
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
@@ -401,10 +401,10 @@
   - T1 内核：状态机、并发槽、优先级、路径锁、暂停 / 取消、节流单测，`-race` 通过。
   - T2 归档迁移：现有 ARCHIVE-PROG / PROG-STYLE 测试不变通过，可暂停继续。
   - T3 复制 / 移动 / 删除后台化：1 万小文件复制时 UI 不卡（帧 < 16ms），冲突内联选择，失败项与撤销。
-  - T4 任务面板（方案 A）：状态栏指示 + 底部停靠面板、历史持久化、失败详情与重试，无浮层。
+  - T4 任务视图：中间文件区 3D 翻转（360ms EaseInOut，减弱动态淡入淡出），状态栏指示 / 工具栏按钮 / Ctrl+Shift+J / Esc，任务卡含子项进度、最近项、失败项与操作，历史持久化，无浮层。
   - T5 重命名与助手：`task_list` / `task_get` / `task_control`、`TaskProgress(task:)` 实时绑定，助手仅能控制自己的任务。
   - T6 定时与插件：定时运行入任务历史，`taskRunner` 改为薄封装，缩略图 / 大小借用 IO 槽。
   - T7 远程：远程发起的复制 / 归档可见。
   - 每阶段 `go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过，单次提交 < 1000 行。
-- **待定**：见设计稿第 7 节。
-- **状态**：设计，待确认位置方案后进入 T1。
+- **已定**：位置改为中间文件区翻转；冲突、历史、托盘、并发、通知按设计稿默认。
+- **状态**：T1、T2、T4（翻转视图）进行中；T3、T5–T7 待做。

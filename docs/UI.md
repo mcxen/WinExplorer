@@ -284,3 +284,10 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **仪表盘** `paintGauge` / `paintArchiveGaugeCard`：132×76 半圆，描边 10，轨道 α0.16 绿；值弧同一缓动；弧端内侧 9px 指针；中心 20 号 700 粗体百分比；不确定 60° 弧段往返 2400ms，中心「—」。
 - **状态色**：进行中强调色（仪表盘绿 `tokSuccess`）/ 完成 `tokSuccess` / 失败 `tokDanger` / 取消 `colorMuted`。`ReduceMotion` 时全部静止。
 - **选择**：设置「进度样式」条形 / 仪表盘（助手任务卡）；OpenUI `{style: "gauge"}`；状态栏固定细条。
+
+## 任务视图翻转（TASKSYS）
+
+- **入口**：状态栏任务指示、工具栏「任务」、`Ctrl+Shift+J`；再次触发或 `Esc` 翻回。只翻中间文件区，侧栏 / 工具栏 / 助手不动。
+- **动画** `tasks_flip.go:flipPane`：`RotateY` + `Perspective(1400)`，360ms `ui.EaseInOut`；0–90° 正面、90–180° 背面；明暗叠层 α = 0.22·sin(角度)。`ReduceMotion`：360ms 交叉淡入淡出。
+- **任务卡** `tasks_view.go`：标题 14 号 600、数字行 12.5 号、主进度条 10px（或仪表盘）、子项细条 5px；卡片 1px 分隔色描边、10px 圆角、12px 内边距、卡间距 10。
+- **状态色**：沿用 PROG-STYLE（进行中强调色 / 仪表盘绿、完成绿、失败红、取消与排队灰、暂停琥珀）。

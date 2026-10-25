@@ -746,7 +746,7 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 				a.assistantChoices(c.Key("choice-"+itoa(i)), i, hide)
 			}
 			for _, i := range errs {
-				a.assistErrorLine(c, i, turns[i].Text)
+				a.assistErrorLine(c, i, turns[i].Text, turns[i].At)
 			}
 		},
 	})

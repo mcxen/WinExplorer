@@ -78,3 +78,13 @@ func TestAssistErrorText(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestAssistErrorReport(t *testing.T) {
+	at := time.Date(2026, 10, 25, 15, 0, 0, 0, time.UTC)
+	got := assistErrorReport("boom {style}", at, `C:\l\sunvale.log`)
+	for _, w := range []string{"出错了：boom {style}", "2026-10-25 15:00:00", `C:\l\sunvale.log`} {
+		if !strings.Contains(got, w) {
+			t.Fatalf("missing %q in %q", w, got)
+		}
+	}
+}

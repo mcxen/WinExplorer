@@ -2,6 +2,9 @@ package main
 
 import (
 	"strings"
+	"time"
+
+	"sunvale/internal/applog"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
@@ -34,7 +37,7 @@ func assistErrorText(err error) string {
 // assistErrorLine draws a failed run's message inside the conversation: one
 // ellipsized line with a disclosure, expanded into a height-capped scroll.
 // It never floats over the composer.
-func (a *App) assistErrorLine(c *ui.Context, i int, text string) {
+func (a *App) assistErrorLine(c *ui.Context, i int, text string, at time.Time) {
 	open := a.assist.errOpen[i]
 	first, _, more := strings.Cut(text, "\n")
 	key := "assist-err-" + itoa(i)
@@ -56,6 +59,13 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string) {
 				ui.Text(c, label).FontSize(11).TextColor(colorMuted()).Shrink(0)
 			}
 		})
+		full := assistErrorReport(text, at, applog.Path())
+		row.ContextMenu(func(m *ui.Menu) {
+			if m.Item("复制错误信息").Chosen() {
+				c.WriteClipboard(full)
+				a.assist.copiedKey, a.assist.copiedAt = key+"-copy", time.Now()
+			}
+		})
 		if row.Clicked() {
 			if a.assist.errOpen == nil {
 				a.assist.errOpen = map[int]bool{}
@@ -63,7 +73,8 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string) {
 			a.assist.errOpen[i] = !open
 		}
 		// 查看日志 (applog_glue.go): the full request trace for this failure.
-		ui.Row(c).Key("log").FillWidth().Padding(0, 6).Children(func() {
+		ui.Row(c).Key("log").FillWidth().Padding(0, 6).Gap(8).AlignItems(ui.Center).Children(func() {
+			a.assistCopyButton(c, key+"-copy", full)
 			if ui.ButtonBase(c).Key("view-log").Label("查看日志").Children(func() {
 				ui.Text(c, "查看日志").FontSize(11).TextColor(colorAccent())
 			}).Clicked() {
@@ -72,10 +83,24 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string) {
 		})
 		if open {
 			ui.Scroll(c).Key("detail").FillWidth().MaxHeight(160).MinHeight(0).Children(func() {
-				ui.Text(c, text).FontSize(12).TextColor(colorText()).Wrap().Padding(0, 6)
+				ui.Text(c, text).FontSize(12).TextColor(colorText()).Wrap().Selectable().Padding(0, 6)
 			})
 		}
 	})
 }
 
 var assistErrorColor = ui.Hex("#D14343")
+
+// assistErrorReport is what 复制 puts on the clipboard: the full error plus
+// when it happened and where the log lives, ready to paste into feedback.
+func assistErrorReport(text string, at time.Time, logPath string) string {
+	var b strings.Builder
+	b.WriteString("出错了：" + text)
+	if !at.IsZero() {
+		b.WriteString("\n时间：" + at.Format("2006-01-02 15:04:05 -0700"))
+	}
+	if logPath != "" {
+		b.WriteString("\n日志：" + logPath)
+	}
+	return b.String()
+}

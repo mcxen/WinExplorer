@@ -440,3 +440,14 @@
 - **验收**：日志写到 `%LOCALAPPDATA%\Sunvale\logs\sunvale.log`（macOS `~/Library/Logs/Sunvale`，Linux `~/.local/state/sunvale/logs`），5 MB × 5 轮转；main 第一行初始化，顶层与助手运行 panic 带栈；设置可调级别、打开文件夹、导出 zip；助手错误行“查看日志”；助手 run id、模型、Base URL、HTTP 状态 / 耗时 / 错误体片段、token 用量、工具调用与结果耗时、MCP、OpenUI 解析失败、定时触发均有记录且密钥脱敏；单测覆盖脱敏、轮转、级别过滤；`go build`、`go vet`、Windows 交叉编译、`go test ./... -short` 通过。
 - **已知限制**：流式响应仅记首包耗时；脱敏为规则匹配；非 Go 运行时的原生崩溃不记录。
 - **状态**：已完成，合入 `main`。
+
+## AST-FSTRING — 指令中的字面花括号
+- **问题**：Eino `ChatModelAgent` 默认 `GenModelInput` 在存在 SessionValues 时把 Instruction 当 FString 模板格式化；系统提示含 OpenUI 文档 `{style: "gauge"}` 等字面花括号，报 `could not find key: style`。
+- **修复**：`internal/assistant/genmodelinput.go` 自定义 `GenModelInput`，只把已有会话值的 `{key}` 原样替换，其余花括号原样保留；`assistant_run.go` 唯一的 `NewChatModelAgent`（助手/定时/任务均经此）接入。
+- **验收**：`genmodelinput_test.go` 带 SessionValues 跑真实 Runner，指令 `{style: "gauge"}` 原样传给模型且无错误。
+- **状态**：已完成，合入 `main`。
+
+## AST-ERRCOPY — 助手错误行可复制
+- **目标**：错误行可复制反馈：复制图标按钮（复用消息复制样式）、右键「复制错误信息」、展开详情文本可选中；复制内容含完整错误、时间、日志路径；详情区限高可滚动。
+- **范围**：`assistant_error.go`、`assistant.go`、`assistant_error_test.go`。
+- **状态**：已完成，合入 `main`。

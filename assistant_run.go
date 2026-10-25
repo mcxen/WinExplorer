@@ -353,6 +353,7 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: tools},
 		},
 		MaxIterations: iters,
+		GenModelInput: assistant.GenModelInput,
 	})
 	if err != nil {
 		return assistRunResult{}, err

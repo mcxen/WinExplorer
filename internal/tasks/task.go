@@ -117,6 +117,10 @@ type Snapshot struct {
 	Speed float64       `json:"-"` // units per second
 	ETA   time.Duration `json:"-"`
 
+	// Ask is the question the task waits on (a name conflict), nil when
+	// it is not waiting.
+	Ask *Ask `json:"-"`
+
 	Recent      []Item `json:"recent,omitempty"`
 	Failed      []Item `json:"failed,omitempty"`
 	FailedCount int    `json:"failedCount,omitempty"`
@@ -172,6 +176,7 @@ type task struct {
 	cancel   context.CancelFunc
 	done     chan struct{} // closed when the run ends
 	lastEmit time.Time
+	answer   chan Answer
 	slot     string
 }
 
@@ -181,6 +186,10 @@ func (t *task) snapshot(now time.Time) Snapshot {
 	s := t.snap
 	s.Recent = append([]Item(nil), t.snap.Recent...)
 	s.Failed = append([]Item(nil), t.snap.Failed...)
+	if s.Ask != nil {
+		q := *s.Ask
+		s.Ask = &q
+	}
 	if s.State == Running && len(t.samples) > 0 {
 		first := t.samples[0]
 		if dt := now.Sub(first.at).Seconds(); dt > 0.2 {

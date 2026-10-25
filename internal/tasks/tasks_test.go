@@ -212,3 +212,42 @@ func TestNilReporterIsInert(t *testing.T) {
 		t.Fatal("reader")
 	}
 }
+
+func TestAskBlocksUntilAnswered(t *testing.T) {
+	m := NewManager(Options{})
+	got := make(chan Answer, 1)
+	id := m.Submit(Spec{}, func(r *Reporter) error {
+		a, err := r.Ask(Ask{Item: "a.txt", Options: []string{ChoiceReplace, ChoiceSkip, ChoiceKeep}, Rest: 3})
+		got <- a
+		return err
+	})
+	deadline := time.Now().Add(2 * time.Second)
+	for m.Get(id).Ask == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("no question")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if q := m.Get(id).Ask; q.Item != "a.txt" || q.Rest != 3 {
+		t.Fatalf("ask %+v", q)
+	}
+	_ = m.Answer(id, Answer{Choice: ChoiceSkip, All: true})
+	if a := <-got; a.Choice != ChoiceSkip || !a.All {
+		t.Fatalf("answer %+v", a)
+	}
+	if s, _ := m.Wait(context.Background(), id); s.Ask != nil || s.State != Done {
+		t.Fatalf("%+v", s)
+	}
+	c := m.Submit(Spec{}, func(r *Reporter) error { _, err := r.Ask(Ask{Item: "b"}); return err })
+	for m.Get(c).Ask == nil {
+		time.Sleep(time.Millisecond)
+	}
+	_ = m.Cancel(c)
+	if s, _ := m.Wait(context.Background(), c); s.State != Canceled {
+		t.Fatalf("cancel while asking: %v", s.State)
+	}
+	var nilR *Reporter
+	if a, _ := nilR.Ask(Ask{Options: []string{ChoiceSkip, ChoiceKeep}}); a.Choice != ChoiceKeep {
+		t.Fatalf("nil reporter %+v", a)
+	}
+}

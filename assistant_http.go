@@ -411,7 +411,7 @@ func (a *App) a2aMessageSend(w http.ResponseWriter, req a2aRPCRequest) {
 	memories := readAssistantMemories(assistantSideRootFor(assistantConfigPath()))
 	run := assistRun{
 		origin: "a2a",
-		prov: prov, root: root, book: disk.ArchivePasswords,
+		prov:   prov, root: root, book: disk.ArchivePasswords,
 		files: files, autopilot: p.Metadata.Autopilot || disk.Prefs.Autopilot,
 		prefs: disk.Prefs,
 		hist:  []*schema.Message{schema.UserMessage(text)}, memories: memories,
@@ -715,7 +715,7 @@ func (a *App) runAssistantFromMCP(ctx context.Context, in assistantRunArgs) (ass
 	hist = append(hist, schema.UserMessage(text))
 	run := assistRun{
 		origin: "mcp",
-		prov: prov, root: root, book: disk.ArchivePasswords, files: in.Files,
+		prov:   prov, root: root, book: disk.ArchivePasswords, files: in.Files,
 		autopilot: in.Autopilot || disk.Prefs.Autopilot, prefs: disk.Prefs, hist: hist,
 		memories: readAssistantMemories(assistantSideRootFor(assistantConfigPath())),
 	}

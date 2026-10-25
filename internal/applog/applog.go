@@ -350,7 +350,9 @@ func (h *redactHandler) WithAttrs(as []slog.Attr) slog.Handler {
 	return &redactHandler{h.Handler.WithAttrs(out)}
 }
 
-func (h *redactHandler) WithGroup(n string) slog.Handler { return &redactHandler{h.Handler.WithGroup(n)} }
+func (h *redactHandler) WithGroup(n string) slog.Handler {
+	return &redactHandler{h.Handler.WithGroup(n)}
+}
 
 // Since is a millisecond duration attr.
 func Since(t time.Time) slog.Attr { return slog.Int64("ms", time.Since(t).Milliseconds()) }

@@ -4,10 +4,11 @@ go 1.27.2
 
 require (
 	github.com/aiq/go-rtf v0.0.0-20250119212555-f57508a7d581
+	github.com/cloudsoda/go-smb2 v0.0.0-20260918041005-0c5d69b69701
 	github.com/cloudwego/eino v0.9.11
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.11
 	github.com/cloudwego/eino-ext/components/tool/mcp/officialmcp v0.1.1
-	github.com/egoist/mygo v0.5.5
+	github.com/egoist/mygo v0.6.0
 	github.com/lu4p/cat v0.1.5
 	github.com/mgilbir/spine v0.4.0
 	github.com/mholt/archives v0.1.5
@@ -15,6 +16,7 @@ require (
 	github.com/oneo-me/onevra/source v0.2026.11
 	golang.org/x/image v0.47.0
 	golang.org/x/net v0.59.0
+	golang.org/x/sys v0.49.0
 	mvdan.cc/sh/v3 v3.11.0
 )
 
@@ -29,7 +31,6 @@ require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
-	github.com/cloudsoda/go-smb2 v0.0.0-20260918041005-0c5d69b69701 // indirect
 	github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.15 // indirect
@@ -83,7 +84,6 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

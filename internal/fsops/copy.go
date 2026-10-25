@@ -78,7 +78,56 @@ func CopyName(name string, isDir bool, n int) string {
 	return stem + suffix + ext
 }
 
-func CopyFile(src, dst string, info os.FileInfo) error {
+func CopyFile(src, dst string, info os.FileInfo) error { return CopyFileH(src, dst, info, nil) }
+
+// Hooks let a caller watch and steer a copy: Item names each file (its
+// path relative to the copy's root) before its bytes, Wrap wraps its
+// reader (progress, pause, cancel), Wait runs between files. Any may be
+// nil; a nil *Hooks copies plainly.
+type Hooks struct {
+	Item func(rel string, size int64)
+	Done func()
+	Wrap func(io.Reader) io.Reader
+	Wait func() error
+	root string
+}
+
+func (h *Hooks) item(path string, size int64) error {
+	if h == nil {
+		return nil
+	}
+	if h.Wait != nil {
+		if err := h.Wait(); err != nil {
+			return err
+		}
+	}
+	if h.Item != nil {
+		rel := filepath.Base(path)
+		if h.root != "" {
+			if r, err := filepath.Rel(h.root, path); err == nil {
+				rel = filepath.ToSlash(filepath.Join(filepath.Base(h.root), r))
+			}
+		}
+		h.Item(rel, size)
+	}
+	return nil
+}
+
+func (h *Hooks) done() {
+	if h != nil && h.Done != nil {
+		h.Done()
+	}
+}
+
+func (h *Hooks) wrap(r io.Reader) io.Reader {
+	if h == nil || h.Wrap == nil {
+		return r
+	}
+	return h.Wrap(r)
+}
+
+// CopyFileH is CopyFile under h.
+func CopyFileH(src, dst string, info os.FileInfo, h *Hooks) error {
 	if info.Mode()&os.ModeSymlink != 0 {
 		target, err := os.Readlink(src)
 		if err != nil {
@@ -86,6 +135,10 @@ func CopyFile(src, dst string, info os.FileInfo) error {
 		}
 		return os.Symlink(target, dst)
 	}
+	if err := h.item(src, info.Size()); err != nil {
+		return err
+	}
+	defer h.done()
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -95,7 +148,7 @@ func CopyFile(src, dst string, info os.FileInfo) error {
 	if err != nil {
 		return err
 	}
-	_, copyErr := io.Copy(out, in)
+	_, copyErr := io.Copy(out, h.wrap(in))
 	closeErr := out.Close()
 	if copyErr != nil {
 		_ = os.Remove(dst)
@@ -109,13 +162,21 @@ func CopyFile(src, dst string, info os.FileInfo) error {
 	return nil
 }
 
-func CopyDir(src, dst string) error {
+func CopyDir(src, dst string) error { return CopyDirH(src, dst, nil) }
+
+// CopyDirH is CopyDir under h; Item names files relative to src's parent.
+func CopyDirH(src, dst string, h *Hooks) error {
 	srcClean := filepath.Clean(src)
 	seen := map[string]struct{}{srcClean: {}}
-	return copyDirRec(srcClean, dst, seen)
+	if h != nil {
+		hh := *h
+		hh.root = srcClean
+		h = &hh
+	}
+	return copyDirRec(srcClean, dst, seen, h)
 }
 
-func copyDirRec(src, dst string, seen map[string]struct{}) error {
+func copyDirRec(src, dst string, seen map[string]struct{}, h *Hooks) error {
 	info, err := os.Lstat(src)
 	if err != nil {
 		return err
@@ -135,7 +196,7 @@ func copyDirRec(src, dst string, seen map[string]struct{}) error {
 			return err
 		}
 		if fi.Mode()&os.ModeSymlink != 0 {
-			if err := CopyFile(srcPath, dstPath, fi); err != nil {
+			if err := CopyFileH(srcPath, dstPath, fi, h); err != nil {
 				return err
 			}
 			continue
@@ -149,16 +210,32 @@ func copyDirRec(src, dst string, seen map[string]struct{}) error {
 				}
 				seen[real] = struct{}{}
 			}
-			if err := copyDirRec(srcPath, dstPath, seen); err != nil {
+			if err := copyDirRec(srcPath, dstPath, seen, h); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := CopyFile(srcPath, dstPath, fi); err != nil {
+		if err := CopyFileH(srcPath, dstPath, fi, h); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// TreeSize is the bytes and regular files under path (path itself when
+// it is a file); symlinks count as zero-byte items.
+func TreeSize(path string) (bytes int64, files int) {
+	_ = filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		files++
+		if info, err := d.Info(); err == nil && info.Mode().IsRegular() {
+			bytes += info.Size()
+		}
+		return nil
+	})
+	return
 }
 
 func UniqueTrashName(dir, name string) (string, error) {

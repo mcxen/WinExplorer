@@ -194,7 +194,11 @@ func appTheme(c *ui.Context) *ui.Theme {
 		FontSize: 12,
 	}
 	if visualV2 {
-		t.Radius = v2RowRadius
+		t.Radius = v2RowRadius // dialogs double it → 14, the pane radius
+		t.Font = uiFontFamily()
+		t.ScrollbarWidth = 7
+		t.Scrollbar = tokText.Alpha(0.28)
+		t.Focus = tokAccent.Alpha(0.5)
 	}
 	// The adjustments MyGo's own themes make for the desktop's preferences,
 	// so a text scale or a higher contrast setting still applies.

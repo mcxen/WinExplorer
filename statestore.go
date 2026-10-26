@@ -78,6 +78,9 @@ type appSettings struct {
 	// TreeNoExpand turns off 展开到打开的文件夹: navigating leaves the
 	// sidebar tree as the user opened it (Explorer's option off).
 	TreeNoExpand bool `json:"treeNoExpand,omitempty"`
+	// SystemFont uses the system UI font instead of the embedded faces
+	// under the macOS 26 style (fonts.go).
+	SystemFont bool `json:"systemFont,omitempty"`
 	// VisualStyle is 视觉风格: "v2" (default for fresh installs), "" 经典 (visual.go).
 	VisualStyle    string `json:"visualStyle,omitempty"`
 	ShowExt        bool   `json:"showExt"`

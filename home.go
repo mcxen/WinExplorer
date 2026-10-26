@@ -143,7 +143,7 @@ func (a *App) homeSectionGap(c *ui.Context) {
 // opens it — a folder is entered, a file is shown in its folder.
 func (a *App) homePin(c *ui.Context, pins []Entry, i int) {
 	e := pins[i]
-	tile := ui.ButtonBase(c.Key("home-pin-"+e.Path)).Fill().Height(40).Radius(4).
+	tile := ui.ButtonBase(c.Key("home-pin-"+e.Path)).Fill().Height(40).Radius(rowR()).
 		Padding(0, 8).Gap(10).AlignItems(ui.Center).Label(e.Name)
 	if tile.Hovered() || a.isSelected(e.Path) {
 		tile.Background(colorHover())

@@ -176,7 +176,7 @@ func (a *App) saveColWidths() {
 // keep width.
 func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32, flex bool, slot *float32) {
 	cell := ui.ButtonBase(c).Height(a.detailsRowH()).Padding(0, 8).Gap(4).
-		AlignItems(ui.Center).Radius(4).Label(title)
+		AlignItems(ui.Center).Radius(rowR()).Label(title)
 	// A button centers its content; the labels sit where their cells'
 	// text starts, as Explorer's do: 大小 at the end, the rest at the start.
 	cell.Justify(ui.Start)
@@ -268,7 +268,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 	// either side of the cells, shifting every data column right of its header.
 	row := ui.ButtonBase(c.Key(e.Path)).FillWidth().Height(a.detailsRowH()).
 		AlignItems(ui.Center).Justify(ui.Start).Margin(0, rowInset).
-		MinWidth(a.detailsWidth()).Radius(4).Label(e.Name)
+		MinWidth(a.detailsWidth()).Radius(rowR()).Label(e.Name)
 	a.paintSelect(row, e.Path)
 	aiFxRow(c, row, e.Path, a.detailsRowH(), 4)
 	row.Children(func() {

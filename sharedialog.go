@@ -208,7 +208,7 @@ func (a *App) shareBody(c *ui.Context) {
 		ui.Row(c).FillWidth().Gap(6).Children(func() {
 			for _, o := range shareExpiryOptions {
 				label := o.label
-				btn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(4).Label(label)
+				btn := ui.ButtonBase(c).Height(28).Padding(0, 10).Radius(rowR()).Label(label)
 				if d.expires == label {
 					btn.Background(colorSelected())
 				} else if btn.Hovered() {
@@ -240,7 +240,7 @@ func (a *App) shareBody(c *ui.Context) {
 		btns.Children(func() {
 			uikitSecondaryButton(c, "关闭", func() { d.open = false })
 			if d.result == nil {
-				btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+				btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 					Background(colorAccent()).Label("创建分享")
 				btn.Children(func() {
 					ui.Text(c, "创建分享").FontSize(12).TextColor(colorBtnText())

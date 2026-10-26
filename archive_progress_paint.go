@@ -170,7 +170,7 @@ func paintArchiveStatus(c *ui.Context, open func()) bool {
 	}
 	s := live[len(live)-1]
 	ui.Row(c.Key("archive-status")).Gap(6).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
-		ob := ui.ButtonBase(c.Key("open")).Radius(4).Padding(2, 4).Shrink(1).MinWidth(0).Label("任务视图")
+		ob := ui.ButtonBase(c.Key("open")).Radius(rowR()).Padding(2, 4).Shrink(1).MinWidth(0).Label("任务视图")
 		ob.Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).MinWidth(0).Children(func() { paintArchiveStatusBody(c, s, live) })
 		})

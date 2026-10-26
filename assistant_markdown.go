@@ -171,7 +171,7 @@ func assistOpenPlaceholder(c *ui.Context) {
 // mygo's widgets.go cites for placeholders, shared with the file-row breath.
 func assistOpenSkelBar(c *ui.Context, key string, widthFrac float32, calm bool) {
 	ui.Row(c.Key(key)).FillWidth().Height(8).Children(func() {
-		bar := ui.Box(c).Height(8).Radius(4).Grow(widthFrac)
+		bar := ui.Box(c).Height(8).Radius(rowR()).Grow(widthFrac)
 		pulse := float32(0.65)
 		if !calm {
 			pulse = 0.50 + 0.50*bar.Loop("pulse", aiFxPulse, ui.Bounce(ui.EaseInOut))
@@ -243,7 +243,7 @@ func assistCodeBlock(c *ui.Context, md *assistMD, b *markdown.CodeBlockView) {
 			if copied {
 				label, icon = "已复制", lucide.Check()
 			}
-			btn := ui.ButtonBase(c).Padding(2, 6).Radius(4).Gap(4).AlignItems(ui.Center).
+			btn := ui.ButtonBase(c).Padding(2, 6).Radius(rowR()).Gap(4).AlignItems(ui.Center).
 				Label("复制代码").Disabled(b.Open)
 			if btn.Hovered() && !b.Open {
 				btn.Background(colorHover())

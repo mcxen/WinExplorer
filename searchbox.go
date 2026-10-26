@@ -1139,7 +1139,7 @@ func (a *App) searchBoxStatus(c *ui.Context) {
 		}
 		if searchIndexOn() {
 			btn := ui.ButtonBase(c.Key("search-index-rebuild")).Height(18).Shrink(0).
-				Padding(0, 6).Gap(4).Radius(4).AlignItems(ui.Center).Label("重建索引")
+				Padding(0, 6).Gap(4).Radius(rowR()).AlignItems(ui.Center).Label("重建索引")
 			if btn.Hovered() {
 				btn.Background(colorHover())
 			}

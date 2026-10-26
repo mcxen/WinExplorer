@@ -401,8 +401,12 @@ func (a *App) contentPanes(c *ui.Context) {
 	if visualV2 {
 		// v2: keep classic's FillHeight Row (cross-axis % height in the
 		// Split Column), gutter via Margin, card chrome on that same row.
-		row.Margin(0, v2Gutter, v2Gutter, 2)
-		a.contentRow(c, v2Card(row))
+		// The gutter is the outer row's padding: a Margin on a FillWidth row
+		// pushed the card's right edge past the window.
+		row.Padding(0, v2Gutter, v2Gutter, 2).Children(func() {
+			card := ui.Row(c).Grow(1).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+			a.contentRow(c, v2Card(card))
+		})
 		return
 	}
 	a.contentRow(c, row)

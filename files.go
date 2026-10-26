@@ -389,6 +389,9 @@ func (a *App) checkboxCell(c *ui.Context, e Entry) {
 }
 
 func (a *App) paintSelect(el ui.Element, path string) {
+	if visualV2 {
+		el.Radius(v2RowRadius) // macOS 26: rounded selection, inset in the card
+	}
 	switch {
 	case a.isSelected(path):
 		el.Background(colorSelected())

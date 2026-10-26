@@ -1,28 +1,31 @@
-# 11 视觉语言 v2（VISUAL2）
+# 11 视觉语言：macOS 26 风格（原 v2）
 
-目标：在保持 Explorer 密度（行高、字号、内边距不变）的前提下，提供可切换的 v2 视觉风格：Kero 式 mist 底色、浮起内容卡、侧栏选中 chip、蓝色强调；**v2 为默认**，经典（Windows 11 扁平）仍可在设置中切换。
+在保持 Explorer 密度的前提下，对齐 macOS 26 Tahoe / Liquid Glass：浮动毛玻璃侧栏、胶囊工具栏分组、同心圆角、系统蓝强调、内嵌字体。**默认**；经典（Windows 11 扁平）仍可切换。设置值保持 `"v2"`（兼容已保存配置），界面名称为 **macOS 26**。
 
 ## 令牌（`visual.go`）
 
 | 常量 | 值 | 用途 |
 | --- | --- | --- |
-| `v2CardRadius` | **8** | 内容卡、任务卡 |
-| `v2RowRadius` | **4** | 侧栏选中行、主题 `appTheme.Radius`（对话框组件加倍 → **8**） |
-| `v2InputRadius` | **4** | 地址栏 / 搜索框（`fieldRadius()`） |
-| `v2Gutter` | 8 | 内容卡外侧 wash 间距 |
+| `v2PaneRadius` | 14 | 浮动侧栏、内容卡、对话框（`Theme.Radius` 7 × 2） |
+| `v2CardRadius` | 12 | 卡片内的卡（任务、磁盘、OpenUI） |
+| `v2RowRadius` / `rowR()` | 7 | 行、选中高亮、焦点环、小按钮（经典 4） |
+| `ctlR()` | 8 | 按钮、窗格内输入（经典 6） |
+| `v2InputRadius` / `v2PillRadius` | 16 | 32 高的地址/搜索框与工具栏按钮组 = 胶囊 |
+| `v2Gutter` | 8 | 窗口 → 浮动窗格内缩 |
 
-经典：`appTheme.Radius = 6`（对话框 12），地址/搜索圆角 6。
+同心规则：子形状内缩 d 时取 R−d（窗格 14，行内缩 6 → 7）。色板为 Apple 系统色（蓝 #007AFF / #0A84FF 等）。
 
-## 行为
+## 材质 / 模糊
 
-- `appSettings.VisualStyle`：`"v2"`（`defaultSettings` 默认）、`""` 经典。
-- `syncVisual` → `resolveV2` 覆盖色板；根节点 mist 渐变；`contentPanes` 将文件区 / 预览 / 助手包进一张 `v2Card`。
-- 设置 → 外观 → 视觉风格：`经典` / `v2`。
+- 窗口：`mygo.VibrancyTabbed`——Windows 11 为 Mica，macOS 为原生 vibrancy；无原生材质（Linux、旧 Windows）时绘制 mist 渐变。
+- `macGlass`：MyGo `plugins/glass` Liquid Glass（真实背景模糊，GPU 着色器），用于侧栏（`macFloat`）、工具栏胶囊（`macPill`）、停靠助手窗格；对话框为 Onevra 玻璃面板；任务翻转沿用自适应 `Blur`。
+- 回退：高对比度、`glassOn=false`、或翻转测得超预算（`flipLowEnd`）→ 半透明色 `glassTint()`。
+- 右键菜单为系统原生菜单（macOS NSMenu 自带模糊），不由应用绘制。
 
-## 纵向对齐
+## 字体（`fonts.go`，`fonts/OFL-*.txt`）
 
-图标、文字、徽章、按钮在各自行高内垂直居中；v2 下侧栏列表顶距收为 4，与内容卡顶齐；搜索图标与 24 DIP 输入同高居中；状态栏 / 任务卡进度条固定高度并 `AlignSelf(Center)`。
+内嵌 SIL OFL 1.1：Inter 可变（Latin 子集）、JetBrains Mono 可变（Latin + 制表符）、Noto Sans CJK SC 常规/粗体（GB2312 子集）。缺字回退系统字体。设置 → 界面字体：内嵌 / 系统。SF Pro 许可禁止分发，未内嵌。
 
 ## 截图
 
-`docs/assets/shots/VISUAL2/`：`files|tasks` × `classic|v2` × `light|dark`。
+`docs/assets/shots/MACOS26/`（`TestMacOS26Shots`，`SUNVALE_SHOT_DIR`）；旧 v2 对比 `00-v2-before.png`；`VISUAL2/` 为历史。

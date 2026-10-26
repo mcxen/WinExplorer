@@ -297,13 +297,13 @@ func (a *App) openVideoWithSystem(path string) {
 // duplicate interactive chrome (same split as IMAGE1).
 func (a *App) videoSidebarBody(c *ui.Context, st *previewState) {
 	if st.bitmap != nil {
-		ui.Box(c).FillWidth().Shrink(0).Radius(4).Clip().Children(func() {
+		ui.Box(c).FillWidth().Shrink(0).Radius(rowR()).Clip().Children(func() {
 			ui.Image(c, st.bitmap).Fit(ui.Contain)
 		})
 	} else {
 		a.paintVideoBroken(c, "无法提取关键帧（需 ffmpeg）")
 	}
-	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 		Background(colorAddress()).Border(1, colorDivider()).
 		Label("用系统播放器打开").Tooltip("用系统默认播放器打开")
 	btn.Children(func() {

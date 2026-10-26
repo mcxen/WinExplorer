@@ -167,7 +167,11 @@ func (a *App) assistantPane(c *ui.Context) {
 	} else {
 		pane.Width(a.assist.width).Shrink(0)
 	}
-	pane.Background(c.Theme().Background)
+	if visualV2 && !a.assist.full {
+		macGlass(c, pane, a.flipLowEnd)
+	} else {
+		pane.Background(c.Theme().Background)
+	}
 	pane.Children(func() {
 		ui.Box(c).Width(1).FillHeight().Shrink(0).Background(colorDivider())
 		if !a.assist.full {
@@ -1192,7 +1196,7 @@ func (a *App) assistantRecords(c *ui.Context) {
 }
 
 func (a *App) assistantSessionRow(c *ui.Context, meta aiSessionMeta) {
-	row := ui.Row(c.Key(meta.ID)).FillWidth().Gap(4).AlignItems(ui.Center).Radius(4)
+	row := ui.Row(c.Key(meta.ID)).FillWidth().Gap(4).AlignItems(ui.Center).Radius(rowR())
 	current := meta.ID == a.assist.sessionID
 	if current {
 		row.Background(colorSelected())
@@ -1204,7 +1208,7 @@ func (a *App) assistantSessionRow(c *ui.Context, meta aiSessionMeta) {
 		if label == "" {
 			label = "新会话"
 		}
-		btn := ui.ButtonBase(c).Grow(1).MinWidth(0).Padding(2, 4).Radius(4).Label(label)
+		btn := ui.ButtonBase(c).Grow(1).MinWidth(0).Padding(2, 4).Radius(rowR()).Label(label)
 		btn.Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 				title := ui.Text(c, label).FontSize(12).TextColor(colorText()).SingleLine()

@@ -21,7 +21,7 @@ const (
 // uikitSecondaryButton is the white-on-raised-surface button with a
 // hairline border: 取消, 打开, 恢复默认, and friends.
 func uikitSecondaryButton(c *ui.Context, label string, onClick func()) {
-	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 		Background(colorAddress()).Border(1, colorDivider()).Label(label)
 	btn.Children(func() {
 		ui.Text(c, label).FontSize(12).TextColor(colorText())
@@ -35,7 +35,7 @@ func uikitSecondaryButton(c *ui.Context, label string, onClick func()) {
 // Its label uses colorBtnText — white on the light accent, near-black on
 // the dark one, where white reads poorly.
 func uikitPrimaryButton(c *ui.Context, label string, onClick func()) {
-	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 		Background(colorAccent()).Label(label)
 	btn.Children(func() {
 		ui.Text(c, label).FontSize(12).TextColor(colorBtnText())

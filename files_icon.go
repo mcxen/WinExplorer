@@ -190,7 +190,7 @@ const tileWarmup = 12
 // the name under it. i is the tile's place in the listing, which decides
 // whether a network tile warms up its picture or waits to be looked at.
 func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
-	tile := ui.ButtonBase(c.Key(e.Path)).Fill().Radius(4).Label(e.Name)
+	tile := ui.ButtonBase(c.Key(e.Path)).Fill().Radius(rowR()).Label(e.Name)
 	if e.VolTotal > 0 {
 		tile.Tooltip(driveCapacity(e) + "（" + drivePercent(e) + " 可用）")
 	}
@@ -275,7 +275,7 @@ func (a *App) tileGlyph(c *ui.Context, e Entry, box float32, eager bool) {
 // mediaTile is a picture's tile: the picture fills it, and a video's gets
 // the play badge over it.
 func (a *App) mediaTile(c *ui.Context, e Entry, box float32, bm *ui.Bitmap) {
-	frame := ui.Box(c).Size(box, box).Shrink(0).Radius(4).Clip()
+	frame := ui.Box(c).Size(box, box).Shrink(0).Radius(rowR()).Clip()
 	frame.Children(func() {
 		ui.Image(c, bm).Fit(ui.Cover).Size(box, box)
 		if isVideoExt(lowerExt(e.Path)) {

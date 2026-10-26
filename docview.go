@@ -407,7 +407,7 @@ func (a *App) docFlipButton(c *ui.Context, glyph, tip string, enabled bool, on f
 
 func (a *App) docPageCard(c *ui.Context, i int, w, h float32) {
 	bm := a.docQV.pages[i]
-	card := ui.Box(c).Width(w).Height(h).Shrink(0).Radius(4).Clip().
+	card := ui.Box(c).Width(w).Height(h).Shrink(0).Radius(rowR()).Clip().
 		Background(ui.RGBA(255, 255, 255, 1)).Border(1, colorDivider())
 	card.Children(func() {
 		if bm != nil {
@@ -448,7 +448,7 @@ func docPoster(path string) (*ui.Bitmap, error) {
 }
 
 // monoFont is the fixed-width stack for text/code previews.
-const monoFont = "SF Mono, Menlo, Consolas, DejaVu Sans Mono, monospace"
+const monoFont = "Sunvale Mono, SF Mono, Menlo, Consolas, DejaVu Sans Mono, monospace"
 
 // expandTabs widens tabs for the read-only text area, which draws them
 // as nothing, so code keeps its indentation in the monospace preview.

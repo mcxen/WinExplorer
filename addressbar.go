@@ -413,7 +413,7 @@ const addressRecentLimit = 15
 // menu of recently visited folders (title · path). Picking one navigates.
 // Editing the address stays on blank-click / Ctrl+L / F4 / the bar menu.
 func (a *App) addressRecentButton(c *ui.Context) {
-	btn := ui.ButtonBase(c).Size(24, 24).Radius(4).Shrink(0).
+	btn := ui.ButtonBase(c).Size(24, 24).Radius(rowR()).Shrink(0).
 		Label("最近访问").Tooltip("最近访问")
 	switch {
 	case btn.Pressed():
@@ -467,7 +467,7 @@ func (a *App) addressRecentItems() []addressRecentItem {
 
 func (a *App) crumbButton(c *ui.Context, crumb Crumb, last bool) {
 	path := crumb.Path
-	b := ui.ButtonBase(c.Key("crumb:"+path)).Height(24).Radius(4).
+	b := ui.ButtonBase(c.Key("crumb:"+path)).Height(24).Radius(rowR()).
 		Padding(0, crumbPadX).Shrink(0).MaxWidth(crumbMaxName + 2*crumbPadX).
 		AlignItems(ui.Center).Label(crumb.Name).Tooltip(pathDisplay(path))
 	switch {
@@ -500,7 +500,7 @@ func (a *App) crumbButton(c *ui.Context, crumb Crumb, last bool) {
 // crumbSeparator is the chevron between two crumbs; its menu lists the
 // folders in parent, the folder on the path marked, as Explorer's.
 func (a *App) crumbSeparator(c *ui.Context, parent Crumb) {
-	sep := ui.ButtonBase(c.Key("sep:"+parent.Path)).Size(crumbSepW, 24).Radius(4).Shrink(0).
+	sep := ui.ButtonBase(c.Key("sep:"+parent.Path)).Size(crumbSepW, 24).Radius(rowR()).Shrink(0).
 		AlignItems(ui.Center).Justify(ui.Center).Label(parent.Name + " 中的文件夹")
 	switch {
 	case sep.Pressed():
@@ -523,7 +523,7 @@ func (a *App) crumbSeparator(c *ui.Context, parent Crumb) {
 // crumbOverflow is the "…" that holds the crumbs the bar has no room for,
 // nearest first.
 func (a *App) crumbOverflow(c *ui.Context, hidden []Crumb) {
-	more := ui.ButtonBase(c.Key("crumb-more")).Size(crumbMoreW, 24).Radius(4).Shrink(0).
+	more := ui.ButtonBase(c.Key("crumb-more")).Size(crumbMoreW, 24).Radius(rowR()).Shrink(0).
 		AlignItems(ui.Center).Justify(ui.Center).Label("更多位置").Tooltip("更多位置")
 	switch {
 	case more.Pressed():

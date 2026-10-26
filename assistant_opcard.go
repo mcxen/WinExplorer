@@ -279,7 +279,7 @@ func (a *App) assistOpFoot(c *ui.Context, i int, op *assistant.FileOp) {
 			if op.Danger {
 				bg = t.Danger
 			}
-			btn := ui.ButtonBase(c.Key("op-go")).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+			btn := ui.ButtonBase(c.Key("op-go")).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 				Background(bg).Label(label)
 			if btn.Hovered() {
 				btn.Background(bg.Mix(colorText(), 0.12))
@@ -295,7 +295,7 @@ func (a *App) assistOpFoot(c *ui.Context, i int, op *assistant.FileOp) {
 		}
 		ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "已记录，可撤销").FontSize(11).TextColor(colorMuted()).Grow(1)
-			b := ui.ButtonBase(c.Key("op-undo")).Height(26).Padding(0, 10).Radius(4).Gap(4).
+			b := ui.ButtonBase(c.Key("op-undo")).Height(26).Padding(0, 10).Radius(rowR()).Gap(4).
 				AlignItems(ui.Center).Border(1, colorDivider()).Background(colorAddress()).Label("撤销")
 			if b.Hovered() {
 				b.Background(colorHover())
@@ -394,7 +394,7 @@ func (a *App) assistSpeaker(c *ui.Context, at time.Time) {
 			ui.Text(c, s).FontSize(11).TextColor(colorMuted())
 		}
 		if assistDemoOn() {
-			ui.Text(c, "演示").FontSize(10.5).TextColor(colorMuted()).Padding(1, 6).Radius(4).Background(colorHover())
+			ui.Text(c, "演示").FontSize(10.5).TextColor(colorMuted()).Padding(1, 6).Radius(rowR()).Background(colorHover())
 		}
 	})
 }

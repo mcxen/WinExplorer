@@ -317,7 +317,7 @@ func (a *App) galleryView(c *ui.Context) {
 // frame until it decodes, and the item behaves like any other file —
 // select, open, quick preview, drag, context menu.
 func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
-	tile := ui.ButtonBase(c.Key(p.path)).Size(112, galleryCellH-8).Shrink(0).Radius(4).
+	tile := ui.ButtonBase(c.Key(p.path)).Size(112, galleryCellH-8).Shrink(0).Radius(rowR()).
 		Clip().Label(p.name)
 	t := a.cur()
 	if t.itemBounds == nil {
@@ -360,7 +360,7 @@ func (a *App) galleryTileBody(c *ui.Context, p galleryPhoto) {
 	// The picture fills its square edge to edge; only a picture still
 	// decoding shows the quiet frame, so no grey band is left under a
 	// landscape shot.
-	pic := ui.Box(c).Size(112, 112).Shrink(0).Radius(4).Clip()
+	pic := ui.Box(c).Size(112, 112).Shrink(0).Radius(rowR()).Clip()
 	if galleryThumb(p.path) == nil {
 		pic.Background(colorHover().Alpha(0.35))
 	}

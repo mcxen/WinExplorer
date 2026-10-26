@@ -59,7 +59,7 @@ func (a *App) tabStrip(c *ui.Context) {
 		}
 		// 新建标签页 sits outside the strip, so it stays in reach however far
 		// the strip scrolls.
-		plus := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).
+		plus := ui.ButtonBase(c).Size(28, 28).Radius(rowR()).Shrink(0).
 			Label("新建标签页").Tooltip("新建标签页 (Ctrl+T)")
 		if plus.Hovered() || plus.Pressed() {
 			plus.Background(colorHover())
@@ -117,7 +117,7 @@ func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
 	tab.Children(func() {
 		ui.Text(c, title).FontSize(12).SingleLine().Grow(1).MinWidth(0).
 			TextColor(colorText()).MaxLines(1)
-		close := ui.ButtonBase(c).Size(20, 20).Radius(4).Shrink(0).
+		close := ui.ButtonBase(c).Size(20, 20).Radius(rowR()).Shrink(0).
 			Label("关闭标签页").Tooltip("关闭标签页 (Ctrl+W)")
 		if close.Hovered() || close.Pressed() {
 			close.Background(colorHover())
@@ -415,26 +415,45 @@ func (a *App) commandBar(c *ui.Context) {
 
 		a.commandSep(c)
 
-		a.commandIconButton(c, lucide.Scissors, "剪切", hasSel, a.doCut)
-		a.commandIconButton(c, lucide.Copy, "复制", hasSel, a.doCopy)
-		a.commandIconButton(c, lucide.ClipboardPaste, "粘贴", canPaste, a.doPaste)
-		a.commandIconButton(c, lucide.Pencil, "重命名", hasSel, a.doRenameStart)
-		a.commandIconButton(c, lucide.Share2, "分享", hasSel, a.shareDialogOpen)
-		a.commandIconButton(c, lucide.Trash, "删除", hasSel, a.doDelete)
+		a.toolGroup(c, func() {
+			a.commandIconButton(c, lucide.Scissors, "剪切", hasSel, a.doCut)
+			a.commandIconButton(c, lucide.Copy, "复制", hasSel, a.doCopy)
+			a.commandIconButton(c, lucide.ClipboardPaste, "粘贴", canPaste, a.doPaste)
+			a.commandIconButton(c, lucide.Pencil, "重命名", hasSel, a.doRenameStart)
+			a.commandIconButton(c, lucide.Share2, "分享", hasSel, a.shareDialogOpen)
+			a.commandIconButton(c, lucide.Trash, "删除", hasSel, a.doDelete)
+		})
 
 		a.commandSep(c)
 
-		a.commandMenu(c, lucide.ArrowDownWideNarrow, "排序", "排序", a.sortMenu)
-		a.commandMenu(c, lucide.LayoutGrid, "查看", "查看", a.viewMenu)
-		a.commandIconButton(c, lucide.ListChecks, "任务 (Ctrl+Shift+J)", true, a.toggleTasksView)
-		a.commandIconButton(c, lucide.Bot, "助手", true, a.toggleAssistant)
-
-		a.moreButton(c)
+		a.toolGroup(c, func() {
+			a.commandMenu(c, lucide.ArrowDownWideNarrow, "排序", "排序", a.sortMenu)
+			a.commandMenu(c, lucide.LayoutGrid, "查看", "查看", a.viewMenu)
+		})
+		a.toolGroup(c, func() {
+			a.commandIconButton(c, lucide.ListChecks, "任务 (Ctrl+Shift+J)", true, a.toggleTasksView)
+			a.commandIconButton(c, lucide.Bot, "助手", true, a.toggleAssistant)
+			a.moreButton(c)
+		})
 	})
 }
 
+// toolGroup is a run of toolbar buttons: under macOS 26 a glass capsule
+// (Tahoe's grouped toolbar items), classic just lays them in the bar.
+func (a *App) toolGroup(c *ui.Context, fn func()) {
+	if !visualV2 {
+		fn()
+		return
+	}
+	macPill(c, ui.Row(c).Shrink(0).Margin(0, 3), a.flipLowEnd).Children(fn)
+}
+
 // commandSep is the 1px hairline between command groups, about 16 tall.
+// macOS 26 separates groups by their capsules instead.
 func (a *App) commandSep(c *ui.Context) {
+	if visualV2 {
+		return
+	}
 	ui.Box(c).Width(1).Height(16).Shrink(0).Margin(0, 4).
 		Background(colorDivider())
 }
@@ -453,7 +472,7 @@ func (a *App) commandIconButton(c *ui.Context, icon func() *ui.SVG, tip string, 
 // a label and a chevron. The menu is attached with Element.Menu so the button
 // keeps the command-bar look instead of MenuButton's themed face.
 func (a *App) commandMenu(c *ui.Context, icon func() *ui.SVG, label, tip string, build func(m *ui.Menu)) {
-	btn := ui.ButtonBase(c).Height(32).Padding(4, 8).Gap(4).Radius(4).
+	btn := ui.ButtonBase(c).Height(32).Padding(4, 8).Gap(4).Radius(cmdRadius()).
 		Shrink(0).Label(label).Tooltip(tip)
 	if btn.Hovered() || btn.Pressed() {
 		btn.Background(colorHover())

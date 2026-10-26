@@ -201,14 +201,25 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
-			ID: "visual", Title: "视觉风格", Description: "v2（默认）：柔和底色、浮起内容卡片；经典为 Windows 11 扁平",
+			ID: "visual", Title: "视觉风格", Description: visualStyleLabel + "（默认）：毛玻璃侧栏与工具栏、同心圆角；经典为 Windows 11 扁平",
 			Build: func(c *ui.Context) {
 				sv := 0
 				if a.store.settings().VisualStyle == "v2" {
 					sv = 1
 				}
-				if ui.Segmented(c, &sv, "经典", "v2").Shrink(0).Changed() {
+				if ui.Segmented(c, &sv, "经典", visualStyleLabel).Shrink(0).Changed() {
 					a.applySettings(func(x *appSettings) { x.VisualStyle = []string{"", "v2"}[sv] })
+				}
+			},
+		}, {
+			ID: "font", Title: "界面字体", Description: visualStyleLabel + " 风格下：内嵌 Inter + 思源黑体（Noto Sans SC）或系统字体",
+			Build: func(c *ui.Context) {
+				fv := 0
+				if a.store.settings().SystemFont {
+					fv = 1
+				}
+				if ui.Segmented(c, &fv, "内嵌", "系统").Shrink(0).Changed() {
+					a.applySettings(func(x *appSettings) { x.SystemFont = fv == 1 })
 				}
 			},
 		}, {
@@ -357,7 +368,7 @@ func (a *App) settingsHotkeyButton(c *ui.Context, acc string) {
 		label = "请按键…"
 	}
 	btn := ui.ButtonBase(c.Key("search-hotkey")).Focusable().Height(30).
-		Padding(0, 10).MinWidth(108).Radius(4).
+		Padding(0, 10).MinWidth(108).Radius(rowR()).
 		Background(colorAddress()).Border(1, colorDivider()).Label(label)
 	if a.hotkeyCapture {
 		btn.Border(1, colorAccent())
@@ -716,7 +727,7 @@ func (a *App) extEditBody(c *ui.Context) {
 			uikitSecondaryButton(c, "测试", func() {
 				a.extEditTest()
 			})
-			btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+			btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 				Background(colorAccent()).Label("确定").Disabled(!e.extEditValid())
 			btn.Children(func() {
 				ui.Text(c, "确定").FontSize(12).TextColor(colorBtnText())

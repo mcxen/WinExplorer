@@ -172,7 +172,7 @@ func (a *App) diskVolumeComposition(c *ui.Context, d diskhealth.Disk) {
 		list := components.List(c, nil, len(groups), func(i int) {
 			g := groups[i]
 			ui.Row(c).FillWidth().Padding(8, 6).Gap(8).AlignItems(ui.Center).Children(func() {
-				dot := ui.Box(c).Size(8, 8).Shrink(0).Radius(4)
+				dot := ui.Box(c).Size(8, 8).Shrink(0).Radius(rowR())
 				dot.Draw(func(p *ui.Painter, r ui.Rect) {
 					p.Fill(r, palette[i%len(palette)], r.H/2)
 				})

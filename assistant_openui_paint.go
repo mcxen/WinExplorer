@@ -477,7 +477,7 @@ func (a *App) paintOpenDonut(c *ui.Context, v *ouiView, p *openPaint) {
 				share = s.Value / total
 			}
 			ui.Row(c.Key("slice-" + s.ID)).FillWidth().MinWidth(0).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Box(c).Size(8, 8).Shrink(0).Radius(4).Draw(func(painter *ui.Painter, r ui.Rect) {
+				ui.Box(c).Size(8, 8).Shrink(0).Radius(rowR()).Draw(func(painter *ui.Painter, r ui.Rect) {
 					painter.Fill(r, palette[i%len(palette)], r.H/2)
 				})
 				ui.Text(c, s.Label).FontSize(12).TextColor(colorText()).Grow(1).MinWidth(0).Wrap().Selectable()
@@ -570,7 +570,7 @@ func (a *App) paintOpenTreeItems(c *ui.Context, parent *ouiView, p *openPaint, d
 			Gap(4).AlignItems(ui.Center)
 		row.Children(func() {
 			if hasKids {
-				chev := ui.ButtonBase(c.Key("chevron")).Size(18, 18).Radius(4).
+				chev := ui.ButtonBase(c.Key("chevron")).Size(18, 18).Radius(rowR()).
 					Label("展开或折叠").Tooltip("展开或折叠")
 				chev.Children(func() { chevronIcon(c, open, 12) })
 				if chev.Clicked() {

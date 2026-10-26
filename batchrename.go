@@ -323,7 +323,7 @@ func (a *App) batchRenameBody(c *ui.Context) {
 			if n := rename.FixableRows(b.rows); n > 0 {
 				label = fmt.Sprintf("重命名 %d 项", n)
 			}
-			btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+			btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 				Background(colorAccent()).Label(label).Disabled(rename.FixableRows(b.rows) == 0)
 			btn.Children(func() {
 				ui.Text(c, label).FontSize(12).TextColor(colorBtnText())
@@ -384,7 +384,7 @@ func (a *App) batchRow(c *ui.Context, i int) {
 	// ButtonBase is a clickable row: a press on it begins the drag, and a
 	// second quick press is the double click that starts typing the name.
 	row := ui.ButtonBase(c.Key(r.Name)).FillWidth().Height(34).Gap(8).Padding(0, 6).
-		AlignItems(ui.Center).Radius(4)
+		AlignItems(ui.Center).Radius(rowR())
 	if i == b.focus {
 		row.Background(colorHover())
 	}

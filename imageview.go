@@ -104,7 +104,7 @@ func (a *App) imageQuickNav(c *ui.Context, path string) {
 	}
 	row := ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center)
 	row.Children(func() {
-		prev := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).Label("上一张").
+		prev := ui.ButtonBase(c).Size(28, 28).Radius(rowR()).Shrink(0).Label("上一张").
 			Tooltip("上一张图片（←）")
 		if idx <= 0 {
 			prev.Disabled(true)
@@ -119,7 +119,7 @@ func (a *App) imageQuickNav(c *ui.Context, path string) {
 		}
 		ui.Text(c, label).FontSize(12).TextColor(colorText()).Grow(1).MinWidth(0).
 			TextAlign(ui.Center).MaxLines(1)
-		next := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).Label("下一张").
+		next := ui.ButtonBase(c).Size(28, 28).Radius(rowR()).Shrink(0).Label("下一张").
 			Tooltip("下一张图片（→）")
 		if idx < 0 || idx >= len(imgs)-1 {
 			next.Disabled(true)

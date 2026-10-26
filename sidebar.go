@@ -121,6 +121,11 @@ func navCurrentRow(rows []navRow, path, clicked string) int {
 // pane when dragged, so the pane itself only fills the room it is given.
 func (a *App) sidebar(c *ui.Context) {
 	pane := windowBG(c, ui.Column(c).FillHeight().FillWidth().Shrink(0)).Clip()
+	if visualV2 {
+		// macOS 26: the sidebar floats on the window as a glass pane.
+		pane.Margin(0, 2, v2Gutter, v2Gutter)
+		macFloat(c, pane, a.flipLowEnd)
+	}
 	a.navTree.hover = pane.Hovered()
 	pane.Children(func() {
 		// The tab may have moved since the last frame: open what it takes for
@@ -130,7 +135,7 @@ func (a *App) sidebar(c *ui.Context) {
 		a.navTree.list.Key = func(i int) any { return rows[i].key }
 		ui.List(c, &a.navTree.list, len(rows), func(i int) {
 			a.navPaneRow(c, rows[i])
-		}).Grow(1).FillWidth().MinHeight(0).Padding(sidebarListPad(), 0, 12, 0)
+		}).Grow(1).FillWidth().MinHeight(0).Padding(sidebarListPad(), sidebarSidePad(), 12, sidebarSidePad())
 		// The current folder's row has its place in the list by now: show it if
 		// the list has it out of sight.
 		a.navTreeReveal()
@@ -506,7 +511,7 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 // navTwist is the chevron that opens and closes a folder, with the label the
 // tests and the accessibility tree read it by.
 func (a *App) navTwist(c *ui.Context, r navRow, label string) ui.Element {
-	chev := ui.ButtonBase(c).Size(18, navRowH).Radius(4).Shrink(0).
+	chev := ui.ButtonBase(c).Size(18, navRowH).Radius(rowR()).Shrink(0).
 		Label(label).Tooltip("展开")
 	if chev.Hovered() {
 		chev.Background(colorHover())
@@ -580,6 +585,9 @@ func (a *App) paintNavRow(row ui.Element, r navRow) {
 		row.Background(colorSelected())
 	case row.Hovered():
 		row.Background(colorHover())
+		if visualV2 {
+			row.Radius(v2RowRadius)
+		}
 	case r.under:
 		row.Background(colorSelected().Alpha(0.35))
 	}
@@ -589,7 +597,11 @@ func (a *App) paintNavRow(row ui.Element, r navRow) {
 		// without this, a previously clicked twist would keep the key.
 		row.Focus()
 		row.FocusRing(false).DrawOver(func(p *ui.Painter, rect ui.Rect) {
-			p.FocusRing(rect, [4]float32{4, 4, 4, 4})
+			r := float32(4)
+			if visualV2 {
+				r = v2RowRadius
+			}
+			p.FocusRing(rect, [4]float32{r, r, r, r})
 		})
 	}
 }

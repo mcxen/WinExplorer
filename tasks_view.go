@@ -253,7 +253,7 @@ func (a *App) taskCardHead(c *ui.Context, s archiveTaskSnap, icon *ui.SVG, tone 
 		t := ui.Text(c.Key("t"), title).FontSize(14).FontWeight(600).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 		components.Tooltip(c, t, s.Path)
 		ui.Text(c.Key("src"), taskSourceLabel(s.Origin)).FontSize(11).TextColor(colorMuted()).
-			Padding(1, 6).Radius(4).Background(colorAddress()).Shrink(0)
+			Padding(1, 6).Radius(rowR()).Background(colorAddress()).Shrink(0)
 		label, col := taskStateLabel(s)
 		ui.Text(c.Key("st"), label).FontSize(11.5).FontWeight(600).TextColor(col).Shrink(0)
 		m := taskManager()
@@ -390,7 +390,7 @@ func (a *App) taskCardLists(c *ui.Context, s archiveTaskSnap) {
 		if open {
 			ic = lucide.ChevronDown()
 		}
-		b := ui.ButtonBase(c.Key("tg-"+key)).Radius(4).Padding(2, 4).Label(label)
+		b := ui.ButtonBase(c.Key("tg-"+key)).Radius(rowR()).Padding(2, 4).Label(label)
 		b.Children(func() {
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 				components.Icon(c, ic).Size(12, 12).TextColor(colorMuted())

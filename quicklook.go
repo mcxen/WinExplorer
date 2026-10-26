@@ -230,7 +230,7 @@ func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 // quickLookOpenButton opens the file with the system default app, for
 // what the pane can show but not play.
 func (a *App) quickLookOpenButton(c *ui.Context, st *previewState) {
-	btn := ui.ButtonBase(c).Height(30).FillWidth().MaxWidth(220).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).FillWidth().MaxWidth(220).Radius(rowR()).
 		Background(colorAddress()).Border(1, colorDivider()).Label("打开")
 	btn.Children(func() {
 		ui.Text(c, "打开").FontSize(12).TextColor(colorText())

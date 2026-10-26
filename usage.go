@@ -662,7 +662,7 @@ func (a *App) usageTopList(c *ui.Context, here *usageNode) {
 // size and the share bar.
 func (a *App) usageTopRow(c *ui.Context, n, here *usageNode) {
 	row := ui.Row(c.Key(n.Path)).FillWidth().Height(24).Shrink(0).
-		Padding(0, 8).AlignItems(ui.Center).Gap(8).Radius(4)
+		Padding(0, 8).AlignItems(ui.Center).Gap(8).Radius(rowR())
 	switch {
 	case a.usagePickedNode() == n:
 		row.Background(colorSelected())
@@ -720,7 +720,7 @@ func (a *App) usageButtons(c *ui.Context, res *usageScan, flag *bool) {
 // for the space-tight scan dialog — with that button's padding and floor width,
 // so 重新扫描 and 关闭 come out even.
 func usageButton(c *ui.Context, text string, primary bool) bool {
-	btn := ui.ButtonBase(c).Height(28).Padding(0, btnPadX).MinWidth(btnMinW).Shrink(0).Radius(4).Label(text)
+	btn := ui.ButtonBase(c).Height(28).Padding(0, btnPadX).MinWidth(btnMinW).Shrink(0).Radius(rowR()).Label(text)
 	if primary {
 		btn = btn.Background(colorAccent())
 	} else {

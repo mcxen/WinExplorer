@@ -14,13 +14,17 @@ func (a *App) navRow(c *ui.Context) {
 	windowBG(c, ui.Column(c).FillWidth().Shrink(0)).Children(func() {
 		ui.Row(c).Height(44).FillWidth().Padding(6, 10).Gap(6).
 			AlignItems(ui.Center).Children(func() {
-			a.navIconButton(c, lucide.ArrowLeft, "后退", a.canBack(), a.back)
-			a.navIconButton(c, lucide.ArrowRight, "前进", a.canForward(), a.forward)
-			a.navIconButton(c, lucide.ArrowUp, "向上", a.canUp(), a.up)
+			a.toolGroup(c, func() {
+				a.navIconButton(c, lucide.ArrowLeft, "后退", a.canBack(), a.back)
+				a.navIconButton(c, lucide.ArrowRight, "前进", a.canForward(), a.forward)
+				a.navIconButton(c, lucide.ArrowUp, "向上", a.canUp(), a.up)
+			})
 			a.addressField(c)
 			a.searchField(c)
 		})
-		ui.Box(c).Height(1).FillWidth().Background(colorDivider())
+		if !visualV2 {
+			ui.Box(c).Height(1).FillWidth().Background(colorDivider())
+		}
 	})
 }
 
@@ -32,7 +36,7 @@ func (a *App) navIconButton(c *ui.Context, icon func() *ui.SVG, label string, en
 }
 
 func (a *App) refreshButton(c *ui.Context) {
-	btn := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).
+	btn := ui.ButtonBase(c).Size(28, 28).Radius(rowR()).Shrink(0).
 		Label("刷新").Tooltip("刷新")
 	if btn.Hovered() {
 		btn.Background(colorHover())

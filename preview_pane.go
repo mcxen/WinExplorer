@@ -60,7 +60,7 @@ func (a *App) previewBody(c *ui.Context, st *previewState) {
 		// Sidebar stays a simple Contain fit; Space owns zoom/pan
 		// (imageview.go) so the two surfaces do not repeat chrome.
 		if st.bitmap != nil {
-			ui.Box(c).FillWidth().Shrink(0).Radius(4).Clip().Children(func() {
+			ui.Box(c).FillWidth().Shrink(0).Radius(rowR()).Clip().Children(func() {
 				ui.Image(c, st.bitmap).Fit(ui.Contain)
 			})
 		} else {
@@ -116,7 +116,7 @@ func (a *App) previewNote(c *ui.Context, msg string) {
 // but not play inline (video, PDF, unsupported audio), matching Explorer's
 // preview-pane open button.
 func (a *App) previewOpenButton(c *ui.Context, st *previewState) {
-	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(4).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, btnPadX).MinWidth(btnMinW).Radius(rowR()).
 		Background(colorAddress()).Border(1, colorDivider()).Label("打开").Tooltip("用系统应用打开")
 	btn.Children(func() {
 		ui.Text(c, "打开").FontSize(12).TextColor(colorText())
@@ -132,7 +132,7 @@ func (a *App) previewOpenButton(c *ui.Context, st *previewState) {
 // previewText shows the first chunk of a text/code file in a read-only
 // area, with a "约 N" hint when truncated.
 func (a *App) previewText(c *ui.Context, st *previewState) {
-	body := ui.Box(c).FillWidth().Shrink(0).Radius(4).
+	body := ui.Box(c).FillWidth().Shrink(0).Radius(rowR()).
 		Background(colorAddress()).Border(1, colorFieldBorder()).Padding(8, 6).MinHeight(120)
 	body.Children(func() {
 		value := expandTabs(st.text)
@@ -261,7 +261,7 @@ func (a *App) pluginMetaRowValue(c *ui.Context, r PluginMetaRow, keyW float32) {
 		ui.Text(c, r.Val).FontSize(12).TextColor(colorText()).
 			Grow(1).MinWidth(0).MaxLines(3)
 		if r.Copy {
-			btn := ui.ButtonBase(c).Height(22).Padding(0, 10).MinWidth(56).Shrink(0).Radius(4).
+			btn := ui.ButtonBase(c).Height(22).Padding(0, 10).MinWidth(56).Shrink(0).Radius(rowR()).
 				Background(colorAddress()).Border(1, colorDivider()).Label("复制")
 			btn.Children(func() {
 				ui.Text(c, "复制").FontSize(11).TextColor(colorText())

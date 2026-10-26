@@ -20,6 +20,10 @@ func (a *App) statusBar(c *ui.Context) {
 	bar := windowBG(c, ui.Row(c).Height(28).FillWidth().Padding(0, 12).Gap(8).
 		AlignItems(ui.Center)).
 		BorderWidth(1, 0, 0, 0).BorderColor(colorDivider())
+	if visualV2 {
+		// macOS 26: no rule; the floating panes end above a quiet strip.
+		bar.Height(24).Padding(0, 16).BorderWidth(0, 0, 0, 0)
+	}
 	bar.Children(func() {
 		left := a.statusLeft()
 		ui.Text(c, left).FontSize(12).TextColor(colorMuted()).SingleLine().Grow(1).MinWidth(0)

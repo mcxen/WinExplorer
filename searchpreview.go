@@ -104,7 +104,7 @@ func (a *App) searchPreviewFacts(c *ui.Context, e Entry) {
 // searchPreviewPath is deliberately selectable: the path is evidence about
 // the hit and a useful value to paste into a terminal or another tool.
 func (a *App) searchPreviewPath(c *ui.Context, e Entry) {
-	box := ui.Box(c).FillWidth().Shrink(0).Radius(4).Padding(6, 4).
+	box := ui.Box(c).FillWidth().Shrink(0).Radius(rowR()).Padding(6, 4).
 		Background(colorSurface()).Border(1, colorFieldBorder())
 	box.Children(func() {
 		ui.Text(c, e.Path).FontSize(11).Font("monospace").TextColor(colorText()).

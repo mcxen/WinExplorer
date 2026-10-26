@@ -272,7 +272,7 @@ func (a *App) pathDropdown(c *ui.Context, field ui.Element) ui.Element {
 			Padding(4).Radius(8).Background(colorAddress()).Border(1, colorDivider()).
 			Shadow(0, 8, 16, 0, ui.RGBA(0, 0, 0, 0.14)).KeepFocus().Label("地址建议")
 		if visualV2 {
-			keroMenu(panel.Radius(v2PaneRadius - 4).Border(0, ui.Transparent))
+			keroMenu(panel.Radius(v2PaneRadius-4).Border(0, ui.Transparent))
 		}
 		panel.Children(func() {
 			if st.errMsg != "" {

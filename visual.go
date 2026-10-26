@@ -180,14 +180,16 @@ func macHairline(e ui.Element) ui.Element {
 
 // macFloat is a floating pane: glass, hairline, soft shadow, pane radius.
 func macFloat(c *ui.Context, e ui.Element, lowEnd bool) ui.Element {
-	e = macHairline(macGlass(c, e.Radius(v2PaneRadius).Clip(), lowEnd))
-	return e.Shadow(0, 2, 10, 0, ui.RGBA(0, 0, 0, 0.06))
+	e = macGlass(c, e.Radius(v2PaneRadius).Clip(), lowEnd)
+	if !darkMode() {
+		e = macHairline(e)
+	}
+	return keroFloating(e)
 }
 
 // macPill is a toolbar capsule grouping buttons, as Tahoe's toolbar does.
 func macPill(c *ui.Context, e ui.Element, lowEnd bool) ui.Element {
-	return macHairline(macGlass(c, e.Height(32).Radius(v2PillRadius).Padding(0, 4).Gap(0).AlignItems(ui.Center), lowEnd)).
-		Shadow(0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.05))
+	return keroFace(macGlass(c, e.Height(32).Radius(v2PillRadius).Padding(0, 4).Gap(0).AlignItems(ui.Center), lowEnd))
 }
 
 // sidebarSidePad insets the nav rows inside the floating pane so the

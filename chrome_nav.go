@@ -56,7 +56,11 @@ func (a *App) searchField(c *ui.Context) {
 	field := ui.Row(c.Key("folder-search")).Width(220).Height(32).Shrink(0).
 		Padding(0, 8).Gap(6).Radius(fieldRadius()).AlignItems(ui.Center).
 		Background(colorAddress()).Border(1, colorDivider()).
+
 		Label("搜索")
+	if visualV2 {
+		keroFace(field.Border(0, ui.Transparent))
+	}
 	field.Children(func() {
 		// Match the input's 24 DIP height so the glyph shares its vertical center.
 		ui.Box(c).Size(14, 24).Shrink(0).Center().Children(func() {

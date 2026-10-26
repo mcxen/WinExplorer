@@ -22,6 +22,10 @@
 - 回退：高对比度、`glassOn=false`、或翻转测得超预算（`flipLowEnd`）→ 半透明色 `glassTint()`。
 - 右键菜单为系统原生菜单（macOS NSMenu 自带模糊），不由应用绘制。
 
+## 借鉴 Kero
+
+`kero_elevation.go` 改编自 [egoist/kero](https://github.com/egoist/kero) `elevation.go`（MIT）：控件面阴影、浮层阴影、macOS 菜单外观、暗色亮边。
+
 ## 字体（`fonts.go`，`fonts/OFL-*.txt`）
 
 内嵌 SIL OFL 1.1：Inter 可变（Latin 子集）、JetBrains Mono 可变（Latin + 制表符）、Noto Sans CJK SC 常规/粗体（GB2312 子集）。缺字回退系统字体。设置 → 界面字体：内嵌 / 系统。SF Pro 许可禁止分发，未内嵌。

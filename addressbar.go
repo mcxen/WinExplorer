@@ -60,7 +60,11 @@ func (a *App) addressField(c *ui.Context) {
 	case editing:
 		field.Border(1, colorAccent())
 	default:
-		field.Border(1, colorDivider())
+		if visualV2 {
+			keroFace(field) // Kero's control face instead of a ruled box
+		} else {
+			field.Border(1, colorDivider())
+		}
 	}
 	var in ui.Element
 	field.Children(func() {
@@ -267,6 +271,9 @@ func (a *App) pathDropdown(c *ui.Context, field ui.Element) ui.Element {
 			AttachTo(field, ui.AnchorBottomStart, ui.AnchorTopStart).Margin(4, 0, 0, 0).
 			Padding(4).Radius(8).Background(colorAddress()).Border(1, colorDivider()).
 			Shadow(0, 8, 16, 0, ui.RGBA(0, 0, 0, 0.14)).KeepFocus().Label("地址建议")
+		if visualV2 {
+			keroMenu(panel.Radius(v2PaneRadius - 4).Border(0, ui.Transparent))
+		}
 		panel.Children(func() {
 			if st.errMsg != "" {
 				ui.Row(c).FillWidth().Height(32).Padding(0, 8).Gap(8).AlignItems(ui.Center).Children(func() {

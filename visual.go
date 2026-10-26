@@ -50,21 +50,28 @@ func resolveV2() {
 	tokContent = pick("#FFFFFF", "#232325")
 	tokSurface = pick("#FFFFFF", "#2A2A2D")
 	tokAddress = pick("#FFFFFF", "#323235").Alpha(0.72)
-	tokText = pick("#1D1D1F", "#F2F2F7")
-	tokMuted = pick("#7C7C82", "#98989F")
+	// labelColor 85%, secondaryLabelColor 50% (blended opaque).
+	if darkMode() {
+		tokText, tokMuted = ui.RGBA(255, 255, 255, 0.85), ui.RGBA(255, 255, 255, 0.55)
+	} else {
+		tokText, tokMuted = ui.RGBA(0, 0, 0, 0.85), ui.RGBA(0, 0, 0, 0.5)
+	}
 	// Apple system colors (controlAccentColor blue, systemRed/Orange/Green).
-	tokAccent = pick("#007AFF", "#0A84FF")
+	tokAccent = pick("#0088FF", "#0091FF") // HIG 2025 unified blue
 	tokSel = tokAccent.Alpha(0.16)
+	// selectedContentBackgroundColor / unemphasizedSelectedContentBackgroundColor.
+	tokAccentSel = pick("#0064E1", "#0059D1")
+	tokUnemph = pick("#DCDCDC", "#464646")
 	tokFieldBorder = pick("#D1D1D6", "#3A3A3C")
-	tokDanger = pick("#FF3B30", "#FF453A")
-	tokWarning = pick("#FF9500", "#FF9F0A")
+	tokDanger = pick("#FF383C", "#FF4245")
+	tokWarning = pick("#FF8D28", "#FF9230")
 	tokSuccess = pick("#34C759", "#30D158")
 	tokBtnText = pick("#FFFFFF", "#FFFFFF")
 	if darkMode() {
-		tokDivider = ui.RGBA(255, 255, 255, 0.07)
+		tokDivider = ui.RGBA(255, 255, 255, 0.10) // separatorColor
 		tokHover = ui.RGBA(255, 255, 255, 0.05)
 	} else {
-		tokDivider = ui.RGBA(0, 0, 0, 0.07)
+		tokDivider = ui.RGBA(0, 0, 0, 0.10) // separatorColor
 		tokHover = ui.RGBA(0, 0, 0, 0.04)
 	}
 }
@@ -224,4 +231,52 @@ func ctlR() float32 {
 		return 8
 	}
 	return 6
+}
+
+var (
+	tokAccentSel, tokUnemph ui.Color
+	// rowFilled is set by paintSelect while the row it painted is drawn in
+	// the accent: its cells then take white text.
+	rowFilled bool
+)
+
+// listKeyed is whether the file list has the keyboard: neither the sidebar
+// nor a text field holds it.
+func (a *App) listKeyed() bool { return !a.navTree.focused && !a.fieldFocused }
+
+// rowFg is a list cell's text color: white on an accent-filled row, else
+// label (primary) or secondaryLabel (Finder's date, kind and size).
+func rowFg(primary bool) ui.Color {
+	switch {
+	case rowFilled:
+		return ui.RGB(255, 255, 255)
+	case primary || !visualV2:
+		return colorText()
+	}
+	return colorMuted()
+}
+
+// bodyFont is the list text size: HIG macOS Body 13 under macOS 26.
+func bodyFont() float32 {
+	if visualV2 {
+		return 13
+	}
+	return 12
+}
+
+// navRowHt is the sidebar row height: HIG medium sidebar rows are 28.
+func navRowHt() float32 {
+	if visualV2 {
+		return 28
+	}
+	return navRowH
+}
+
+// statusFont is the bottom bar's size: Finder's path/status bar, 11 pt
+// (HIG Subheadline).
+func statusFont() float32 {
+	if visualV2 {
+		return 11
+	}
+	return 12
 }

@@ -178,7 +178,10 @@ func (a *App) assistantPane(c *ui.Context) {
 		pane.Width(a.assist.width).Shrink(0)
 	}
 	if visualV2 && !a.assist.full {
-		macGlass(c, pane, a.flipLowEnd)
+		// The docked pane sits inside the opaque content card, where a
+		// backdrop has nothing to blur; a material there also stalled the
+		// composer's second send under test. Tint only.
+		pane.Background(glassTint())
 	} else {
 		pane.Background(c.Theme().Background)
 	}

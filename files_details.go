@@ -192,7 +192,7 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 		cell.Background(colorHover())
 	}
 	cell.Children(func() {
-		label := ui.Text(c, title).FontSize(12).TextColor(colorMuted()).
+		label := ui.Text(c, title).FontSize(statusFont()).TextColor(colorMuted()).
 			SingleLine().FontWeight(600)
 		if key == SortSize {
 			label.TextAlign(ui.End)
@@ -282,7 +282,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 			name.Grow(1).Shrink(1).MinWidth(colNameMin)
 		}
 		name.Children(func() {
-			a.nameCell(c, e, 16, 12)
+			a.nameCell(c, e, 16, bodyFont())
 		})
 		a.detailText(c, formatModTime(e.ModTime), a.dateColW(), false)
 		if searching {
@@ -380,7 +380,7 @@ func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
 		cell.Justify(ui.End)
 	}
 	cell.Children(func() {
-		label := ui.Text(c, text).FontSize(12).TextColor(colorText()).SingleLine()
+		label := ui.Text(c, text).FontSize(bodyFont()).TextColor(rowFg(false)).SingleLine()
 		if end {
 			label.TextAlign(ui.End)
 		}

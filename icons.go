@@ -33,6 +33,15 @@ func (a *App) fileIcon(c *ui.Context, e Entry, px float32) {
 }
 
 func (a *App) placeIcon(c *ui.Context, kind string, px float32) {
+	if visualV2 {
+		// macOS 26 / HIG Sidebars: monochrome symbols in the accent color.
+		if ic, ok := macPlaceIcons[kind]; ok {
+			ui.Box(c).Size(px, px).Shrink(0).Center().Children(func() {
+				components.Icon(c, ic).Size(px-1, px-1).TextColor(colorAccent())
+			})
+			return
+		}
+	}
 	ui.Box(c).Size(px, px).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
 		switch kind {
 		case "home":
@@ -321,4 +330,12 @@ func drawHome(p *ui.Painter, r ui.Rect) {
 	p.Stroke(body, ink, s*0.04, s*0.10)
 	door := ui.Rect{X: x + s*0.44, Y: y + s*0.64, W: s * 0.12, H: s * 0.22}
 	p.Fill(door, ink, s*0.02)
+}
+
+// macPlaceIcons are the sidebar's SF-Symbol-like glyphs under macOS 26.
+var macPlaceIcons = map[string]func() *ui.SVG{
+	"home": lucide.House, "desktop": lucide.Monitor, "downloads": lucide.Download,
+	"documents": lucide.FileText, "pictures": lucide.Image, "music": lucide.Music,
+	"videos": lucide.Video, "drive": lucide.HardDrive, "trash": lucide.Trash,
+	"gallery": lucide.Images, "thispc": lucide.Laptop,
 }

@@ -25,6 +25,14 @@ const (
 // detailsRowH is 30, or 22 with 查看>紧凑视图 on, as Explorer's Compact
 // view tightens the list.
 func (a *App) detailsRowH() float32 {
+	if visualV2 {
+		// macOS 26: NSTableView's inset style rows (Finder list view) are
+		// 24 pt; compact 20.
+		if a.compact {
+			return 20
+		}
+		return 24
+	}
 	if a.compact {
 		return 22
 	}
@@ -294,6 +302,8 @@ func (a *App) nameCell(c *ui.Context, e Entry, icon, font float32) {
 		SingleLine().Grow(1).MinWidth(0)
 	if l := aiFx.look(e.Path); l.flash > 0 {
 		label.TextColor(flashColor(colorText(), l))
+	} else if rowFilled {
+		label.TextColor(ui.RGB(255, 255, 255))
 	}
 }
 
@@ -389,8 +399,21 @@ func (a *App) checkboxCell(c *ui.Context, e Entry) {
 }
 
 func (a *App) paintSelect(el ui.Element, path string) {
+	rowFilled = false
 	if visualV2 {
 		el.Radius(v2RowRadius) // macOS 26: rounded selection, inset in the card
+		if a.isSelected(path) {
+			// HIG Focus and selection: a focused list draws the selection
+			// in the accent with white text; unfocused, a gray highlight
+			// with the standard text color.
+			if a.listKeyed() {
+				rowFilled = true
+				el.Background(tokAccentSel)
+			} else {
+				el.Background(tokUnemph)
+			}
+			return
+		}
 	}
 	switch {
 	case a.isSelected(path):

@@ -374,7 +374,7 @@ func (a *App) navPaneRow(c *ui.Context, r navRow) {
 // 快速访问 takes a drop and pins it, collapsed or not. A folder row under
 // the heading still moves a drop into that folder; only the heading pins.
 func (a *App) navSectionRow(c *ui.Context, r navRow) {
-	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
+	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
 		Radius(4).Padding(0, 8, 0, 2).Gap(4).AlignItems(ui.Center).Justify(ui.Start).Label(r.label)
 	a.paintNavRow(row, r)
 	row.Children(func() {
@@ -408,13 +408,13 @@ func (a *App) navSetSectionOpen(r navRow, open bool) {
 // place, 磁盘健康, 回收站. A plugin's page runs its own action, the rest navigate;
 // files dropped on the row move there, as anywhere else in the app.
 func (a *App) navPlaceRow(c *ui.Context, r navRow) {
-	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
+	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
 		Radius(4).Padding(0, 4, 0, r.indent).Gap(8).AlignItems(ui.Center).
 		Label(r.label).Selected(r.sel)
 	a.paintNavRow(row, r)
 	row.Children(func() {
 		a.navRowGlyph(c, r)
-		ui.Text(c, r.label).FontSize(12).TextColor(colorText()).
+		ui.Text(c, r.label).FontSize(bodyFont()).TextColor(colorText()).
 			SingleLine().Grow(1).MinWidth(0)
 	})
 	if row.Clicked() {
@@ -450,7 +450,7 @@ func navCanDrag(r navRow) bool {
 // navThisPCRow is 此电脑: a twist that shows the volumes and the folders under
 // them, and the row itself, which navigates to the This PC page.
 func (a *App) navThisPCRow(c *ui.Context, r navRow) {
-	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
+	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
 		Radius(4).Padding(0, 2).Gap(4).AlignItems(ui.Center).
 		Label(r.label).Selected(a.cur().path == pathThisPC)
 	a.paintNavRow(row, r)
@@ -461,7 +461,7 @@ func (a *App) navThisPCRow(c *ui.Context, r navRow) {
 			return
 		}
 		a.navRowGlyph(c, r)
-		ui.Text(c, r.label).FontSize(12).TextColor(colorText()).
+		ui.Text(c, r.label).FontSize(bodyFont()).TextColor(colorText()).
 			SingleLine().Grow(1).MinWidth(0)
 	})
 	if row.Clicked() {
@@ -473,7 +473,7 @@ func (a *App) navThisPCRow(c *ui.Context, r navRow) {
 // navFolderRow is one folder of the tree: its twist, its icon and name, which
 // navigate, its context menu; files dropped on it move into it.
 func (a *App) navFolderRow(c *ui.Context, r navRow) {
-	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
+	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
 		Radius(4).Padding(0, 2).Gap(4).AlignItems(ui.Center).
 		Label(r.label).Selected(r.sel)
 	a.paintNavRow(row, r)
@@ -494,7 +494,7 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 			navTwistSlot(c)
 		}
 		a.navRowGlyph(c, r)
-		ui.Text(c, r.label).FontSize(12).TextColor(colorText()).
+		ui.Text(c, r.label).FontSize(bodyFont()).TextColor(colorText()).
 			SingleLine().Grow(1).MinWidth(0)
 	})
 	if row.Clicked() {
@@ -511,7 +511,7 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 // navTwist is the chevron that opens and closes a folder, with the label the
 // tests and the accessibility tree read it by.
 func (a *App) navTwist(c *ui.Context, r navRow, label string) ui.Element {
-	chev := ui.ButtonBase(c).Size(18, navRowH).Radius(rowR()).Shrink(0).
+	chev := ui.ButtonBase(c).Size(18, navRowHt()).Radius(rowR()).Shrink(0).
 		Label(label).Tooltip("展开")
 	if chev.Hovered() {
 		chev.Background(colorHover())
@@ -529,7 +529,7 @@ func (a *App) navTwist(c *ui.Context, r navRow, label string) ui.Element {
 // before a folder label. The line of each ancestor is muted along the active
 // path; the whole set fades with the pane's hover state.
 func navIndentGuides(c *ui.Context, width float32, depth int, hovered bool, active int) {
-	gutter := ui.Box(c).Width(width).Height(navRowH).Shrink(0)
+	gutter := ui.Box(c).Width(width).Height(navRowHt()).Shrink(0)
 	// The indent stops at navTreeMaxIndent, so a deep branch must not keep
 	// painting guides into the folder label beside the compressed gutter.
 	lines := min(depth, int(width/navTreeStep))
@@ -555,7 +555,7 @@ func navIndentGuides(c *ui.Context, width float32, depth int, hovered bool, acti
 
 // navTwistSlot is the room a twist would take, for a folder with none.
 func navTwistSlot(c *ui.Context) {
-	ui.Box(c).Size(18, navRowH).Shrink(0)
+	ui.Box(c).Size(18, navRowHt()).Shrink(0)
 }
 
 // navRowGlyph is a row's 16px icon: a place or volume glyph by kind, and the

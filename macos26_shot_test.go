@@ -54,4 +54,7 @@ func TestMacOS26Shots(t *testing.T) {
 	shot(false, "03-assistant-light.png", func(a *App) { a.assistantOpen = true })
 	shot(false, "04-tasks-flip.png", func(a *App) { a.tasksFlipped = true })
 	shot(false, "05-settings.png", func(a *App) { a.settingsOpen = true })
+	shot(false, "08-selection-focused.png", func(a *App) { a.navTree.focused = false })
+	shot(false, "09-selection-unfocused.png", func(a *App) { a.navTree.focused = true })
+	shot(true, "10-selection-focused-dark.png", func(a *App) { a.navTree.focused = false })
 }

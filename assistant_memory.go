@@ -112,6 +112,7 @@ func (u *assistantUI) loadSessionLocked(id string) error {
 	}
 	u.sessionID = file.ID
 	u.sessionTitle = file.Title
+	u.sessionRenamed = file.Renamed
 	u.created = file.Created
 	u.folder = file.Folder
 	u.turns = normalizeTurns(file.Turns)
@@ -123,6 +124,7 @@ func (u *assistantUI) loadSessionLocked(id string) error {
 func (u *assistantUI) clearSession() {
 	u.sessionID = ""
 	u.sessionTitle = ""
+	u.sessionRenamed = false
 	u.created = time.Time{}
 	u.folder = ""
 	u.turns = nil
@@ -154,13 +156,13 @@ func (u *assistantUI) persistSession(folder string) {
 	if u.created.IsZero() {
 		u.created = time.Now()
 	}
-	if strings.TrimSpace(u.sessionTitle) == "" || u.sessionTitle == "新会话" {
+	if !u.sessionRenamed && (strings.TrimSpace(u.sessionTitle) == "" || u.sessionTitle == "新会话") {
 		u.sessionTitle = sessionTitleFrom(u.turns)
 	}
 	now := time.Now()
 	file := aiSessionFile{
 		ID: u.sessionID, Title: u.sessionTitle, Created: u.created, Updated: now,
-		Folder: u.folder, Turns: diskTurns(u.turns),
+		Folder: u.folder, Renamed: u.sessionRenamed, Turns: diskTurns(u.turns),
 	}
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {
@@ -175,6 +177,7 @@ func (u *assistantUI) persistSession(folder string) {
 	u.upsertIndexLocked(aiSessionMeta{
 		ID: u.sessionID, Title: u.sessionTitle, Updated: now,
 		Folder: u.folder, Preview: sessionPreview(u.turns),
+		Turns: len(u.turns), Renamed: u.sessionRenamed,
 	})
 }
 
@@ -186,7 +189,9 @@ func (u *assistantUI) upsertIndexLocked(meta aiSessionMeta) {
 	}
 	next := make([]aiSessionMeta, 0, len(idx.Sessions)+1)
 	for _, s := range idx.Sessions {
-		if s.ID != meta.ID && safeSessionID(s.ID) {
+		if s.ID == meta.ID {
+			meta.Pinned = s.Pinned
+		} else if safeSessionID(s.ID) {
 			next = append(next, s)
 		}
 	}
@@ -543,4 +548,98 @@ func (s *sunvaleTools) memoryList(_ context.Context, _ *mcp.CallToolRequest, _ s
 		b.WriteByte('\n')
 	}
 	return mcpText(strings.TrimRight(b.String(), "\n")), nil, nil
+}
+
+// editIndexLocked rewrites one index entry in place (no reorder, no touch).
+func (u *assistantUI) editIndex(id string, edit func(*aiSessionMeta)) bool {
+	if u.diskPath == "" || !safeSessionID(id) || u.indexBroken {
+		return false
+	}
+	assistantDiskMu.Lock()
+	defer assistantDiskMu.Unlock()
+	idx, ok := readIndexFile(u.indexPath())
+	if !ok {
+		u.indexBroken = true
+		return false
+	}
+	found := false
+	for i := range idx.Sessions {
+		if idx.Sessions[i].ID == id {
+			edit(&idx.Sessions[i])
+			found = true
+		}
+	}
+	if !found || writeIndexFile(u.indexPath(), idx) != nil {
+		return false
+	}
+	u.sessions = idx.Sessions
+	return true
+}
+
+func (u *assistantUI) pinSession(id string, on bool) {
+	u.editIndex(id, func(m *aiSessionMeta) { m.Pinned = on })
+}
+
+// renameSession sets a user title that auto titling keeps; an empty title
+// hands the session back to auto titling.
+func (u *assistantUI) renameSession(id, title string) {
+	title = limitRunes(strings.TrimSpace(title), 60)
+	renamed := title != ""
+	if !u.editIndex(id, func(m *aiSessionMeta) {
+		m.Renamed = renamed
+		if renamed {
+			m.Title = title
+		}
+	}) {
+		return
+	}
+	if id == u.sessionID {
+		u.sessionRenamed = renamed
+		if renamed {
+			u.sessionTitle = title
+		} else {
+			u.sessionTitle = ""
+		}
+		u.persistSessionFileOnly()
+		return
+	}
+	assistantDiskMu.Lock()
+	defer assistantDiskMu.Unlock()
+	data, err := os.ReadFile(u.sessionPath(id))
+	if err != nil {
+		return
+	}
+	var file aiSessionFile
+	if json.Unmarshal(data, &file) != nil {
+		return
+	}
+	file.Renamed = renamed
+	if renamed {
+		file.Title = title
+	}
+	if out, err := json.MarshalIndent(file, "", "  "); err == nil {
+		_ = writePrivate(u.sessionPath(id), out)
+	}
+}
+
+// persistSessionFileOnly rewrites the open session's title fields without
+// bumping Updated, so a rename does not reorder the list.
+func (u *assistantUI) persistSessionFileOnly() {
+	assistantDiskMu.Lock()
+	defer assistantDiskMu.Unlock()
+	data, err := os.ReadFile(u.sessionPath(u.sessionID))
+	if err != nil {
+		return
+	}
+	var file aiSessionFile
+	if json.Unmarshal(data, &file) != nil {
+		return
+	}
+	file.Renamed = u.sessionRenamed
+	if u.sessionTitle != "" {
+		file.Title = u.sessionTitle
+	}
+	if out, err := json.MarshalIndent(file, "", "  "); err == nil {
+		_ = writePrivate(u.sessionPath(u.sessionID), out)
+	}
 }

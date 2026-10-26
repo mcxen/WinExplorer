@@ -30,6 +30,8 @@ type Provider struct {
 type Prefs struct {
 	Width            float32   `json:"width,omitempty"`
 	Full             bool      `json:"full,omitempty"`
+	HistOpen         bool      `json:"histOpen,omitempty"`
+	HistWidth        float32   `json:"histWidth,omitempty"`
 	Autopilot        bool      `json:"autopilot,omitempty"`
 	ExtraInstruction string    `json:"extraInstruction,omitempty"`
 	DisabledSkills   []string  `json:"disabledSkills,omitempty"`

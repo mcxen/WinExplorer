@@ -57,8 +57,45 @@ func (a *App) settingsAssistantGroups() []components.SettingsGroup {
 		a.settingsAssistantSkillsGroup(),
 		a.settingsAssistantMCPGroup(),
 		a.settingsAssistantBehaviorGroup(),
+		a.settingsAssistantMemoryGroup(),
 		a.settingsAssistantPasswordsGroup(),
 	}
+}
+
+// settingsAssistantMemoryGroup lists what the assistant remembers across
+// sessions (moved here from the history column, CHATHIST).
+func (a *App) settingsAssistantMemoryGroup() components.SettingsGroup {
+	a.assist.ensure()
+	items := []components.SettingsItem{}
+	for _, m := range append([]aiMemory(nil), a.assist.memories...) {
+		id := m.ID
+		items = append(items, components.SettingsItem{
+			ID: "mem-" + id, Title: m.Text, Keywords: []string{"记忆", "记住"},
+			Build: func(c *ui.Context) {
+				if components.Button(c, "删除", components.ButtonGhost).Clicked() {
+					a.assist.deleteMemory(id)
+				}
+			},
+		})
+	}
+	items = append(items, components.SettingsItem{
+		ID: "mem-add", Title: "添加记忆", Keywords: []string{"记忆", "记住"}, Stacked: true,
+		Build: func(c *ui.Context) {
+			ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
+				components.TextBox(c, &a.assist.memDraft, components.TextBoxOptions{}).
+					Grow(1).MinWidth(0).Height(28).FontSize(12).Placeholder("下载按月份归档").Label("记忆")
+				if components.Button(c, "记住", components.ButtonSecondary).Clicked() {
+					if msg, err := a.assist.addMemory(a.assist.memDraft); err != nil {
+						a.statusMsg = err.Error()
+					} else {
+						a.assist.memDraft = ""
+						a.statusMsg = msg
+					}
+				}
+			})
+		},
+	})
+	return components.SettingsGroup{ID: "memory", Title: "记忆", Items: items}
 }
 
 func (a *App) settingsAssistantModelsGroup() components.SettingsGroup {
@@ -333,7 +370,7 @@ func (a *App) settingsAssistantSkillsGroup() components.SettingsGroup {
 		ID: "skills", Title: "Skills",
 		Items: []components.SettingsItem{
 			skillSwitch("skill-files", "文件能力", "关闭后 A2A 卡片不再声明 files 技能（本机工具仍可用）。", assistant.SkillFiles),
-			skillSwitch("skill-memory", "记忆能力", "关闭后不向模型注入记忆，也不提供记忆工具入口；会话抽屉隐藏记忆列表。", assistant.SkillMemory),
+			skillSwitch("skill-memory", "记忆能力", "关闭后不向模型注入记忆，也不提供记忆工具入口；设置中的记忆列表仍可管理。", assistant.SkillMemory),
 			skillSwitch("skill-archive", "压缩与密码", "可选标记；解压密码本仍可在下方管理。", assistant.SkillArchive),
 			skillSwitch("skill-web", "网页搜索", "关闭后 web_search 与 web_read 即使配置了也不接受调用。", assistant.SkillWeb),
 		},

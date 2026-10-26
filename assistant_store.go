@@ -110,6 +110,11 @@ func (u *assistantUI) readConfigLocked() {
 		u.width = disk.Prefs.Width
 	}
 	u.full = disk.Prefs.Full
+	u.showHist = disk.Prefs.HistOpen
+	if disk.Prefs.HistWidth >= assistHistMinW {
+		u.histW = disk.Prefs.HistWidth
+	}
+	u.savedHist = u.showHist
 	u.autopilot = disk.Prefs.Autopilot
 	u.extraInstruction = disk.Prefs.ExtraInstruction
 	u.disabledSkills = append([]string(nil), disk.Prefs.DisabledSkills...)
@@ -142,7 +147,7 @@ func (u *assistantUI) writeConfigLocked() {
 		Providers: u.providers, ActiveID: u.activeID, ArchivePasswords: u.passwords,
 		Passwords: append(json.RawMessage(nil), u.legacyPasswords...),
 		Prefs: assistPrefs{
-			Width: u.width, Full: u.full, Autopilot: u.autopilot,
+			Width: u.width, Full: u.full, Autopilot: u.autopilot, HistOpen: u.showHist, HistWidth: u.histW,
 			ExtraInstruction: u.extraInstruction, DisabledSkills: append([]string(nil), u.disabledSkills...),
 		},
 	}
@@ -176,6 +181,13 @@ func (u *assistantUI) mergeConfigLocked(disk assistantDisk) {
 	if u.full == u.basePrefs.Full {
 		u.full = disk.Prefs.Full
 	}
+	if u.showHist == u.basePrefs.HistOpen {
+		u.showHist = disk.Prefs.HistOpen
+	}
+	if u.histW == u.basePrefs.HistWidth && disk.Prefs.HistWidth >= assistHistMinW {
+		u.histW = disk.Prefs.HistWidth
+	}
+	u.savedHist = u.showHist
 	if u.autopilot == u.basePrefs.Autopilot {
 		u.autopilot = disk.Prefs.Autopilot
 	}
@@ -206,7 +218,7 @@ func (u *assistantUI) snapshotConfig() {
 	u.baseActiveID = u.activeID
 	u.basePasswords = clonePasswords(u.passwords)
 	u.basePrefs = assistPrefs{
-		Width: u.width, Full: u.full, Autopilot: u.autopilot,
+		Width: u.width, Full: u.full, Autopilot: u.autopilot, HistOpen: u.showHist, HistWidth: u.histW,
 		ExtraInstruction: u.extraInstruction, DisabledSkills: append([]string(nil), u.disabledSkills...),
 	}
 	u.baseConfigEpoch = assistantConfigStamp()

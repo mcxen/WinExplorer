@@ -199,7 +199,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 侧栏标题「助手」，图标 `lucide.Bot()`，ID `assistant`。
 - 分组：模型与密钥、系统提示词、Skills、MCP、行为与记忆、解压密码本。
 - 附加提示词为多行输入（`TextBox` Multiline，`Lines(1, 6)`）；密钥与解压密码输入为 Password，保存后列表不回显正文。
-- 助手窗格顶栏用「助手设置」打开本分类；不再提供供应商 / 解压密码抽屉。会话抽屉保留；记忆区在 Skills 关闭 memory 时隐藏。
+- 助手窗格顶栏用「助手设置」打开本分类；不再提供供应商 / 解压密码抽屉。会话侧列（CHATHIST B，见 specs/13）；记忆在 设置 → 助手 → 记忆 中管理。
 
 截图：`docs/assets/shots/A4/`。
 

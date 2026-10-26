@@ -12,6 +12,7 @@ import (
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/egoist/mygo"
@@ -325,6 +326,17 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 	bag := newMediaBag()
 	sunvaleToolState.bindMedia(bag)
 	vision := visionModel{inner: chatModel, bag: bag, vision: run.prov.VisionEnabled()}
+	mode := "逐步确认"
+	iters := 12
+	if run.autopilot {
+		mode = "全托管"
+		iters = 24
+	}
+	// budget is the iteration guard: it injects the wrap-up instruction on
+	// the last model call and lets the loop below finish the turn with an
+	// answer instead of ErrExceedMaxIterations when the model still calls
+	// tools then.
+	budget := newBudgetModel(vision, iters)
 	sess, err := sunvaleSession(ctx)
 	if err != nil {
 		return assistRunResult{}, err
@@ -332,12 +344,6 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 	tools, err := sunvaleRunTools(ctx, sess)
 	if err != nil {
 		return assistRunResult{}, err
-	}
-	mode := "逐步确认"
-	iters := 12
-	if run.autopilot {
-		mode = "全托管"
-		iters = 24
 	}
 	memories := run.memories
 	if assistant.SkillDisabled(run.prefs, assistant.SkillMemory) {
@@ -347,7 +353,7 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 		Name:        "sunvale",
 		Description: "晴谷文件管理器助手",
 		Instruction: assistant.EffectiveInstruction(run.prefs.ExtraInstruction),
-		Model:       vision,
+		Model:       budget,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: tools},
 		},
@@ -379,6 +385,18 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 			slog.Debug("ai event error", "run", run.runID, "err", ev.Err)
 			if assistantStopped(ctx, ev.Err) {
 				return result, errAssistantStopped
+			}
+			if errors.Is(ev.Err, adk.ErrExceedMaxIterations) {
+				// The model kept calling tools into the last budgeted call.
+				// The turn already has real work in it; one direct model call
+				// with the wrap-up note turns that work into an answer rather
+				// than an error the user cannot act on.
+				if finErr := budgetFinishTurn(ctx, run, chatModel, nextID, &result); finErr == nil {
+					nextID++
+					return result, nil
+				} else {
+					slog.Warn("ai budget finish failed", "run", run.runID, "err", finErr)
+				}
 			}
 			return result, ev.Err
 		}
@@ -442,6 +460,47 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 		}
 	}
 	return result, nil
+}
+
+// budgetFinishTurn salvages a turn the iteration budget cut off. The
+// transcript turns already published carry the model's work (assistant text,
+// tool calls and results); replaying them with the wrap-up note and no tools
+// asks for the answer those results imply, in one call that cannot loop.
+func budgetFinishTurn(ctx context.Context, run assistRun, chatModel model.BaseChatModel, id int, result *assistRunResult) error {
+	msgs := []*schema.Message{schema.UserMessage(budgetFinishAsk(result))}
+	out, err := chatModel.Generate(ctx, msgs)
+	if err != nil {
+		return err
+	}
+	text := strings.TrimSpace(streamShown(out.Content))
+	if text == "" {
+		return errors.New("收尾生成没有返回文字")
+	}
+	publishAssist(run, id, aiTurn{Role: "assistant", Text: text}, false, result)
+	return nil
+}
+
+// budgetFinishAsk is the single user message of the salvage call: a compact
+// transcript of the cut-off turn plus the demand for an answer now.
+func budgetFinishAsk(result *assistRunResult) string {
+	var b strings.Builder
+	b.WriteString("刚才的一轮对话在工具预算用尽时被截断，以下是已发生的轮次：\n\n")
+	for _, ev := range result.Events {
+		switch ev.Role {
+		case "tool":
+			text := strings.TrimSpace(ev.Text)
+			if text == "" {
+				continue
+			}
+			fmt.Fprintf(&b, "[工具 %s] %s\n\n", ev.Tool, assistant.ToolText(text))
+		case "assistant":
+			if t := strings.TrimSpace(ev.Text); t != "" {
+				fmt.Fprintf(&b, "[助手] %s\n\n", t)
+			}
+		}
+	}
+	b.WriteString("请只根据上面的内容直接回答用户最初的问题：给出结论与必要的路径、数字；未完成的部分明确说明做到了哪一步、下一步该做什么。不要调用工具，不要再描述计划。")
+	return b.String()
 }
 
 // publishAssist paints a line and, once it is finished, keeps it for the

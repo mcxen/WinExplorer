@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/oneo-me/onevra/source/components/chat"
+	"github.com/oneo-me/onevra/source/icons/lucide"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
@@ -22,6 +25,9 @@ import (
 type settingsAssistForm struct {
 	editID                string
 	name, url, model, key string
+	providerID            string // models.dev provider the form was filled from
+	catPick               chat.PickerState
+	catOptions            []chat.Option
 	vision                string // assistant.VisionAuto / VisionOn / VisionOff
 	extraDraft            string
 	extraLoaded           bool
@@ -67,6 +73,14 @@ func (a *App) settingsAssistantModelsGroup() components.SettingsGroup {
 			id := p.ID
 			label := p.Name
 			desc := p.Model + " · " + p.BaseURL
+			if info, ok := p.CatalogueInfo(); ok {
+				if badges := assistant.ModelBadges(info); badges != "" {
+					desc += " · " + badges
+				}
+				if ctx := assistant.FormatContext(info.Context); ctx != "" {
+					desc += " · 上下文 " + ctx
+				}
+			}
 			if p.ID == disk.ActiveID {
 				label = "当前 · " + label
 			}
@@ -116,6 +130,7 @@ func (a *App) settingsAssistantModelsGroup() components.SettingsGroup {
 		Keywords:    []string{"API", "OpenAI", "密钥"},
 		Stacked:     true,
 		Build: func(c *ui.Context) {
+			a.settingsAssistCatalogueRow(c)
 			a.settingsAssistField(c, "名称", &a.settingsAssist.name, "OpenAI")
 			a.settingsAssistField(c, "接口", &a.settingsAssist.url, "https://api.openai.com/v1")
 			a.settingsAssistField(c, "模型", &a.settingsAssist.model, "gpt-4o-mini")
@@ -168,8 +183,12 @@ func (a *App) settingsAssistVisionRow(c *ui.Context) {
 			}
 		}
 	})
-	guess := assistant.ModelSeesImages(a.settingsAssist.model)
-	hint := "按模型名判断：当前模型" + map[bool]string{true: "会看图", false: "不看图"}[guess] + "。图片、PDF 页和视频帧都会直接发给模型。"
+	guess := visionGuess(a.settingsAssist.model)
+	source := "按模型名判断"
+	if _, ok := (aiProvider{Model: a.settingsAssist.model}).CatalogueInfo(); ok {
+		source = "models.dev 模态数据"
+	}
+	hint := source + "：当前模型" + map[bool]string{true: "会看图", false: "不看图"}[guess] + "。图片、PDF 页和视频帧都会直接发给模型。"
 	if a.settingsAssist.vision == assistant.VisionOn {
 		hint = "强制看图。模型不支持时会自动退回纯文字。"
 	} else if a.settingsAssist.vision == assistant.VisionOff {
@@ -207,10 +226,19 @@ func visionLabel(p aiProvider) string {
 	case assistant.VisionOff:
 		return "不看图"
 	}
-	if assistant.ModelSeesImages(p.Model) {
+	if visionGuess(p.Model) {
 		return "自动·看图"
 	}
 	return "自动·不看图"
+}
+
+// visionGuess is the auto answer for one model: models.dev first, name
+// heuristic when the catalogue does not know it.
+func visionGuess(model string) bool {
+	if info, ok := (aiProvider{Model: model}).CatalogueInfo(); ok {
+		return info.SeesImages()
+	}
+	return assistant.ModelSeesImages(model)
 }
 
 func (a *App) settingsAssistSaveProvider() {
@@ -467,4 +495,54 @@ func (a *App) settingsAssistantPasswordsGroup() components.SettingsGroup {
 		},
 	})
 	return components.SettingsGroup{ID: "passwords", Title: "解压密码本", Items: items}
+}
+
+// settingsAssistCatalogueRow is the models.dev shortcut above the provider
+// form: pick a catalogue provider and the name and endpoint fields fill in,
+// so adding a known provider is one click plus a key. Only providers that
+// publish an OpenAI-compatible endpoint are offered — sunvale speaks that
+// shape and nothing else.
+func (a *App) settingsAssistCatalogueRow(c *ui.Context) {
+	cat := currentCatalogue()
+	if cat == nil {
+		ensureModelsDevCatalogue()
+		return
+	}
+	provs := cat.OpenAICompatibleProviders()
+	if len(provs) == 0 {
+		return
+	}
+	if a.settingsAssist.catPick.Open {
+		// Rebuild while open so a just-loaded catalogue shows.
+		a.settingsAssist.catOptions = a.settingsAssist.catOptions[:0]
+		for _, p := range provs {
+			a.settingsAssist.catOptions = append(a.settingsAssist.catOptions, chat.Option{
+				ID: p.ID, Label: p.Name, Group: "models.dev 供应商",
+				Icon:   providerLogo(p.ID).icon(),
+				Detail: detailEndpoint(p.API),
+			})
+		}
+	}
+	res := chat.Picker(c, &a.settingsAssist.catPick, chat.PickerOptions{
+		Label: "从 models.dev 选择", Icon: lucide.Sparkles,
+		SearchLabel: "搜索供应商", EmptyText: "没有匹配的供应商",
+		Options: a.settingsAssist.catOptions, Width: 360,
+	})
+	if res.Chosen == "" {
+		return
+	}
+	prov := cat.Providers[res.Chosen]
+	name, api, _ := cat.LookupProvider(res.Chosen)
+	a.settingsAssist.name = name
+	a.settingsAssist.url = api
+	a.settingsAssist.providerID = res.Chosen
+	_ = prov
+	a.statusMsg = "已填入 " + name + " 的接口地址，补上密钥和模型即可"
+}
+
+func detailEndpoint(api string) string {
+	if len(api) > 42 {
+		return api[:42] + "…"
+	}
+	return api
 }

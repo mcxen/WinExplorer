@@ -90,6 +90,7 @@
 | OPENUI-MORE2 | Gallery 列数与双击打开、Files 文件夹图标进入与 stat 缓存 | 中 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MORE | `main` |
 | SCH2 | AI 任务立刻跑：助手预设 + assistant_task_run + 斜杠 /分类 /立即执行 | 高 | 已完成 | [07](docs/specs/07-scheduled-tasks.md) | SCH1、FORM1、A5 | `feat/ai-task-run` |
 | A6 | 助手全量文件读取与看图 | 高 | 已完成 | 本文 | A5 | `feat/assistant-fileview` |
+| A8 | 接入 models.dev 目录：模型元数据、品牌图标与供应商预填 | 高 | 已完成 | 本文 | A6 | `feat/modelsdev-catalogue` |
 | CHAT1 | 助手对话窗口改版：文件操作卡片、确认/撤销、执行计划、离线演示 | 高 | 已完成 | 本文 / `docs/UI.md` 助手对话窗口 | A5、FX1 | `demo/assistant-chat` → `main` |
 | IMAGE1 | 图片快速查看：侧栏大图 + 空格缩放/平移/同目录翻页 | 高 | 已完成 | 本文 / `docs/UI.md` IMAGE1 | — | `feat/image-quickview` → `main` |
 | VIDEO1 | 视频关键帧预览：空格 scrub 抽帧 + 系统播放器打开 | 高 | 已完成 | 本文 / `docs/UI.md` VIDEO1 | IMAGE1 | `feat/video-quickview` → `main` |
@@ -341,6 +342,11 @@
 - **看图**：图片与视频帧作为真实图片分片进模型请求（工具结果经 `[[sunvale-media:…]]` 标记 + 每轮图片袋，`visionModel` 在模型边界转成分片；用户附件同理）。供应商可选「自动判断 / 总是看图 / 不看图」，自动按模型名判断；请求因图片被拒时自动退回纯文字重试。不能看图时结果里写明，不让模型假装看过。
 - **范围**：新增 `internal/fileview`（内核 + 内置 `extract.py`）、`assistant_files.go`（读取与图片袋）、`assistant_vision.go`（模型包装）、设置 → 助手新增「文件读取」后端清单与供应商「看图」选项；提示词同步。不改远程预览的抽取实现。
 - **验收**：`internal/fileview` 单测（文本/编码/office/图片帧/压缩包/二进制分类）；`assistant_files_test.go`（标记、图片袋、看图重写与降级重试）；`internal/assistant` 看图判定单测；`go build/vet/test` 与 `GOOS=windows/linux/js` 编译通过；截图 `docs/assets/shots/A6/`。
+
+### A8 接入 models.dev 目录
+- **目标**：模型选择器显示目录事实——正式名称、上下文、每百万 token 价格、看图/推理/工具角标；供应商分组带 models.dev 品牌图标；设置 → 助手可「从 models.dev 选择」OpenAI 兼容供应商并预填名称/接口；看图自动判定优先用目录的输入模态（image ∈ input），目录无条目再退回模型名启发式。
+- **范围**：新增 `internal/assistant/modelsdev.go`（api.json 客户端：7 天缓存于 UserCacheDir，陈旧缓存优先于失败，`LookupModel/LookupProvider/OpenAICompatibleProviders`）、`modelsdev_fmt.go`（K/M 上下文、$进/出价格、徽标文案）、`brandicons_cache.go`（logo 拉取/落盘/内存三层缓存，404 负缓存，id 路径消毒，lucide 兜底）；`ModelChoice` 增加 `Info`，`EnrichChoices` 填充；provider 表单加 `catPick`。
+- **验收**：`TestModelsDev*`（查找/缓存生命周期/离线回退）、`TestBrandLogo*`（拉取/404/路径消毒）、格式化单测；截图 `docs/assets/shots/A7/`；全量测试与四平台编译通过。
 
 ### SCH2 AI 任务立刻跑
 - **目标**：助手预设（分类下载 / 收件箱整理 / 按内容重命名）；`assistant_task_run` 一次性全托管；`schedule_run` 与提示词引导「现在跑」；斜杠 `/分类` `/立即执行`。

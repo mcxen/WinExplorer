@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -15,6 +16,60 @@ import (
 // assistant_models.go is the composer's model chip. The list comes from the
 // active provider's OpenAI-compatible /models endpoint and stays in memory;
 // the chosen model is what assistant.json already stores on that provider.
+// What models.dev adds: each row's real name, context and price, the
+// capability badges, and the provider's own logo from the logo cache.
+
+// assistantCatalogue holds the shared models.dev catalogue. One load for
+// the whole process: the picker and the settings page read the same copy,
+// and a refresh replaces the pointer atomically.
+var (
+	assistantCatalogueMu sync.RWMutex
+	assistantCatalogue   *assistant.ModelCatalogue
+	assistantCatLoading  bool
+)
+
+// ensureModelsDevCatalogue loads the catalogue once in the background. The
+// first paint of the picker answers without it; when the load lands the
+// window repaints and the rows gain their facts.
+func ensureModelsDevCatalogue() {
+	assistantCatalogueMu.RLock()
+	loaded, loading := assistantCatalogue != nil, assistantCatLoading
+	assistantCatalogueMu.RUnlock()
+	if loaded || loading {
+		return
+	}
+	assistantCatalogueMu.Lock()
+	if assistantCatalogue != nil || assistantCatLoading {
+		assistantCatalogueMu.Unlock()
+		return
+	}
+	assistantCatLoading = true
+	assistantCatalogueMu.Unlock()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cat, err := assistant.LoadModelsDev(ctx)
+		assistantCatalogueMu.Lock()
+		assistantCatLoading = false
+		if err == nil {
+			assistantCatalogue = cat
+		}
+		assistantCatalogueMu.Unlock()
+		// Publish for the headless decision helpers (vision, settings).
+		if err == nil {
+			assistant.SetSharedCatalogue(cat)
+		}
+		repaint()
+	}()
+}
+
+// currentCatalogue is the loaded catalogue, or nil: every caller must work
+// without it.
+func currentCatalogue() *assistant.ModelCatalogue {
+	assistantCatalogueMu.RLock()
+	defer assistantCatalogueMu.RUnlock()
+	return assistantCatalogue
+}
 
 func (a *App) assistantModelPicker(c *ui.Context) {
 	p, ok := a.assist.activeProvider()
@@ -33,13 +88,14 @@ func (a *App) assistantModelPicker(c *ui.Context) {
 	selected := p.ID + "\x1f" + p.Model
 	res := chat.Picker(c, &a.assist.modelPick, chat.PickerOptions{
 		Label: label, Icon: lucide.Bot, SearchLabel: "搜索模型", EmptyText: "没有匹配的模型",
-		Options: a.assist.modelOptions(), Selected: selected, Width: 320,
+		Options: a.assist.modelOptions(), Selected: selected, Width: 380,
 	})
 	if a.assist.modelPick.Open && !opened {
 		a.assist.refreshConfig()
 		if current, ok := a.assist.activeProvider(); ok {
 			a.ensureProviderModels(current)
 		}
+		ensureModelsDevCatalogue()
 	}
 	if res.Chosen == "" {
 		return
@@ -50,13 +106,25 @@ func (a *App) assistantModelPicker(c *ui.Context) {
 	}
 }
 
+// modelOptions builds the picker rows: the provider's own logo leads, the
+// catalogue's name and facts follow. A model the catalogue does not know
+// still lists — the endpoint is the authority on what exists.
 func (u *assistantUI) modelOptions() []chat.Option {
-	choices := assistant.ModelChoices(u.providers, u.modelLists)
+	choices := assistant.EnrichChoices(
+		assistant.ModelChoices(u.providers, u.modelLists), currentCatalogue())
 	out := make([]chat.Option, 0, len(choices))
 	for _, choice := range choices {
-		out = append(out, chat.Option{
+		opt := chat.Option{
 			ID: choice.Value, Label: choice.Label, Group: choice.Group,
-		})
+		}
+		if logo := providerLogo(choice.Provider); logo != nil {
+			opt.Icon = logo.icon()
+		}
+		if choice.Info != nil {
+			opt.Detail = assistant.ModelDetail(*choice.Info)
+			opt.Description = assistant.ModelDescription(*choice.Info)
+		}
+		out = append(out, opt)
 	}
 	return out
 }

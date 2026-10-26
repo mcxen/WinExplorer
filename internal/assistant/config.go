@@ -63,9 +63,10 @@ const (
 	VisionOff  = "off"
 )
 
-// VisionEnabled reports whether this route may carry pictures. Auto mode
-// trusts the model name: a wrong guess degrades to text at request time, so
-// guessing is cheaper than asking every user to know their model.
+// VisionEnabled reports whether this route may carry pictures. The explicit
+// choice wins; auto mode asks models.dev first — the catalogue's own
+// modality list is a fact, the name heuristic below is a guess — and falls
+// back to guessing when the catalogue has no entry or was never loaded.
 func (p Provider) VisionEnabled() bool {
 	switch strings.TrimSpace(p.Vision) {
 	case VisionOn:
@@ -73,7 +74,21 @@ func (p Provider) VisionEnabled() bool {
 	case VisionOff:
 		return false
 	}
+	if info, ok := p.CatalogueInfo(); ok {
+		return info.SeesImages()
+	}
 	return ModelSeesImages(p.Model)
+}
+
+// CatalogueInfo is what models.dev knows about this provider's model.
+// ok is false when no catalogue is loaded or the model is unknown; callers
+// fall back to their own judgment without treating that as an error.
+func (p Provider) CatalogueInfo() (ModelInfo, bool) {
+	cat := CurrentCatalogue()
+	if cat == nil {
+		return ModelInfo{}, false
+	}
+	return cat.LookupModel(p.Model)
 }
 
 // ModelSeesImages is the auto-detection heuristic. Positive markers win
@@ -147,12 +162,42 @@ type Config[T any] struct {
 }
 
 // ModelChoice is the UI-independent form of one provider/model row.
+// Info is what models.dev knows about the model, nil when the catalogue
+// has no entry or was never loaded: the row still works, it just shows
+// less.
 type ModelChoice struct {
 	Value    string
 	Label    string
 	Group    string
 	Provider string
 	Model    string
+	Info     *ModelInfo
+}
+
+// EnrichChoices fills Info from the catalogue, without changing order or
+// values: a picker decorated with facts must not become a picker ordered
+// by them.
+func EnrichChoices(choices []ModelChoice, cat *ModelCatalogue) []ModelChoice {
+	if cat == nil {
+		return choices
+	}
+	cache := map[string]ModelInfo{}
+	for i := range choices {
+		c := &choices[i]
+		info, ok := cache[c.Model]
+		if !ok {
+			info, _ = cat.LookupModel(c.Model)
+			cache[c.Model] = info
+		}
+		if info.ID != "" {
+			copy := info
+			c.Info = &copy
+			if info.Name != "" && !strings.EqualFold(info.Name, c.Model) {
+				c.Label = info.Name
+			}
+		}
+	}
+	return choices
 }
 
 // ActiveProvider resolves the active route and falls back to the first one.

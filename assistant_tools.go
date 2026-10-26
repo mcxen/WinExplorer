@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -574,20 +576,26 @@ type choiceArgs struct {
 func (s *sunvaleTools) offerChoices(_ context.Context, _ *mcp.CallToolRequest, args choiceArgs) (*mcp.CallToolResult, any, error) {
 	prompt := strings.TrimSpace(args.Prompt)
 	if prompt == "" {
-		return mcpErr(fmt.Errorf("prompt 不能为空")), nil, nil
+		return mcpText("offer_choices 需要 prompt：一句问用户的话。请带上 prompt 和 2 到 6 个 options 再调用一次。"), nil, nil
 	}
-	options, err := cleanChoiceOptions(choiceOptionValues(args.Options))
-	if err != nil {
-		return mcpErr(err), nil, nil
-	}
+	options := cleanChoiceOptions(choiceOptionValues(args.Options))
 	multi := true
 	switch strings.ToLower(strings.TrimSpace(args.Mode)) {
 	case "single", "one", "单选":
 		multi = false
 	}
+	// Fewer than two options is not a failed tool call. IsError aborts the
+	// whole run (NodeRunError) instead of letting the model ask again, so
+	// the user sees a stack rather than a choice. Say what to write.
+	if len(options) < 2 {
+		return mcpText("offer_choices 没有得到 2 个不同的选项。请再调用一次：options 用 JSON 字符串数组，2 到 6 条，每条一句能立刻执行的做法。"), nil, nil
+	}
 	return mcpText(formatChoices(prompt, multi, options)), nil, nil
 }
 
+// choiceOptionValues reads options from whatever shape the model wrote:
+// a string array, objects with a label/text/name key, one option per line,
+// a JSON array stuffed into a string, or numbers as their text.
 func choiceOptionValues(raw any) []string {
 	switch values := raw.(type) {
 	case []string:
@@ -595,26 +603,86 @@ func choiceOptionValues(raw any) []string {
 	case []any:
 		out := make([]string, 0, len(values))
 		for _, value := range values {
-			if text, ok := value.(string); ok {
-				out = append(out, text)
-			}
+			out = append(out, optionText(value)...)
 		}
 		return out
 	case string:
-		var out []string
-		for _, line := range strings.Split(values, "\n") {
-			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
-			if line != "" {
-				out = append(out, line)
-			}
+		return splitOptionText(values)
+	case map[string]any:
+		return optionText(values)
+	case json.RawMessage:
+		var decoded any
+		if json.Unmarshal(values, &decoded) != nil {
+			return splitOptionText(string(values))
 		}
-		return out
+		return choiceOptionValues(decoded)
 	default:
 		return nil
 	}
 }
 
-func cleanChoiceOptions(in []string) ([]string, error) {
+func splitOptionText(values string) []string {
+	values = strings.TrimSpace(values)
+	if values == "" {
+		return nil
+	}
+	if strings.HasPrefix(values, "[") {
+		var decoded any
+		if json.Unmarshal([]byte(values), &decoded) == nil {
+			if got := choiceOptionValues(decoded); len(got) > 0 {
+				return got
+			}
+		}
+	}
+	lines := strings.Split(values, "\n")
+	if len(lines) == 1 {
+		for _, sep := range []string{"、", "；", "|", "，", ","} {
+			if strings.Contains(values, sep) {
+				lines = strings.Split(values, sep)
+				break
+			}
+		}
+	}
+	var out []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "- ")
+		line = strings.TrimPrefix(line, "* ")
+		line = strings.TrimSpace(line)
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// optionText flattens one option value: a string, an object with a
+// label/text/name/value/title key, or a number as its text.
+func optionText(value any) []string {
+	switch v := value.(type) {
+	case string:
+		return splitOptionText(v)
+	case map[string]any:
+		for _, key := range []string{"label", "text", "name", "value", "title"} {
+			if s, ok := v[key].(string); ok && strings.TrimSpace(s) != "" {
+				return []string{strings.TrimSpace(s)}
+			}
+		}
+		return nil
+	case float64:
+		return []string{strconv.FormatFloat(v, 'f', -1, 64)}
+	case json.Number:
+		return []string{v.String()}
+	case bool:
+		return []string{strconv.FormatBool(v)}
+	default:
+		return nil
+	}
+}
+
+// cleanChoiceOptions dedupes, trims and caps the choices. Too few options
+// is the caller's problem to answer in plain text, not an error.
+func cleanChoiceOptions(in []string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, opt := range in {
@@ -629,10 +697,7 @@ func cleanChoiceOptions(in []string) ([]string, error) {
 			break
 		}
 	}
-	if len(out) < 2 {
-		return nil, fmt.Errorf("需要至少 2 个选项")
-	}
-	return out, nil
+	return out
 }
 
 func joinHits(empty string, hits []string, stopped bool) string {

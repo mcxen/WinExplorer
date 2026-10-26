@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseChoices(t *testing.T) {
 	text := formatChoices("下一步？", false, []string{"留下", "移走"}) + "尾注"
@@ -23,9 +26,37 @@ func TestChoiceOptionValues(t *testing.T) {
 		[]string{"按类型", "按日期"},
 		[]any{"按类型", "按日期"},
 		"- 按类型\n- 按日期",
+		"按类型、按日期",
+		`["按类型","按日期"]`,
+		[]any{map[string]any{"label": "按类型"}, map[string]any{"text": "按日期"}},
 	} {
 		if got := choiceOptionValues(raw); len(got) != 2 || got[0] != "按类型" || got[1] != "按日期" {
-			t.Fatalf("choiceOptionValues(%+v) = %v", raw, got)
+			t.Fatalf("choiceOptionValues(%#v) = %v", raw, got)
 		}
+	}
+}
+
+func TestOfferChoicesShortListDoesNotError(t *testing.T) {
+	res, _, err := sunvaleToolState.offerChoices(t.Context(), nil, choiceArgs{
+		Prompt:  "下一步？",
+		Options: []any{"只留这一个"},
+	})
+	if err != nil || res == nil || res.IsError {
+		t.Fatalf("short list must not fail the run: err=%v res=%+v", err, res)
+	}
+	text := mcpTextOf(res)
+	if strings.Contains(text, "需要至少") || strings.Contains(text, choiceOpen) {
+		t.Fatalf("short list should ask for a real list, got %q", text)
+	}
+	ok, _, err := sunvaleToolState.offerChoices(t.Context(), nil, choiceArgs{
+		Prompt:  "怎么整理？",
+		Options: []any{map[string]any{"label": "按类型"}, map[string]any{"name": "按日期"}},
+	})
+	if err != nil || ok == nil || ok.IsError {
+		t.Fatalf("object options: err=%v res=%+v", err, ok)
+	}
+	_, ch := parseChoices(mcpTextOf(ok))
+	if ch == nil || len(ch.Options) != 2 || ch.Options[0] != "按类型" {
+		t.Fatalf("object options did not become a choice: %q", mcpTextOf(ok))
 	}
 }

@@ -502,6 +502,21 @@ type assistPaint struct {
 	group chat.GroupState
 	acts  map[int]*chat.ActivityState
 	md    *assistMD
+	// segs holds one Markdown view per text segment, keyed by its first
+	// turn, so text split by tool rows keeps its own reveal and copy state.
+	segs map[int]*assistPaint
+}
+
+func (p *assistPaint) segPaint(i int) *assistPaint {
+	if p.segs == nil {
+		p.segs = map[int]*assistPaint{}
+	}
+	sp := p.segs[i]
+	if sp == nil {
+		sp = &assistPaint{acts: map[int]*chat.ActivityState{}}
+		p.segs[i] = sp
+	}
+	return sp
 }
 
 func (u *assistantUI) paintFor(i int) *assistPaint {
@@ -548,36 +563,32 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		key = ex.Rest[0]
 	}
 	paint := a.assist.paintFor(key)
+	segs := assistSegments(turns, ex.Rest)
 	var tools, cards, errs []int
 	var answer strings.Builder
-	var replies []int
-	for _, i := range ex.Rest {
-		t := turns[i]
-		switch {
-		case t.Role == "tool" && (t.Op != nil || len(t.Steps) > 0):
-			// File work and plans are cards in the reply, not tool log rows.
-			cards = append(cards, i)
-		case t.Role == "tool":
-			tools = append(tools, i)
-		case t.Error:
-			errs = append(errs, i)
-		default:
-			text := t.Text
-			if t.Choice != nil && strings.TrimSpace(text) == t.Choice.Prompt {
-				text = ""
+	for _, sg := range segs {
+		switch sg.Kind {
+		case assistSegTools:
+			tools = append(tools, sg.Turns...)
+		case assistSegCard:
+			cards = append(cards, sg.Turns...)
+		case assistSegError:
+			errs = append(errs, sg.Turns...)
+		case assistSegText:
+			if answer.Len() > 0 {
+				answer.WriteString("\n\n")
 			}
-			// OpenUI programs stay in the text: the Markdown view draws them
-			// where the model put them.
-			if strings.TrimSpace(text) != "" {
-				if answer.Len() > 0 {
-					answer.WriteString("\n\n")
-				}
-				answer.WriteString(strings.TrimSpace(text))
-				replies = append(replies, i)
-			}
+			answer.WriteString(sg.Text)
 		}
 	}
 	final := answer.String()
+	shown := segs[:0:0]
+	for _, sg := range segs {
+		if sg.Kind != assistSegError {
+			shown = append(shown, sg)
+		}
+	}
+	segs = shown
 	last := key == a.assist.lastExchangeKey(ex)
 	status := chat.Completed
 	working := ""
@@ -627,85 +638,100 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 			})
 		}
 	}
-	var steps []chat.Step
-	if len(tools) > 0 || (last && a.assist.running && a.assist.pending != "") {
-		activities := make([]chat.Activity, 0, len(tools)+1)
-		names := make([]string, 0, len(tools))
-		for _, i := range tools {
-			t := turns[i]
-			text := t.Text
-			st := paint.acts[i]
-			if st == nil {
-				st = &chat.ActivityState{}
-				paint.acts[i] = st
-			}
-			action := t.Tool
-			if action == "" {
-				action = "工具"
-			}
-			if t.Plan != "" {
-				action = "重命名方案"
-			}
-			if t.Tool != "" {
-				names = append(names, t.Tool)
-			}
-			actStatus := chat.Completed
-			if last && a.assist.running && a.assist.liveOn && a.assist.liveAt == i {
-				actStatus = chat.Running
-			}
-			detail := assistFirstLine(text)
-			activities = append(activities, chat.Activity{
-				ID: itoa(i), Action: action, Detail: detail,
-				Status: actStatus, Mono: true, State: st, MaxHeight: 220,
-				Content: func(c *ui.Context) {
-					ui.Text(c, text).FontSize(12).TextColor(colorText()).Wrap()
-				},
-			})
-		}
-		if last && a.assist.running && a.assist.pending != "" {
-			// An empty Detail puts the toolkit's pulse dot on the row; the
-			// verb beats the raw tool name while it still says doing what.
-			activities = append(activities, chat.Activity{
-				ID: "pending", Action: assistToolVerb(a.assist.pending), Status: chat.Running,
-			})
-			names = append(names, a.assist.pending)
-		}
-		title := assistSummary(len(tools))
-		if label := assistCallSummary(names, last && a.assist.running); label != "" {
-			title = label
-		}
-		steps = []chat.Step{{
-			ID: "tools", Title: title, Activities: activities, Group: &paint.group,
-		}}
+	running := last && a.assist.running
+	pending := ""
+	if running {
+		pending = a.assist.pending
 	}
-	// With cards the reply owns its working line, under the cards, so the
-	// dots do not sit above the work they describe.
-	ownWorking := ""
-	if len(cards) > 0 && status == chat.Running {
-		ownWorking, status, working = working, chat.Completed, ""
+	// Tool rows sit in the reply where they happened: text, call, more
+	// text. The turn has no separate step list, so nothing stacks on top.
+	var names []string
+	for _, i := range tools {
+		if n := turns[i].Tool; n != "" {
+			names = append(names, n)
+		}
+	}
+	if pending != "" {
+		names = append(names, pending)
+	}
+	toolRow := func(c *ui.Context, i int) {
+		t := turns[i]
+		st := paint.acts[i]
+		if st == nil {
+			st = &chat.ActivityState{}
+			paint.acts[i] = st
+		}
+		action := t.Tool
+		if action == "" {
+			action = "工具"
+		}
+		if t.Plan != "" {
+			action = "重命名方案"
+		}
+		actStatus := chat.Completed
+		if running && a.assist.liveOn && a.assist.liveAt == i {
+			actStatus = chat.Running
+		}
+		text := t.Text
+		var content chat.View
+		if strings.TrimSpace(text) != "" {
+			content = func(c *ui.Context) {
+				ui.Text(c, text).FontSize(12).TextColor(colorText()).Wrap()
+			}
+		}
+		chat.ActivityRow(c, chat.Activity{
+			ID: "tool-" + itoa(i), Action: action, Detail: assistFirstLine(text),
+			Status: actStatus, Mono: true, State: st, MaxHeight: 220, Content: content,
+		})
 	}
 	var finalView chat.View
 	var actions chat.View
-	if final != "" || len(cards) > 0 {
-		streaming := last && a.assist.running
+	if len(segs) > 0 || pending != "" {
+		streaming := running
 		var at time.Time
 		if len(ex.Rest) > 0 {
 			at = turns[ex.Rest[0]].At
 		}
+		ownWorking := ""
+		if status == chat.Running {
+			// The reply owns its working line, under the latest segment.
+			ownWorking, status, working = working, chat.Completed, ""
+		}
+		lastText := -1
+		for n, sg := range segs {
+			if sg.Kind == assistSegText {
+				lastText = n
+			}
+		}
 		finalView = func(c *ui.Context) {
 			ui.Column(c.Key("reply")).FillWidth().MinWidth(0).Gap(8).Children(func() {
 				a.assistSpeaker(c, at)
-				for _, i := range cards {
-					if t := turns[i]; len(t.Steps) > 0 {
-						assistPlanCard(c, "plan-steps-"+itoa(i), t.Steps)
-					} else {
-						a.assistOpCard(c, i, t.Op)
+				for n, sg := range segs {
+					switch sg.Kind {
+					case assistSegText:
+						sp := paint.segPaint(sg.Turns[0])
+						live := streaming && n == lastText && n == len(segs)-1
+						ui.Column(c.Key("md-" + itoa(sg.Turns[0]))).FillWidth().MinWidth(0).Children(func() {
+							a.assistMarkdown(c, sp, sg.Text, sg.Turns, live)
+						})
+					case assistSegTools:
+						ui.Column(c.Key("tools-" + itoa(sg.Turns[0]))).FillWidth().MinWidth(0).Gap(4).Children(func() {
+							for _, i := range sg.Turns {
+								toolRow(c, i)
+							}
+						})
+					case assistSegCard:
+						i := sg.Turns[0]
+						if t := turns[i]; len(t.Steps) > 0 {
+							assistPlanCard(c, "plan-steps-"+itoa(i), t.Steps)
+						} else {
+							a.assistOpCard(c, i, t.Op)
+						}
 					}
 				}
-				if final != "" {
-					ui.Column(c.Key("md")).FillWidth().MinWidth(0).Children(func() {
-						a.assistMarkdown(c, paint, final, replies, streaming)
-					})
+				if pending != "" {
+					// An empty Detail puts the toolkit's pulse dot on the row.
+					chat.ActivityRow(c, chat.Activity{ID: "pending", Action: assistToolVerb(pending), Status: chat.Running})
 				}
 				if ownWorking != "" {
 					ui.Row(c.Key("own-working")).Height(22).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -720,15 +746,15 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		}
 	}
 	summary := assistSummary(len(tools))
-	if len(steps) == 1 && steps[0].Title != "" {
-		summary = steps[0].Title
+	if label := assistCallSummary(names, running); label != "" {
+		summary = label
 	}
 	if stopped && status == chat.Cancelled {
 		summary = "已停止"
 	}
 	chat.Turn(c, &paint.turn, chat.TurnOptions{
 		ID: itoa(key), Status: status, Summary: summary, Working: working,
-		Prompt: prompt, Steps: steps, Final: finalView, Actions: actions,
+		Prompt: prompt, Final: finalView, Actions: actions,
 		HoldOpen: !a.assist.scroll.AtLatest(),
 		Footer: func(c *ui.Context) {
 			if last && ex.User >= 0 {

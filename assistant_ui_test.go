@@ -38,15 +38,17 @@ func TestAssistantTranscriptFoldsTools(t *testing.T) {
 	a := &App{}
 	a.assist.turns = []aiTurn{
 		{Role: "user", Text: "整理下载"},
-		{Role: "tool", Text: "list_dir\n下载"},
+		{Role: "tool", Text: "list_dir\nreport.pdf"},
 		{Role: "assistant", Text: "已经看过下载"},
 	}
 	tt := ui.NewTester(func(c *ui.Context) { a.assistantTranscript(c) }, 520, 640)
 	tt.Frame()
-	if !tt.HasText("整理下载") || !tt.HasText("已经看过下载") || !tt.HasText("调用了 1 个工具") {
+	// The tool call is one collapsed row inside the reply, before the text
+	// that followed it, rather than a folded group on top.
+	if !tt.HasText("整理下载") || !tt.HasText("已经看过下载") || !tt.HasText("list_dir") {
 		t.Fatalf("transcript: %v", tt.Texts())
 	}
-	if tt.HasText("list_dir") {
+	if tt.HasText("report.pdf") {
 		t.Fatal("tool output was expanded in a finished turn")
 	}
 }

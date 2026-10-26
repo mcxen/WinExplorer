@@ -23,6 +23,12 @@ import (
 
 const assistWalkNodes = 3000
 
+// assistSearchHits is how many paths one search_names call returns before
+// stopping. The distribution note (see hitDistribution) matters as much as
+// the list: without it a deep tree full of matches reads as "the folder has
+// N such files", when they may all sit under one subfolder.
+const assistSearchHits = 200
+
 // errWalkStop ends a capped walk with whatever has been collected.
 var errWalkStop = errors.New("stop walk")
 
@@ -131,6 +137,9 @@ func (s *sunvaleTools) searchNames(ctx context.Context, _ *mcp.CallToolRequest, 
 	_, hidden := s.bound()
 	query := searchquery.Parse(qtext)
 	var hits []string
+	// total keeps counting past the path cap: "200 shown" alone would read
+	// as the whole answer, and a full count is what keeps the summary honest.
+	total := 0
 	stopped, err := walkFiles(ctx, start, hidden, assistWalkNodes, func(path string, d fs.DirEntry) error {
 		if path == start {
 			return nil
@@ -146,16 +155,85 @@ func (s *sunvaleTools) searchNames(ctx context.Context, _ *mcp.CallToolRequest, 
 		if !query.Matches(d.Name(), rel, searchquery.MatchInfo{IsDir: d.IsDir(), Ext: ext, Size: -1}) {
 			return nil
 		}
-		hits = append(hits, path)
-		if len(hits) >= 50 {
-			return errWalkStop
+		total++
+		if len(hits) < assistSearchHits {
+			hits = append(hits, path)
 		}
 		return nil
 	})
 	if err != nil {
 		return mcpErr(err), nil, nil
 	}
-	return mcpText(joinHits("没有匹配的名称", hits, stopped)), nil, nil
+	text := joinHits("没有匹配的名称", hits, false)
+	if dist := hitDistribution(start, hits, total); dist != "" {
+		text += dist
+	} else if stopped {
+		text += "（结果在上限处停下）\n"
+	}
+	if stopped && total > len(hits) {
+		text += "（遍历在节点上限处停下，总数只含已扫描的部分）\n"
+	}
+	return mcpText(text), nil, nil
+}
+
+// hitDistribution summarizes where hits sit: the total found and, per
+// top-level child of start, how many hits are under it. That is the
+// difference between "the folder has 2825 java files" and "they all live
+// under south-plus-app/decompiled". Paths are relative to start.
+//
+// It speaks up in two situations: the walk stopped with more hits than
+// shown, or the hits concentrate — the top level itself holds none and one
+// child holds most of them. A flat handful of matches stays bare; a count
+// line under every hit list would be noise.
+func hitDistribution(start string, hits []string, total int) string {
+	if len(hits) == 0 {
+		return ""
+	}
+	counts := map[string]int{}
+	// topLevel counts hits sitting directly in start; counts' keys are first
+	// components and so can never say whether the top level itself matched.
+	topLevel := 0
+	for _, h := range hits {
+		rel, err := filepath.Rel(start, h)
+		if err != nil {
+			continue
+		}
+		if i := strings.Index(rel, string(filepath.Separator)); i >= 0 {
+			counts[rel[:i]]++
+		} else {
+			counts[rel]++
+			topLevel++
+		}
+	}
+	concentrated := false
+	if topLevel == 0 {
+		// Nothing at the top itself: every hit hides under some child, the
+		// exact shape that reads as "the folder has N such files".
+		largest := 0
+		for _, n := range counts {
+			if n > largest {
+				largest = n
+			}
+		}
+		concentrated = largest*10 >= len(hits)*9
+	}
+	if total <= len(hits) && !concentrated {
+		return ""
+	}
+	tops := make([]string, 0, len(counts))
+	for top := range counts {
+		tops = append(tops, top)
+	}
+	sort.Strings(tops)
+	var b strings.Builder
+	if total > len(hits) {
+		fmt.Fprintf(&b, "共找到 %d 个（显示了前 %d 个）\n", total, len(hits))
+	}
+	b.WriteString("命中按第一层位置分布：\n")
+	for _, top := range tops {
+		fmt.Fprintf(&b, "  %s  %d\n", top, counts[top])
+	}
+	return b.String()
 }
 
 type grepArgs struct {
@@ -325,6 +403,10 @@ func (s *sunvaleTools) folderSummary(ctx context.Context, _ *mcp.CallToolRequest
 	files, dirs := 0, 0
 	var total int64
 	exts := map[string]int{}
+	// perTop counts files under each top-level child, so a capped summary
+	// shows where the mass sits instead of leaving "files: N" to be read as
+	// spread evenly over the tree.
+	perTop := map[string]int{}
 	stopped, err := walkFiles(ctx, root, hidden, assistWalkNodes, func(path string, d fs.DirEntry) error {
 		if path == root {
 			return nil
@@ -342,6 +424,13 @@ func (s *sunvaleTools) folderSummary(ctx context.Context, _ *mcp.CallToolRequest
 			ext = "无扩展名"
 		}
 		exts[ext]++
+		if rel, err := filepath.Rel(root, path); err == nil {
+			top := rel
+			if i := strings.Index(rel, string(filepath.Separator)); i >= 0 {
+				top = rel[:i]
+			}
+			perTop[top]++
+		}
 		return nil
 	})
 	if err != nil {
@@ -380,7 +469,46 @@ func (s *sunvaleTools) folderSummary(ctx context.Context, _ *mcp.CallToolRequest
 	if stopped {
 		b.WriteString("（统计在上限处停下，不是完整结果）\n")
 	}
+	// The distribution answers "where does the mass sit" whenever one child
+	// holds it, capped walk or not — a clean top level over one heavy
+	// subfolder is what gets read as "the folder has N files".
+	if tops := topCounts(perTop, files); tops != "" {
+		b.WriteString(tops)
+	}
 	return mcpText(b.String()), nil, nil
+}
+
+// topCounts renders the per-top-level-child file counts, largest first.
+// Only worth showing when the mass concentrates somewhere — over half the
+// files under one child — and there is more than one place to compare:
+// even splits add noise without changing what the summary says.
+func topCounts(perTop map[string]int, files int) string {
+	if len(perTop) < 2 || files == 0 {
+		return ""
+	}
+	type pair struct {
+		name string
+		n    int
+	}
+	list := make([]pair, 0, len(perTop))
+	for name, n := range perTop {
+		list = append(list, pair{name, n})
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].n == list[j].n {
+			return list[i].name < list[j].name
+		}
+		return list[i].n > list[j].n
+	})
+	if list[0].n*2 < files {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("文件按第一层位置分布（大→小）：\n")
+	for _, p := range list {
+		fmt.Fprintf(&b, "  %s  %d\n", p.name, p.n)
+	}
+	return b.String()
 }
 
 func (s *sunvaleTools) diskSpace(_ context.Context, _ *mcp.CallToolRequest, args pathArgs) (*mcp.CallToolResult, any, error) {

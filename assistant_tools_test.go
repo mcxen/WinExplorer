@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,4 +117,85 @@ func mustRead(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+// A tree whose hits all sit in one deep subfolder is where a bare hit list
+// misleads: the assistant reads "N matches in the folder" when the folder
+// itself has none. The capped tools must say where the mass sits.
+func TestAssistantSearchAndSummaryShowDistribution(t *testing.T) {
+	dir := t.TempDir()
+	deep := filepath.Join(dir, "south-plus-app", "decompiled", "sources")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 60; i++ {
+		name := filepath.Join(deep, fmt.Sprintf("Src%d.java", i))
+		if err := os.WriteFile(name, []byte("class"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The top level itself stays clean: only folders, no java.
+	if err := os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sunvaleToolState.bind(dir, false, nil, nil, false)
+	ctx := context.Background()
+	sess, err := sunvaleSession(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := callToolText(t, sess, "search_names", map[string]any{"query": "java"})
+	if !strings.Contains(found, "命中按第一层位置分布") {
+		t.Fatalf("search distribution missing: %s", found)
+	}
+	if !strings.Contains(found, "south-plus-app  60") {
+		t.Fatalf("search distribution counts wrong: %s", found)
+	}
+
+	sum := callToolText(t, sess, "folder_summary", map[string]any{})
+	if !strings.Contains(sum, "java 60") {
+		t.Fatalf("summary ext count: %s", sum)
+	}
+	if !strings.Contains(sum, "文件按第一层位置分布") || !strings.Contains(sum, "south-plus-app  60") {
+		t.Fatalf("summary distribution missing: %s", sum)
+	}
+}
+
+// Even spreads stay as they were: no distribution block when no child holds
+// the mass, and no total line when the walk finished inside the cap.
+func TestAssistantSearchNoDistributionWhenEven(t *testing.T) {
+	dir := t.TempDir()
+	for _, top := range []string{"a", "b", "c", "d"} {
+		if err := os.MkdirAll(filepath.Join(dir, top), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 5; i++ {
+			if err := os.WriteFile(filepath.Join(dir, top, fmt.Sprintf("f%d.log", i)), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	sunvaleToolState.bind(dir, false, nil, nil, false)
+	ctx := context.Background()
+	sess, err := sunvaleSession(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := callToolText(t, sess, "search_names", map[string]any{"query": "log"})
+	if strings.Contains(found, "共找到") || strings.Contains(found, "按第一层位置分布") {
+		t.Fatalf("even spread got a distribution: %s", found)
+	}
+	if !strings.Contains(found, "a/f0.log") {
+		t.Fatalf("hits missing: %s", found)
+	}
+	sum := callToolText(t, sess, "folder_summary", map[string]any{})
+	if strings.Contains(sum, "文件按第一层位置分布") {
+		t.Fatalf("even summary got a distribution: %s", sum)
+	}
+	if !strings.Contains(sum, "文件: 20") {
+		t.Fatalf("summary count: %s", sum)
+	}
 }

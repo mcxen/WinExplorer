@@ -58,4 +58,9 @@ type SessionMeta struct {
 	Updated time.Time `json:"updated"`
 	Folder  string    `json:"folder,omitempty"`
 	Preview string    `json:"preview,omitempty"`
+	// Pinned sessions list first; Turns is the message count; Renamed marks
+	// a user-chosen title that auto titling must keep.
+	Pinned  bool `json:"pinned,omitempty"`
+	Turns   int  `json:"turns,omitempty"`
+	Renamed bool `json:"renamed,omitempty"`
 }

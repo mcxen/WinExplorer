@@ -151,14 +151,14 @@ func TestAssistantHistoryCollapses(t *testing.T) {
 	a.assist.showHist = true
 	a.assist.sessions = []aiSessionMeta{{ID: "s1", Title: "上次的活", Updated: time.Now()}}
 	tt.Frame()
-	if !tt.HasText("历史会话") {
+	if !tt.HasText("上次的活") {
 		t.Fatalf("no history column: %v", tt.Texts())
 	}
 	if err := tt.Click("收起历史会话"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.assist.showHist || tt.HasText("历史会话") {
+	if a.assist.showHist || tt.HasText("上次的活") {
 		t.Fatal("收起 left the history column on screen")
 	}
 	if !tt.HasText("给助手的消息") {
@@ -168,7 +168,7 @@ func TestAssistantHistoryCollapses(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.assist.showHist || !tt.HasText("历史会话") {
+	if !a.assist.showHist || !tt.HasText("上次的活") {
 		t.Fatal("会话 did not bring the column back")
 	}
 }
@@ -234,7 +234,7 @@ func TestAssistantHistoryGroupsAndCurrentRow(t *testing.T) {
 	a.assist.sessionID = "today"
 	tt := ui.NewTester(func(c *ui.Context) { a.assistantRecords(c) }, 420, 600)
 	tt.Frame()
-	for _, want := range []string{"历史会话", "今天", "今天的活", "更早", "上个月的活"} {
+	for _, want := range []string{"今天", "今天的活", "更早", "上个月的活"} {
 		if !tt.HasText(want) {
 			t.Fatalf("missing %q in %v", want, tt.Texts())
 		}

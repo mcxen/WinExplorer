@@ -59,7 +59,17 @@ type assistantUI struct {
 	showProv bool
 	showBook bool
 	showHist bool
-	floatLay chat.FloatingConversationState
+	// sessionRenamed keeps a user title from auto titling; histW is the
+	// history column's width, histDragging/histDirty save it on release.
+	sessionRenamed bool
+	savedHist      bool
+	histW          float32
+	histDragging   bool
+	histDirty      bool
+	histQuery      string
+	renamingID     string
+	renameDraft    string
+	floatLay       chat.FloatingConversationState
 	// errOpen is which error lines are expanded (assistErrorLine).
 	errOpen    map[int]bool
 	modelPick  chat.PickerState
@@ -192,18 +202,16 @@ func (a *App) assistantPane(c *ui.Context) {
 				if a.assist.showHist {
 					// Full screen gives the column its full width; a narrow pane
 					// keeps the conversation's room and shrinks the list instead.
-					histW := float32(200)
+					histW := a.assist.histWidth()
 					if !a.assist.full {
-						histW = min(200, max(140, a.assist.width-280))
+						histW = min(histW, max(assistHistMinW, a.assist.width-280))
 					}
 					hist := ui.Column(c).Width(histW).Shrink(0).FillHeight().MinHeight(0).
 						Background(c.Theme().Surface)
-					hist.Children(func() {
-						ui.Scroll(c).FillWidth().Grow(1).MinHeight(0).Children(func() {
-							a.assistantRecords(c)
-						})
+					hist.Children(func() { a.assistantRecords(c) })
+					ui.Box(c).Width(1).FillHeight().Shrink(0).Background(colorDivider()).Children(func() {
+						a.assistantHistGrip(c)
 					})
-					ui.Box(c).Width(1).FillHeight().Shrink(0).Background(colorDivider())
 				}
 				// The column, not the card, takes a drag from this window and a
 				// native file list. The card only sees DroppedFiles, so a drop
@@ -1058,12 +1066,13 @@ func (u *assistantUI) noteChrome() {
 	if !u.loaded || u.diskPath == "" {
 		return
 	}
-	widthReady := u.widthDirty && !u.widthDragging
-	chrome := u.full != u.savedFull || u.autopilot != u.savedAutopilot
+	widthReady := (u.widthDirty && !u.widthDragging) || (u.histDirty && !u.histDragging)
+	chrome := u.full != u.savedFull || u.autopilot != u.savedAutopilot || u.showHist != u.savedHist
 	if !widthReady && !chrome {
 		return
 	}
-	u.widthDirty = false
+	u.widthDirty, u.histDirty = false, false
+	u.savedHist = u.showHist
 	u.savedFull = u.full
 	u.savedAutopilot = u.autopilot
 	u.save()
@@ -1094,7 +1103,6 @@ func (a *App) assistantNewSession() {
 
 func (a *App) assistantOpenSession(id string) {
 	if id == "" || id == a.assist.sessionID {
-		a.assist.showHist = false
 		return
 	}
 	if a.assistantBusy() {
@@ -1108,7 +1116,6 @@ func (a *App) assistantOpenSession(id string) {
 	a.assist.touchActive()
 	a.assist.resetPaint()
 	a.assist.scroll = chat.ConversationState{}
-	a.assist.showHist = false
 }
 
 func (a *App) assistantDeleteSession(id string) {
@@ -1129,122 +1136,6 @@ func (a *App) assistantDeleteSession(id string) {
 	a.assist.resetPaint()
 	a.assist.scroll = chat.ConversationState{}
 	a.statusMsg = "已删除会话"
-}
-
-func (a *App) assistantRecords(c *ui.Context) {
-	ui.Column(c).FillWidth().Padding(4, 8).Gap(6).Children(func() {
-		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "历史会话").FontSize(12).FontWeight(600).TextColor(colorText()).Grow(1)
-			if components.Button(c, "新会话", components.ButtonSecondary).Clicked() {
-				a.assistantNewSession()
-			}
-			if components.IconButton(c, lucide.PanelLeftClose(), "收起历史会话", components.IconButtonPlain).Clicked() {
-				a.assist.showHist = false
-			}
-		})
-		switch {
-		case a.assist.diskPath == "" && len(a.assist.turns) > 0:
-			ui.Text(c, "没有用户配置目录，这次对话还不能写入磁盘。").FontSize(11).TextColor(colorMuted()).Wrap()
-		case len(a.assist.sessions) == 0:
-			ui.Text(c, "还没有历史会话。发出第一条消息后会留在本机。").FontSize(11).TextColor(colorMuted()).Wrap()
-		default:
-			metas := append([]aiSessionMeta(nil), a.assist.sessions...)
-			list := ui.Scroll(c).FillWidth().MaxHeight(220).Gap(2)
-			list.Children(func() {
-				// ZCode's timeline task list groups sessions by recency;
-				// the same buckets keep a long history scannable here.
-				group := ""
-				for _, meta := range metas {
-					if g := assistTimelineGroup(meta.Updated); g != group {
-						group = g
-						ui.Text(c, g).Key("hist-group-"+g).FontSize(11).FontWeight(600).
-							TextColor(colorMuted()).Margin(6, 4, 0, 4)
-					}
-					a.assistantSessionRow(c, meta)
-				}
-			})
-		}
-		if !assistant.SkillDisabled(assistPrefs{DisabledSkills: a.assist.disabledSkills}, assistant.SkillMemory) {
-			ui.Text(c, "记住的事").FontSize(12).FontWeight(600).TextColor(colorText())
-			a.assistantField(c, "记忆", &a.assist.memDraft, "下载按月份归档")
-			if components.Button(c, "记住", components.ButtonSecondary).Clicked() {
-				msg, err := a.assist.addMemory(a.assist.memDraft)
-				if err != nil {
-					a.statusMsg = err.Error()
-				} else {
-					a.assist.memDraft = ""
-					a.statusMsg = msg
-				}
-			}
-			if len(a.assist.memories) == 0 {
-				ui.Text(c, "说「记住……」，以后的会话也会知道。").FontSize(11).TextColor(colorMuted()).Wrap()
-			} else {
-				items := append([]aiMemory(nil), a.assist.memories...)
-				mem := ui.Scroll(c).FillWidth().MaxHeight(140).Gap(2)
-				mem.Children(func() {
-					for _, m := range items {
-						a.assistantMemoryRow(c, m)
-					}
-				})
-			}
-		} else {
-			ui.Text(c, "记忆能力已在设置中关闭。").FontSize(11).TextColor(colorMuted()).Wrap()
-		}
-		ui.Text(c, "解压密码本请到设置 → 助手中管理。").FontSize(11).TextColor(colorMuted()).Wrap()
-		ui.Text(c, a.assist.historyWhere()).FontSize(11).TextColor(colorMuted()).Wrap()
-	})
-}
-
-func (a *App) assistantSessionRow(c *ui.Context, meta aiSessionMeta) {
-	row := ui.Row(c.Key(meta.ID)).FillWidth().Gap(4).AlignItems(ui.Center).Radius(rowR())
-	current := meta.ID == a.assist.sessionID
-	if current {
-		row.Background(colorSelected())
-	} else if row.Hovered() {
-		row.Background(colorHover())
-	}
-	row.Children(func() {
-		label := meta.Title
-		if label == "" {
-			label = "新会话"
-		}
-		btn := ui.ButtonBase(c).Grow(1).MinWidth(0).Padding(2, 4).Radius(rowR()).Label(label)
-		btn.Children(func() {
-			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-				title := ui.Text(c, label).FontSize(12).TextColor(colorText()).SingleLine()
-				if current {
-					title.FontWeight(600)
-				}
-				detail := assistWhen(meta.Updated)
-				if base := filepath.Base(meta.Folder); base != "" && base != "." && base != string(filepath.Separator) {
-					if detail != "" {
-						detail += " · "
-					}
-					detail += base
-				}
-				if meta.Preview != "" {
-					if detail != "" {
-						detail += " · "
-					}
-					detail += meta.Preview
-				}
-				if detail != "" {
-					ui.Text(c, detail).FontSize(11).TextColor(colorMuted()).SingleLine()
-				}
-			})
-		})
-		if btn.Clicked() {
-			a.assistantOpenSession(meta.ID)
-		}
-		// The delete action stays out of the row until it is hovered, the way
-		// ZCode's task rows reveal their inline actions, so a quiet list does
-		// not carry one button per row.
-		if row.Hovered() || current {
-			if components.Button(c, "删除", components.ButtonGhost).Clicked() {
-				a.assistantDeleteSession(meta.ID)
-			}
-		}
-	})
 }
 
 // assistTimelineGroup is the history list's recency bucket, as ZCode's
@@ -1275,23 +1166,4 @@ func assistTimelineGroup(t time.Time) string {
 	default:
 		return "更早"
 	}
-}
-
-func (a *App) assistantMemoryRow(c *ui.Context, m aiMemory) {
-	row := ui.Row(c.Key(m.ID)).FillWidth().Gap(6).AlignItems(ui.Center)
-	row.Children(func() {
-		ui.Text(c, m.Text).FontSize(12).TextColor(colorText()).SingleLine().Grow(1).MinWidth(0)
-		if components.Button(c, "删除", components.ButtonGhost).Clicked() {
-			a.assist.deleteMemory(m.ID)
-			a.statusMsg = "已忘掉"
-		}
-	})
-}
-
-func (a *App) assistantField(c *ui.Context, label string, value *string, hint string) {
-	ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, label).FontSize(11).TextColor(colorMuted()).Width(36).Shrink(0)
-		components.TextBox(c, value, components.TextBoxOptions{}).Grow(1).MinWidth(0).
-			Height(28).FontSize(12).Placeholder(hint)
-	})
 }

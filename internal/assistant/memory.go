@@ -24,6 +24,7 @@ type SessionFile struct {
 	Created time.Time `json:"created,omitempty"`
 	Updated time.Time `json:"updated"`
 	Folder  string    `json:"folder,omitempty"`
+	Renamed bool      `json:"renamed,omitempty"`
 	Turns   []Turn    `json:"turns,omitempty"`
 }
 

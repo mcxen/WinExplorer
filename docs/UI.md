@@ -14,11 +14,11 @@
 | --- | --- | --- | --- | --- |
 | tokWindow | `colorWindow()` | #F3F3F3 | #202020 | 窗口底色；标题栏、侧栏、状态栏同值（`tokChrome/tokNav/tokStatus`） |
 | tokContent | `colorContent()` | #FFFFFF | #272727 | 文件列表底色 |
-| tokSel | `colorSelected()` | #CCE4F7 | #004C87 | 选中行/磁贴 |
+| tokSel | `colorSelected()` | #CCE4F7 | #26415C | 选中行/磁贴 |
 | tokHover | `colorHover()` | rgba(0,0,0,.06) | rgba(255,255,255,.06) | 悬停底色 |
 | tokText | `colorText()` | #1A1A1A | #F3F3F3 | 主文字 |
-| tokMuted | `colorMuted()` | #5C5C5C | #A0A0A0 | 次要文字、图标 |
-| tokAccent | `colorAccent()` | #0067C0 | #4CC2FF | 主操作、焦点、链接 |
+| tokMuted | `colorMuted()` | #5C5C5C | #C5C5C5 | 次要文字、图标 |
+| tokAccent | `colorAccent()` | #005FB8 | #60CDFF | 主操作、焦点、链接 |
 | tokDivider | `colorDivider()` | #E5E5E5 | #383838 | 分隔线、次要边框 |
 | tokFolder | `colorFolder()` | #F0C14D | #E8B84A | 文件夹图标 |
 | tokAddress | `colorAddress()` | #FFFFFF | #2D2D2D | 地址栏、浮层表面 |
@@ -42,9 +42,9 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 ### 1.3 圆角与间距
 
-- **经典**：`appTheme.Radius = 6`（对话框由组件加倍为 12），`Spacing = 4`。行、按钮、标签圆角 4；地址栏/搜索 6；下拉/浮层 8；代码块与 OpenUI 占位 6。
+- **经典**（对齐 Fluent 2，`docs/specs/16-commands-layout.md` §5）：`appTheme.Radius = 4`（对话框由组件加倍为 8），`Spacing = 4`。行、按钮、标签、地址栏/搜索圆角 4；下拉/浮层/卡 8。内容区为 `visual.go:classicContentFrame`：左上圆角 8、顶/左 1px `tokDivider`。侧栏选中行左侧 3×16 强调色指示条（`sidebar.go:navPillW/navPillH`）。
 - **v2（默认，`visual.go`）**：内容卡 / 任务卡 `v2CardRadius = 8`；行 / 侧栏选中 / 主题 Radius `v2RowRadius = 4`（对话框加倍为 8）；地址栏/搜索 `v2InputRadius = 4`；内容卡外侧 gutter 8。详见 `docs/specs/11-visual-language.md`。
-- **圆角令牌**：代码不写死随风格变化的圆角。`cardRadius()`（页级卡：磁盘卡——经典 12 / v2 8）、`innerRadius()`（卡内软面：缩略图框、图表、徽标、助手卡——经典 6 / v2 4）、`fieldRadius()`（地址/搜索输入——经典 6 / v2 4）。胶囊与半高圆（清除按钮 8/16、播放 16 等）是几何形状，不随风格变化，仍写死。
+- **圆角令牌**：代码不写死随风格变化的圆角。`cardRadius()`（页级卡：磁盘卡——8）、`innerRadius()`（卡内软面：缩略图框、图表、徽标、助手卡——4）、`fieldRadius()`（地址/搜索输入——4）；经典与 v2 现取值相同，保留函数以便风格分化。胶囊与半高圆（清除按钮 8/16、播放 16 等）是几何形状，不随风格变化，仍写死。
 - 行内边距 `files.go:rowInset = 4`。
 - 设置 → 外观 → 视觉风格可切回经典。截图 `docs/assets/shots/VISUAL2/`。
 
@@ -67,6 +67,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 快速搜索 | 960 宽（独立面板 960×560），列表高 120–384，结果行高 44：24px 图标、完整文件名与相对路径、150px 右对齐的“大小 · 类型 / 修改日期”；分组标题行高 24；右侧预览宽 270 | `searchbox.go:searchHitRowH`、`searchDisplayRowAt`、`searchHitMetaW`、`searchpreview.go` |
 | 地址建议下拉 | 与地址栏同宽，最高 360，行高 28 | `addressbar.go:pathDropdown` |
 | 助手斜杠菜单 | 与输入框同宽，最高 220，行高 28 | `assistant_slash.go:assistantSlashMenu` |
+| 快速预览标题栏 | 高 40：‹ › 32×32、「打开」分割按钮高 32（▾ 宽 28）、更多、关闭 | `quicklook_bar.go` |
 | 按钮最小宽 | 80 | `uikit.go:btnMinW` |
 
 ## 2. 布局区域
@@ -76,7 +77,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 ![详细信息视图](assets/ui/details.png)
 
 - **标题栏/标签条**（`chrome_tab.go:tabStrip`、`tabItem`）：标签可拖动排序、中键关闭、双击空白新建、溢出时收窄并可横向滚动；标签悬停提示完整路径（`tabTooltip`）。特殊页的标签名见 §5。右侧空白区可拖动窗口（`DragWindow`）。
-- **命令栏**（`commandBar`）：新建、剪切/复制/粘贴/重命名/分享/删除、排序、查看、更多（`moreButton`）。图标按钮不可用时置灰。
+- **命令栏**（`commandBar`）：新建、剪切/复制/粘贴/重命名/分享/删除、排序、查看、任务、助手、更多（`moreButton`：撤销 ｜ 全选、全部取消 ｜ 插件项 ｜ 属性、设置）。预览窗格/助手开关在「查看 > 显示」。图标按钮不可用时置灰。菜单分组与快捷键标注见 `docs/specs/16-commands-layout.md`。
 - **导航栏**：后退/前进/上一级/地址栏/刷新/文件夹搜索。地址栏两种状态：面包屑（`breadcrumbBar`，溢出折叠为「…」菜单 `crumbOverflow`，分隔箭头弹出子文件夹菜单 `crumbSeparator`；右侧下拉「最近访问」列出 `visitList` 中的文件夹「标题 · 路径」，点选导航，见 ADDR-RECENT）与编辑（`pathEditor`，补全下拉 `pathDropdown`，行内错误提示；进入编辑：空白处单击 / Ctrl+L / F4 / Alt+D）。
 - **侧栏**（`sidebar.go:sidebar`）：主文件夹、画廊、快速访问（可拖放固定）、最近位置、此电脑（卷 → 目录树）、回收站；虚拟列表。
 - **文件窗格**：详细信息（`files_details.go`）、列表（`files_list.go`）、小/中/大/超大图标（`files_icon.go`）、画廊（`gallery.go`）。
@@ -112,7 +113,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 快速搜索（`searchbox.go:searchBoxKeys`）：↑↓、PageUp/PageDown、Enter 打开、Ctrl+Enter 定位、Esc 关闭。
 - 助手输入框（Onevra `chat.GlassComposer`，`assistant.go:assistantComposer` / `assistant_slash.go`）：Enter 发送、Shift+Enter 换行；草稿为单行 `/…` 时上方弹出命令菜单（含 `/分类` `/立即执行`），`↑`/`↓` 选择、`Enter` 选用、`Esc` 关闭（关闭后同一草稿不再弹出，直到离开斜杠查询）。回答中且草稿非空时 Trailing 提供停止。
 - 侧栏方向键导航（`navkeys.go`）：点击侧栏后 `↑`/`↓`、`Home`/`End` 移动焦点，`→` 展开或进入子级，`←` 折叠或回到父级，`Enter`/空格导航，`Tab` 交还焦点；移动不改变当前标签（`docs/specs/02-tree-polish.md` C）。
-- 空格快速预览（`quicklook.go`、图片见 `imageview.go`、视频见 `videoview.go`）：`空格` 打开/关闭；`Esc` 或点外部关闭。图片：滚轮缩放（1×–8×，适配为 1×）、拖拽平移、`←`/`→` 或顶栏按钮切换**同目录图片**；坏图显示 `ImageOff` 占位。视频：关键帧 + 细进度条 scrub 抽帧（`ffmpeg`），按钮「用系统播放器打开」（无内嵌播放器）；点画面播放提示同样走系统播放器。非图片/非视频：`←`/`→` 步进可见项；音频打开时为快退/快进 5 秒。侧栏预览窗格（`preview_pane.go`）选中图片时只做 Contain 适配大图；选中视频时显示关键帧海报 +「用系统播放器打开」，不重复 scrub 控件。
+- 空格快速预览（`quicklook.go`、图片见 `imageview.go`、视频见 `videoview.go`）：`空格` 打开/关闭；`Esc` 或点外部关闭。图片：滚轮缩放（1×–8×，适配为 1×）、拖拽平移、`←`/`→` 或标题栏 ‹ › 切换**同目录图片**；标题栏（`quicklook_bar.go`）右侧为「打开」分割按钮（▾ 打开方式）、「更多」（在文件夹中显示、复制路径、复制 ｜ 分享 ｜ 属性）、关闭；经典风格对话框为不透明面；坏图显示 `ImageOff` 占位。视频：关键帧 + 细进度条 scrub 抽帧（`ffmpeg`），按钮「用系统播放器打开」（无内嵌播放器）；点画面播放提示同样走系统播放器。非图片/非视频：`←`/`→` 步进可见项；音频打开时为快退/快进 5 秒。侧栏预览窗格（`preview_pane.go`）选中图片时只做 Contain 适配大图；选中视频时显示关键帧海报 +「用系统播放器打开」，不重复 scrub 控件。
 
 ## 4. 中文文案
 

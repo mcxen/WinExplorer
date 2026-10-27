@@ -132,15 +132,14 @@ func (a *App) remoteHandleArchiveUnzip(w http.ResponseWriter, r *http.Request) {
 			continue // sub-paths and escapes are skipped, never acted on
 		}
 		disk := filepath.Join(srcDir, name)
-		st, err := os.Lstat(disk)
-		if err != nil {
+		if _, err := os.Lstat(disk); err != nil {
 			failed = append(failed, name)
 			if reason == "" {
 				reason = "object not found"
 			}
 			continue
 		}
-		if st.IsDir() || !isArchive(name) {
+		if !isArchivePath(disk) {
 			failed = append(failed, name)
 			if reason == "" {
 				reason = fmt.Sprintf("%s is not an archive", name)

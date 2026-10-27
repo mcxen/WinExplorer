@@ -96,8 +96,9 @@
 | VIDEO1 | 视频关键帧预览：空格 scrub 抽帧 + 系统播放器打开 | 高 | 已完成 | 本文 / `docs/UI.md` VIDEO1 | IMAGE1 | `feat/video-quickview` → `main` |
 | DOCPREV1 | 文档快速预览：空格叠层 PDF/Office 栅格翻页 + 文本等宽 + 侧栏首页缩略图 | 高 | 已完成 | 本文 / `docs/UI.md` DOCPREV1 | VIDEO1、DOC1 | `feat/doc-preview` → `main` |
 | DOC1 | 文档图标：PDF/HTML 配色字形 + 大图标 PDF 首页 / HTML favicon | 中 | 已完成 | 本文 | — | `feat/doc-icons` |
-| R7 | 远程处理函数移入 internal/remote | 低 | 进行中（文件拆分；完整接口化以后） | 03 §7 / [15](docs/specs/15-code-layout.md) | R5、R6 | `refactor/feature-layout` |
-| LAY1 | 代码功能分布：规格 15 + remote/settings/shell 拆分（R7 启动） | 高 | 进行中 | [15](docs/specs/15-code-layout.md) | R1–R6 | `refactor/feature-layout` |
+| R7 | 远程处理函数移入 internal/remote | 低 | 部分完成（文件拆分已做；完整接口化待开发） | 03 §7 / [15](docs/specs/15-code-layout.md) | R5、R6 | `refactor/feature-layout` |
+| LAY1 | 代码功能分布：规格 15 + remote/settings/shell 拆分（R7 启动） | 高 | 已完成 | [15](docs/specs/15-code-layout.md) | R1–R6 | `refactor/feature-layout` |
+| LAY2 | 助手 UI 大文件按功能拆分（纯移动） | 中 | 待开发 | [15](docs/specs/15-code-layout.md) | LAY1、AST-STOP | — |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
 

@@ -9,7 +9,8 @@
 - 分支 `refactor/feature-layout`；每步独立提交，单次提交 < 1000 行。
 - 子包不得反向引用主包（`AGENTS.md`）；新增 `internal/` 前确认不依赖 `App` / `ui`。
 - 每步：`gofmt`、`go build ./...`、`go vet ./...`、`GOOS=windows` / `js,wasm`（改平台代码时加 darwin）构建、`go test -count=1 -timeout 900s ./...`。
-- **刻意不做（并行冲突）**：不改 `assistant_*`、`internal/assistant`（留给 `fix/ai-stability`）。`archive*` / `bundle*` 在 macos-app-bundle 合入后可按需整理，但本轮优先 remote / settings / shell。
+- **本轮已避开、现已解锁的下一步**：`fix/ai-stability` 已合入 main 后，可再开任务拆 `assistant.go` / `assistant_run.go` / `assistant_*paint*` 等过大助手 UI 文件（仍勿与行为变更混提）。`archive*` / `bundle*` 亦可按需整理。
+- **本轮范围**：remote 文件/测试拆分、settings、shellcore/usage；R7 完整接口化仍以后做。
 
 ## 主包按功能的文件分组（约 291 个 `.go`，约 7.2 万行）
 
@@ -49,7 +50,7 @@
 
 | 文件 | 约行数 | 建议 | 本轮 |
 | --- | --- | --- | --- |
-| `assistant.go` 等助手 UI | 800–1200+ | 按面板/运行/工具继续拆；逻辑下沉留给 AI 稳定性之后 | 不做 |
+| `assistant.go` 等助手 UI | 800–1200+ | 按面板/运行/工具继续拆；AI 稳定性已合入，作为 LAY2 | 本轮不做，写入下一步 |
 | `searchbox.go` | ~1290 | 已有 panel/accel；可再拆视图 vs 命中合并 | 低优 |
 | `remote_manage.go` | ~840 | 重命名类 handler vs 批处理 move/copy/remove/put | 做 |
 | `remote_share.go` | ~850 | 管理 CRUD vs 访客 FS/下载/访问计数 | 做 |
@@ -70,11 +71,18 @@
 2. 在拆出的文件顶部注明「R7 边界」：哪些是纯协议/路径/预览构造（可下沉），哪些绑定 `App`/state store（需接口化）。
 3. 已明显无 App 依赖的纯函数（如部分 preview 构造、batch 规划）**能安全移则移**到 `internal/remote`；完整 handler 接口化留待争议小、助手并行结束后再做。
 
-## 刻意不做
+## 刻意不做（本轮）
 
-- 任何 `assistant_*`、`internal/assistant` 改动（并行 `fix/ai-stability`）。
+- 助手大文件拆分与 `internal/assistant` 再下沉（并行冲突已解除，留作 **LAY2**）。
+- R7 完整 `Host` 接口化（仅文件拆分 + 边界注释）。
 - 用户可见行为变更、依赖升级、发版。
 - force-push；不安装 post-commit hook。
+
+## 下一步（LAY2 建议）
+
+1. 拆分仍 >800 行的 `assistant.go`、`assistant_run.go`、`assistant_openui_paint.go`、`assistant_http.go`、`assistant_tools.go`（纯移动）。
+2. 评估 `searchbox.go` 再拆视图 vs 命中合并。
+3. R7：为 remote handlers 设计 `Host` 接口并迁入 `internal/remote`（单独评审）。
 
 ## 验收
 

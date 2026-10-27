@@ -80,4 +80,6 @@
 
 ## 7. 远程处理函数（以后再做）
 
-`remote_*.go` 中的 HTTP 处理函数仍是 `(*App)` 方法。待第 4、6 步完成后，评估将处理函数改为依赖接口（`type Host interface { List(path string) ([]fsentry.Entry, error); ... }`）后移入 `internal/remote`。本轮不做，只在此记录。
+`remote_*.go` 中的 HTTP 处理函数仍是 `(*App)` 方法。待第 4、6 步完成后，评估将处理函数改为依赖接口（`type Host interface { List(path string) ([]fsentry.Entry, error); ... }`）后移入 `internal/remote`。
+
+文件级拆分与边界注释见 [15 代码功能分布](15-code-layout.md)（任务 LAY1 / R7 启动）；完整接口化仍待单独评审。

@@ -20,6 +20,7 @@
 | 11 | [视觉语言 v2（VISUAL2）](11-visual-language.md) |
 | 12 | [诊断日志（LOG1）](12-logging.md) |
 | 09 | [压缩 / 解压进度与进度样式（ARCHIVE-PROG、PROG-STYLE）](09-archive-progress.md) |
+| 15 | [代码功能分布与可维护性布局](15-code-layout.md) |
 
 **任务状态、分支、依赖与验收统一维护在仓库根目录 [`TASK.md`](../../TASK.md)**，本目录不再记录状态，避免两处不一致。界面与动效规范见 [`docs/UI.md`](../UI.md)。
 

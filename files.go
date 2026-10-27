@@ -509,14 +509,14 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 		}
 		special := specialPath(a.cur().path)
 		m.Submenu("新建", func(n *ui.Menu) {
-			if n.Item("文件夹").Disabled(special).Chosen() {
+			if n.Item("文件夹").Shortcut(ui.Cmd|ui.Shift, ui.KeyN).Disabled(special).Chosen() {
 				a.doNewFolder()
 			}
 			if n.Item("文本文档").Disabled(special).Chosen() {
 				a.doNewTextFile()
 			}
 		})
-		if m.Item("粘贴").Disabled(!a.canPaste() || special).Chosen() {
+		if m.Item("粘贴").Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || special).Chosen() {
 			a.doPaste()
 		}
 		m.Separator()
@@ -530,7 +530,7 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 			}
 		}
 		m.Separator()
-		if m.Item("刷新").Chosen() {
+		if m.Item("刷新").Shortcut(0, ui.KeyF5).Chosen() {
 			a.doRefresh()
 		}
 		// 刷新统计 drops the folder's cached sizes and walks its subtree
@@ -570,7 +570,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	oneDir := one && sel[0].IsDir
 	onSpecial := specialPath(a.cur().path)
 
-	if m.Item("打开").Disabled(!anySel).Chosen() {
+	if m.Item("打开").Shortcut(0, ui.KeyEnter).Disabled(!anySel).Chosen() {
 		a.doOpen()
 	}
 	// Finder's 显示包内容: walk into a macOS package without launching it.
@@ -598,21 +598,26 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 		}
 	}
 	m.Separator()
-	if m.Item("剪切").Disabled(!anySel).Chosen() {
+	if m.Item("剪切").Shortcut(ui.Cmd, ui.KeyX).Disabled(!anySel).Chosen() {
 		a.doCut()
 	}
-	if m.Item("复制").Disabled(!anySel).Chosen() {
+	if m.Item("复制").Shortcut(ui.Cmd, ui.KeyC).Disabled(!anySel).Chosen() {
 		a.doCopy()
 	}
-	if m.Item("粘贴").Disabled(!a.canPaste() || onSpecial).Chosen() {
+	if m.Item("粘贴").Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || onSpecial).Chosen() {
 		a.doPaste()
 	}
-	if m.Item("复制为路径").Disabled(!anySel || onSpecial).Chosen() {
+	if m.Item("复制为路径").Shortcut(ui.Cmd|ui.Shift, ui.KeyC).Disabled(!anySel || onSpecial).Chosen() {
 		a.doCopyAsPath()
 	}
 	// 单选内联重命名；多选为批量重命名对话框——菜单项都叫“重命名”。
-	if m.Item("重命名").Disabled(!anySel || onSpecial).Chosen() {
+	if m.Item("重命名").Shortcut(0, ui.KeyF2).Disabled(!anySel || onSpecial).Chosen() {
 		a.doRenameStart()
+	}
+	// 删除 sits with the edit verbs, as Explorer's and Files' menus keep
+	// it, not after the plugins' items (docs/specs/16).
+	if m.Item("删除").Shortcut(0, ui.KeyDelete).Disabled(!anySel).Chosen() {
+		a.doDelete()
 	}
 	m.Separator()
 	if m.Item("压缩为 ZIP 文件").Disabled(!anySel || onSpecial).Chosen() {
@@ -637,11 +642,8 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 		}
 	}
 	a.extMenuItems(m)
-	if m.Item("删除").Disabled(!anySel).Chosen() {
-		a.doDelete()
-	}
 	m.Separator()
-	if m.Item("属性").Disabled(!one).Chosen() {
+	if m.Item("属性").Shortcut(ui.Alt, ui.KeyEnter).Disabled(!one).Chosen() {
 		a.showProperties()
 	}
 }

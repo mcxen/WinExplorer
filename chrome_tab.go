@@ -155,14 +155,14 @@ func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
 		if at < 0 {
 			return
 		}
-		if m.Item("新建标签页").Chosen() {
+		if m.Item("新建标签页").Shortcut(ui.Cmd, ui.KeyT).Chosen() {
 			a.openTab(a.cur().path)
 		}
 		if m.Item("复制标签页").Chosen() {
 			a.duplicateTab(at)
 		}
 		m.Separator()
-		if m.Item("关闭标签页").Disabled(len(a.tabs) <= 1).Chosen() {
+		if m.Item("关闭标签页").Shortcut(ui.Cmd, ui.KeyW).Disabled(len(a.tabs) <= 1).Chosen() {
 			a.closeTab(at)
 		}
 		if m.Item("关闭其他标签页").Disabled(len(a.tabs) <= 1).Chosen() {
@@ -172,7 +172,7 @@ func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
 			a.closeRight(at)
 		}
 		m.Separator()
-		if m.Item("重新打开关闭的标签页").Disabled(len(a.closedTabs) == 0).Chosen() {
+		if m.Item("重新打开关闭的标签页").Shortcut(ui.Cmd|ui.Shift, ui.KeyT).Disabled(len(a.closedTabs) == 0).Chosen() {
 			a.reopenClosedTab()
 		}
 	})
@@ -466,15 +466,23 @@ func (a *App) commandMenu(c *ui.Context, icon func() *ui.SVG, label, tip string,
 	btn.Menu(build)
 }
 
-// moreButton is the 查看更多 overflow at the command bar's right end.
+// moreButton is the 查看更多 overflow at the command bar's right end, laid
+// out as Windows 11 Explorer's: 撤销, then the selection verbs, then the
+// plugins' entries, then 设置 last. The panes (预览窗格, 助手) live under
+// 查看 > 显示 and the bar's own 助手 button, so they are not repeated here
+// (docs/specs/16-commands-layout.md).
 func (a *App) moreButton(c *ui.Context) {
 	btn := components.IconButton(c, lucide.Ellipsis(), "查看更多", components.IconButtonPlain)
 	btn.Menu(func(m *ui.Menu) {
-		if m.Item("预览窗格").Checked(a.previewOpen).Chosen() {
-			a.togglePreview()
+		if m.Item("撤销").Shortcut(ui.Cmd, ui.KeyZ).Disabled(!a.canUndo()).Chosen() {
+			a.doUndo()
 		}
-		if m.Item("助手").Checked(a.assistantOpen).Chosen() {
-			a.toggleAssistant()
+		m.Separator()
+		if m.Item("全选").Shortcut(ui.Cmd, ui.KeyA).Chosen() {
+			a.selectAll()
+		}
+		if m.Item("全部取消").Disabled(len(a.cur().selected) == 0).Chosen() {
+			a.clearSelection()
 		}
 		m.Separator()
 		// The plugins' overflow items — remote's 远程访问 and 复制远程地址.
@@ -486,7 +494,10 @@ func (a *App) moreButton(c *ui.Context) {
 			}
 		}
 		m.Separator()
-		if m.Item("设置").Chosen() {
+		if m.Item("属性").Shortcut(ui.Alt, ui.KeyEnter).Disabled(len(a.selectedEntries()) != 1).Chosen() {
+			a.showProperties()
+		}
+		if m.Item("设置").Shortcut(ui.Cmd, ui.KeyComma).Chosen() {
 			a.settingsOpen = true
 		}
 	})
@@ -541,17 +552,21 @@ func (a *App) viewMenu(m *ui.Menu) {
 		a.compact = !a.compact
 	}
 	m.Separator()
-	if m.Item("助手").Checked(a.assistantOpen).Chosen() {
-		a.toggleAssistant()
-	}
-	m.Separator()
-	if m.Item("放大图标").Disabled(!a.canZoomIn()).Chosen() {
+	if m.Item("放大图标").Shortcut(ui.Cmd|ui.Shift, ui.KeyEqual).Disabled(!a.canZoomIn()).Chosen() {
 		a.zoomIn()
 	}
-	if m.Item("缩小图标").Disabled(!a.canZoomOut()).Chosen() {
+	if m.Item("缩小图标").Shortcut(ui.Cmd|ui.Shift, ui.KeyMinus).Disabled(!a.canZoomOut()).Chosen() {
 		a.zoomOut()
 	}
 	m.Submenu("显示", func(n *ui.Menu) {
+		// The panes first, as Explorer's 查看 > 显示 lists 预览窗格.
+		if n.Item("预览窗格").Shortcut(ui.Alt, ui.KeyP).Checked(a.previewOpen).Chosen() {
+			a.togglePreview()
+		}
+		if n.Item("助手").Checked(a.assistantOpen).Chosen() {
+			a.toggleAssistant()
+		}
+		n.Separator()
 		if n.Item("文件扩展名").Checked(a.showExt).Chosen() {
 			a.showExt = !a.showExt
 		}

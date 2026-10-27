@@ -9,7 +9,7 @@
 - 分支 `refactor/feature-layout`；每步独立提交，单次提交 < 1000 行。
 - 子包不得反向引用主包（`AGENTS.md`）；新增 `internal/` 前确认不依赖 `App` / `ui`。
 - 每步：`gofmt`、`go build ./...`、`go vet ./...`、`GOOS=windows` / `js,wasm`（改平台代码时加 darwin）构建、`go test -count=1 -timeout 900s ./...`。
-- **本轮已避开、现已解锁的下一步**：`fix/ai-stability` 已合入 main 后，可再开任务拆 `assistant.go` / `assistant_run.go` / `assistant_*paint*` 等过大助手 UI 文件（仍勿与行为变更混提）。`archive*` / `bundle*` 亦可按需整理。
+- **LAY2**：`fix/ai-stability` 合入后已拆助手与 searchbox 大文件（纯移动）。`archive*` 等仍可按需整理。
 - **本轮范围**：remote 文件/测试拆分、settings、shellcore/usage；R7 完整接口化仍以后做。
 
 ## 主包按功能的文件分组（约 291 个 `.go`，约 7.2 万行）
@@ -18,9 +18,9 @@
 | --- | --- | --- | --- |
 | 入口 / 状态 / 主题 | `main.go`、`state.go`、`statestore.go`、`theme.go`、`plugins.go`、`sys_*.go`、`tray.go`、`aifx.go` | ~6k | 接线、持久化、平台壳 |
 | 资源管理器 UI | `files*.go`、`sidebar.go`、`chrome_tab.go`、`tabs.go`、`addressbar.go`、`preview*.go`、`gallery.go`、`thumb.go`、`docview.go`、`videoview.go`、`quicklook.go` 等 | ~10k | 列表/侧栏/标签/预览 |
-| 助手 UI 与接线 | `assistant.go`、`assistant_run.go`、`assistant_http.go`、`assistant_tools.go`、`assistant_*paint*.go`、`assistant_opcard.go`、`assistant_mcp.go` 等 | ~16k | **本轮不碰**；逻辑多在 `internal/assistant` |
+| 助手 UI 与接线 | `assistant.go`、`assistant_transcript.go`、`assistant_attach.go`、`assistant_run.go`、`assistant_run_stream.go`、`assistant_http.go`、`assistant_a2a.go`、`assistant_tools*.go`、`assistant_*paint*`/`widgets`、`assistant_opcard.go`、`assistant_mcp.go` 等 | ~16k | **LAY2 已按功能切开**；逻辑多在 `internal/assistant` |
 | 远程访问 | `remote.go`、`remote_manage*.go`、`remote_share.go`、`remote_preview.go`、`remote_storage.go`、`remote_fs.go`、`remote_admin.go`、`remote_archive.go`、`remote_*_test.go` | ~9k | 处理仍是 `(*App)`；协议已在 `internal/remote` |
-| 搜索 UI | `searchbox.go`、`searchbox_panel.go`、`searchbox_accel.go`、`search.go`、`searchindex.go`、`searchpath.go`、`searchpreview.go` | ~4k | 引擎在 `internal/search` |
+| 搜索 UI | `searchbox.go`、`searchbox_frame.go`、`searchbox_view.go`、`searchbox_panel.go`、`searchbox_accel.go`、`search.go`、`searchindex.go`、`searchpath.go`、`searchpreview.go` | ~4k | 引擎在 `internal/search`；LAY2 已拆 frame/view |
 | 设置 | `settingsdialog.go`、`settings_assistant.go`、`settings_schedule.go`、`settings_websearch.go` | ~2k | 按分区继续拆文件 |
 | 压缩包 | `archive*.go`、`bundle.go` | ~3k | macos-app-bundle 已合入；可选再拆 |
 | 磁盘健康 | `diskhealth*.go` | ~1.5k | R4 已拆 |
@@ -50,8 +50,8 @@
 
 | 文件 | 约行数 | 建议 | 本轮 |
 | --- | --- | --- | --- |
-| `assistant.go` 等助手 UI | 800–1200+ | 按面板/运行/工具继续拆；AI 稳定性已合入，作为 LAY2 | 本轮不做，写入下一步 |
-| `searchbox.go` | ~1290 | 已有 panel/accel；可再拆视图 vs 命中合并 | 低优 |
+| `assistant.go` 等助手 UI | 原 800–1200+ → 现大多 <600 | LAY2：按面板/对话/附件、运行/流式、A2A、工具、OpenUI 控件、记忆工具拆文件 | **LAY2 已做** |
+| `searchbox.go` | 原 ~1290 → ~264 + frame/view | LAY2：类型/查询 vs 帧循环命中合并 vs 绘制按键 | **LAY2 已做**（view 仍略 >600） |
 | `remote_manage.go` | ~840 | 重命名类 handler vs 批处理 move/copy/remove/put | 做 |
 | `remote_share.go` | ~850 | 管理 CRUD vs 访客 FS/下载/访问计数 | 做 |
 | `remote_preview.go` | ~700 | sniff/文本 vs Office vs 归档列表；纯预览构造可再下沉 `internal/remote` | 做文件拆；下沉可选 |
@@ -71,21 +71,37 @@
 2. 在拆出的文件顶部注明「R7 边界」：哪些是纯协议/路径/预览构造（可下沉），哪些绑定 `App`/state store（需接口化）。
 3. 已明显无 App 依赖的纯函数（如部分 preview 构造、batch 规划）**能安全移则移**到 `internal/remote`；完整 handler 接口化留待争议小、助手并行结束后再做。
 
-## 刻意不做（本轮）
+## LAY2 完成摘要（`refactor/assistant-layout`）
 
-- 助手大文件拆分与 `internal/assistant` 再下沉（并行冲突已解除，留作 **LAY2**）。
+纯移动、不改行为。新增/切开：
+
+| 原文件 | 约行数（前） | 拆后 |
+| --- | --- | --- |
+| `assistant.go` | ~1165 | ~580 + `assistant_transcript` (~432) + `assistant_attach` (~178) |
+| `assistant_run.go` | ~923 | ~549 + `assistant_run_stream` (~392) |
+| `assistant_http.go` | ~780 | ~215 + `assistant_a2a` (~574) |
+| `assistant_tools.go` | ~763 | ~396 + `assistant_tools_more` (~384) |
+| `assistant_openui_paint.go` | ~871 | ~413 + `assistant_openui_widgets` (~472) |
+| `assistant_memory.go` | ~645 | ~508 + `assistant_memory_tools` (~148) |
+| `searchbox.go` | ~1293 | ~264 + `searchbox_frame` (~424) + `searchbox_view` (~628) |
+
+稳定性：`assistant_run_stream.go` 承接 stop / halted / liveEpoch；`assistant_guard_test.go` 仍 Walk 全树检查 `NewChatModelAgent` + `assistant.GenModelInput`。
+
+## 刻意不做（LAY1 当时 / 仍适用）
+
+- `internal/assistant` 再下沉（非本轮主目标；LAY2 以纯拆文件为主）。
 - R7 完整 `Host` 接口化（仅文件拆分 + 边界注释）。
 - 用户可见行为变更、依赖升级、发版。
 - force-push；不安装 post-commit hook。
 
-## 下一步（LAY2 建议）
+## 下一步
 
-1. 拆分仍 >800 行的 `assistant.go`、`assistant_run.go`、`assistant_openui_paint.go`、`assistant_http.go`、`assistant_tools.go`（纯移动）。
-2. 评估 `searchbox.go` 再拆视图 vs 命中合并。
-3. R7：为 remote handlers 设计 `Host` 接口并迁入 `internal/remote`（单独评审）。
+1. 可选：`archive.go`（~690）按检测/列出 vs 解压流程再拆；`searchbox_view.go`（~628）若需可再切过滤器条。
+2. R7：为 remote handlers 设计 `Host` 接口并迁入 `internal/remote`（单独评审）。
+3. 其它仍略大的主包文件（`forms_paint`、`sidebar`、`statestore`、`main` 等）按需整理。
 
 ## 验收
 
-- 本规格入仓；`TASK.md` 有对应任务行。
-- 至少若干真实结构提交（不仅文档）；测试全绿；分支 `refactor/feature-layout` 已推。
-- 汇报：改了什么、行数变化、剩余（助手与可选归档整理）。
+- 本规格入仓；`TASK.md` 有对应任务行（LAY1 / LAY2）。
+- LAY1：真实结构提交；测试全绿；分支 `refactor/feature-layout` 已合入 main。
+- LAY2：助手与 searchbox 拆分提交；测试全绿；分支 `refactor/assistant-layout`。

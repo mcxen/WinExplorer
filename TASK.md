@@ -98,7 +98,7 @@
 | DOC1 | 文档图标：PDF/HTML 配色字形 + 大图标 PDF 首页 / HTML favicon | 中 | 已完成 | 本文 | — | `feat/doc-icons` |
 | R7 | 远程处理函数移入 internal/remote | 低 | 部分完成（文件拆分已做；完整接口化待开发） | 03 §7 / [15](docs/specs/15-code-layout.md) | R5、R6 | `refactor/feature-layout` |
 | LAY1 | 代码功能分布：规格 15 + remote/settings/shell 拆分（R7 启动） | 高 | 已完成 | [15](docs/specs/15-code-layout.md) | R1–R6 | `refactor/feature-layout` |
-| LAY2 | 助手 UI 大文件按功能拆分（纯移动） | 中 | 待开发 | [15](docs/specs/15-code-layout.md) | LAY1、AST-STOP | — |
+| LAY2 | 助手 UI 大文件按功能拆分（纯移动） | 中 | 已完成 | [15](docs/specs/15-code-layout.md) | LAY1、AST-STOP | `refactor/assistant-layout` |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
 
@@ -466,3 +466,9 @@
 - **目标**：错误行可复制反馈：复制图标按钮（复用消息复制样式）、右键「复制错误信息」、展开详情文本可选中；复制内容含完整错误、时间、日志路径；详情区限高可滚动。
 - **范围**：`assistant_error.go`、`assistant.go`、`assistant_error_test.go`。
 - **状态**：已完成，合入 `main`。
+
+### LAY2 — 助手 UI 大文件按功能拆分
+- **目标**：把仍过大的助手（及顺带搜索框）主包文件按功能纯移动切开，单文件大多 <600 行；不改停止/halted/liveEpoch 等行为；AST guard 仍能扫到 `NewChatModelAgent`。
+- **范围**：`assistant.go`→`assistant_transcript`/`assistant_attach`；`assistant_run.go`→`assistant_run_stream`；`assistant_http.go`→`assistant_a2a`；`assistant_tools.go`→`assistant_tools_more`；`assistant_openui_paint.go`→`assistant_openui_widgets`；`assistant_memory.go`→`assistant_memory_tools`；`searchbox.go`→`searchbox_view`/`searchbox_frame`；更新 [15](docs/specs/15-code-layout.md)。
+- **验收**：`gofmt`、`go build ./...`、`go vet ./...`、windows/js,wasm/darwin 交叉编译、`go test -count=1 -timeout 900s ./...`；无 force-push / 不装 post-commit hook。
+- **状态**：已完成（本分支）。

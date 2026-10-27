@@ -405,7 +405,7 @@ func (a *App) contentPanes(c *ui.Context) {
 		a.contentRow(c, v2Card(row))
 		return
 	}
-	a.contentRow(c, row)
+	a.contentRow(c, classicContentFrame(row))
 }
 
 func (a *App) contentRow(c *ui.Context, row ui.Element) {

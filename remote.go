@@ -35,8 +35,8 @@ const remotePortCount = 10
 // remotePluginID is the plugin's id in the registry (plugins.go).
 const remotePluginID = "remote"
 
-// registerRemotePlugin registers the 远程访问 plugin: the 查看更多 menu's
-// remote items, and the LAN server the plugin switch owns — turning the
+// registerRemotePlugin registers the 远程访问 plugin: the 查看更多 ▸ 插件
+// submenu's remote items, and the LAN server the plugin switch owns — turning the
 // plugin off stops it at once, turning it back on brings it up when the
 // account still has remote access on.
 func registerRemotePlugin() {

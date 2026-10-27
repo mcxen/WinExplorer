@@ -466,41 +466,49 @@ func (a *App) commandMenu(c *ui.Context, icon func() *ui.SVG, label, tip string,
 	btn.Menu(build)
 }
 
-// moreButton is the 查看更多 overflow at the command bar's right end, laid
-// out as Windows 11 Explorer's: 撤销, then the selection verbs, then the
-// plugins' entries, then 设置 last. The panes (预览窗格, 助手) live under
-// 查看 > 显示 and the bar's own 助手 button, so they are not repeated here
-// (docs/specs/16-commands-layout.md).
+// moreButton is the 查看更多 overflow at the command bar's right end.
 func (a *App) moreButton(c *ui.Context) {
 	btn := components.IconButton(c, lucide.Ellipsis(), "查看更多", components.IconButtonPlain)
-	btn.Menu(func(m *ui.Menu) {
-		if m.Item("撤销").Shortcut(ui.Cmd, ui.KeyZ).Disabled(!a.canUndo()).Chosen() {
-			a.doUndo()
-		}
+	btn.Menu(a.moreMenu)
+}
+
+// moreMenu builds the command bar's 查看更多 menu. Layout mirrors Windows 11
+// Explorer and Files: undo, selection verbs, a 插件 submenu for extension
+// entries, then properties and settings. Top-level stays at most ~8 items
+// and 3 separator groups so the flyout stays scannable
+// (docs/specs/16-commands-layout.md). The panes (预览窗格, 助手) live under
+// 查看 > 显示 and the bar's own 助手 button, so they are not repeated here.
+func (a *App) moreMenu(m *ui.Menu) {
+	if m.Item("撤销").Shortcut(ui.Cmd, ui.KeyZ).Disabled(!a.canUndo()).Chosen() {
+		a.doUndo()
+	}
+	m.Separator()
+	if m.Item("全选").Shortcut(ui.Cmd, ui.KeyA).Chosen() {
+		a.selectAll()
+	}
+	if m.Item("全部取消").Disabled(len(a.cur().selected) == 0).Chosen() {
+		a.clearSelection()
+	}
+	if items := a.pluginMoreItems(); len(items) > 0 {
 		m.Separator()
-		if m.Item("全选").Shortcut(ui.Cmd, ui.KeyA).Chosen() {
-			a.selectAll()
-		}
-		if m.Item("全部取消").Disabled(len(a.cur().selected) == 0).Chosen() {
-			a.clearSelection()
-		}
-		m.Separator()
-		// The plugins' overflow items — remote's 远程访问 and 复制远程地址.
-		// A plugin being off keeps its items out of the menu: the settings
-		// page's 插件 switch is what brings them back.
-		for _, it := range a.pluginMoreItems() {
-			if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
-				it.Run()
+		// Plugin overflow items nest under 插件 so a few plugins cannot
+		// flatten the top-level flyout. A plugin being off keeps its items
+		// out: the settings page's 插件 switch is what brings them back.
+		m.Submenu("插件", func(n *ui.Menu) {
+			for _, it := range items {
+				if n.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+					it.Run()
+				}
 			}
-		}
-		m.Separator()
-		if m.Item("属性").Shortcut(ui.Alt, ui.KeyEnter).Disabled(len(a.selectedEntries()) != 1).Chosen() {
-			a.showProperties()
-		}
-		if m.Item("设置").Shortcut(ui.Cmd, ui.KeyComma).Chosen() {
-			a.settingsOpen = true
-		}
-	})
+		})
+	}
+	m.Separator()
+	if m.Item("属性").Shortcut(ui.Alt, ui.KeyEnter).Disabled(len(a.selectedEntries()) != 1).Chosen() {
+		a.showProperties()
+	}
+	if m.Item("设置").Shortcut(ui.Cmd, ui.KeyComma).Chosen() {
+		a.settingsOpen = true
+	}
 }
 
 func (a *App) sortMenu(m *ui.Menu) {

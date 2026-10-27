@@ -39,6 +39,19 @@ func ReadMessageStream(ctx context.Context, stream *schema.StreamReader[*schema.
 			break
 		}
 		if err != nil {
+			// ModelRetryConfig surfaces a rejected attempt as WillRetryError;
+			// the next Recv yields the retry. Drop the failed attempt so the
+			// concatenated message is only the accepted one.
+			var willRetry *adk.WillRetryError
+			if errors.As(err, &willRetry) {
+				chunks = chunks[:0]
+				text.Reset()
+				reasoning.Reset()
+				if onText != nil {
+					onText("", "网络波动，正在重试…")
+				}
+				continue
+			}
 			if StreamStopped(ctx, err) {
 				stopped = true
 				break

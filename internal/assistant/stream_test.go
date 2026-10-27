@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -51,5 +52,40 @@ func TestStreamingDisplayHidesIncompleteBlocks(t *testing.T) {
 	}
 	if got := StreamShown("前文\n" + OpenUIMarkerOpen + "\nroot = Card([])"); got != "前文" {
 		t.Fatalf("unfinished OpenUI marker leaked: %q", got)
+	}
+}
+
+func TestReadMessageStreamSkipsWillRetryAttempt(t *testing.T) {
+	sr, sw := schema.Pipe[*schema.Message](4)
+	go func() {
+		sw.Send(&schema.Message{Role: schema.Assistant, Content: "坏"}, nil)
+		sw.Send(nil, &adk.WillRetryError{ErrStr: "503", RetryAttempt: 1})
+		sw.Send(&schema.Message{Role: schema.Assistant, Content: "好"}, nil)
+		sw.Close()
+	}()
+	var status []string
+	var texts []string
+	msg, err := ReadMessageStream(context.Background(), sr, func(full, reasoning string) {
+		if full == "" && reasoning != "" {
+			status = append(status, reasoning)
+			return
+		}
+		texts = append(texts, full)
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg == nil || msg.Content != "好" {
+		t.Fatalf("want accepted attempt only, got %+v", msg)
+	}
+	if len(status) == 0 || !strings.Contains(status[0], "重试") {
+		t.Fatalf("retry status missing: %v", status)
+	}
+	// The rejected "坏" may have been painted briefly; the final concat must not keep it.
+	for _, s := range texts {
+		if strings.Contains(s, "坏") && !strings.Contains(s, "好") {
+			// interim paint of the failed attempt is ok; ensure final message is clean (checked above)
+			_ = s
+		}
 	}
 }

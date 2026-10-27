@@ -94,11 +94,14 @@ type assistantUI struct {
 	// pending is a tool the model has named and not finished. halted is the
 	// last turn being cut off before the stopped bit is written onto it.
 	// liveOn replaces one growing line instead of appending every token.
-	pending string
-	halted  bool
-	liveOn  bool
-	liveID  int
-	liveAt  int
+	// liveEpoch bumps on each submit and each Stop so a cancelled run's
+	// late stream/tool callbacks cannot paint into the next turn.
+	pending   string
+	halted    bool
+	liveOn    bool
+	liveID    int
+	liveAt    int
+	liveEpoch uint64
 
 	// sessionID is empty until the first message of a new chat is saved.
 	sessionID       string
@@ -266,7 +269,7 @@ func (a *App) assistantComposer(c *ui.Context) {
 			Placeholder:  "让助手整理这个文件夹…",
 			SendLabel:    "发送",
 			StopLabel:    "停止",
-			Running:      a.assist.running,
+			Running:      a.assist.running && !a.assist.halted,
 			AcceptFiles:  true,
 			SendDisabled: slashOpen,
 			Attachments:  attachments,
@@ -309,19 +312,16 @@ func (a *App) assistantComposer(c *ui.Context) {
 		if len(comp.Dropped) > 0 {
 			a.attachDroppedPaths(comp.Dropped)
 		}
-		if comp.Stop && a.assist.stop != nil {
-			a.assist.queued = ""
-			a.assist.stop()
-			a.assist.status = "正在停止…"
+		if comp.Stop {
+			a.assistantRequestStop()
 		}
 		switch {
 		case comp.Send && !a.assist.running:
 			a.assistantSubmit()
 		case comp.Send && strings.TrimSpace(a.assist.draft) != "":
-			// A message sent over a running turn waits out the run instead
-			// of interrupting it: the queue chip above the card says so,
-			// and cancels on a click. One message waits; a new one takes
-			// its place.
+			// A message sent over a running (or just-stopped) turn waits out
+			// the run: the queue chip says so. Stop clears the queue; a later
+			// Send while cleanup finishes queues again.
 			a.assist.queued = strings.TrimSpace(a.assist.draft)
 			a.assist.draft = ""
 		}

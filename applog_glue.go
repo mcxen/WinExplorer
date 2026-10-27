@@ -191,8 +191,19 @@ func (t *aiLogTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
+// aiHTTPHeaderTimeout bounds how long we wait for response headers. The
+// client itself has no overall Timeout: a long streamed answer must keep
+// the body open until the run cancels.
+const aiHTTPHeaderTimeout = 60 * time.Second
+
 func aiHTTPClient(runID string) *http.Client {
-	return &http.Client{Transport: &aiLogTransport{base: http.DefaultTransport, runID: runID}}
+	base := http.DefaultTransport
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		cloned := t.Clone()
+		cloned.ResponseHeaderTimeout = aiHTTPHeaderTimeout
+		base = cloned
+	}
+	return &http.Client{Transport: &aiLogTransport{base: base, runID: runID}}
 }
 
 // openUIParseLogged dedupes parse-failure records: the painter parses every

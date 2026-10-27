@@ -374,6 +374,13 @@
 - **范围**：`updatemirror.go`（`http.DefaultClient` 的传输层：github.com release 下载按镜像顺序换线，每线 20 秒响应头超时；代理不跟随 `latest/download` 跳转，先 HEAD `releases/latest` 解析 tag 再走代理）、`statestore.go`（`updateMirrors`，默认 `https://tvv.tw/`→直连）、设置页「更新」显示下载线路、`main.go` 安装。签名仍由 mygo 用 `mygo.json` 的 `updates.publicKey` 校验。
 - **待用户**：本地 `mygo keygen` 生成密钥，私钥内容写入仓库 secret `UPDATE_PRIVATE_KEY`，`mygo-update.pub` 与 `mygo.json` 的 publicKey 必须一致（不一致则换公钥，且旧版无法自动更新到新签名），然后发新版本。
 
+## AST-STOP — 助手停止/取消立刻生效
+- **状态**：进行中 → 本分支落地
+- **目标**：Stop 在 1 秒内打断流式/工具/重试等待；composer 立刻可输入；部分回复保留并标已停止；迟到事件不污染新轮。
+- **范围**：`assistant_run.go`（`assistantRequestStop`、liveEpoch、halted）、`assistant_shell.go`（bash 使用 call ctx）、`assistant.go`/`assistant_slash.go`、`assistant_stop_test.go`；审计见 `docs/specs/14-ai-stability.md`。
+- **不做**：暂停后继续（Interrupt/Resume）大改；压缩包识别（另派）。
+- **验收**：`go test -run 'TestAssistantRequestStop|TestStopDuring|TestLateLive|TestStopClears|TestBashToolUses' .`；全量测试与交叉编译通过。
+
 ## AST1 助手报错后输入框可用
 
 - **状态**：已合入 `main`，未发版。Linux 上未复现 Windows 的遮挡，按代码推断修复。

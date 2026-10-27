@@ -13,6 +13,11 @@ import (
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
+// searchBoxModal draws the palette while it is open, from view with the
+// window's other overlays. The running app draws it in the panel instead,
+// so this is the headless path: a test lays the same body out inside the
+// window it drives. A close from outside the body — a click on the
+// backdrop, DialogBase's own Escape — cancels the walk here.
 func (a *App) searchBoxModal(c *ui.Context) {
 	if searchPanel != nil {
 		return

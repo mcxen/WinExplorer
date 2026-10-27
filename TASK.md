@@ -96,7 +96,9 @@
 | VIDEO1 | 视频关键帧预览：空格 scrub 抽帧 + 系统播放器打开 | 高 | 已完成 | 本文 / `docs/UI.md` VIDEO1 | IMAGE1 | `feat/video-quickview` → `main` |
 | DOCPREV1 | 文档快速预览：空格叠层 PDF/Office 栅格翻页 + 文本等宽 + 侧栏首页缩略图 | 高 | 已完成 | 本文 / `docs/UI.md` DOCPREV1 | VIDEO1、DOC1 | `feat/doc-preview` → `main` |
 | DOC1 | 文档图标：PDF/HTML 配色字形 + 大图标 PDF 首页 / HTML favicon | 中 | 已完成 | 本文 | — | `feat/doc-icons` |
-| R7 | 远程处理函数移入 internal/remote | 低 | 待开发（以后） | 03 §7 | R5、R6 | — |
+| R7 | 远程处理函数移入 internal/remote | 低 | 部分完成（文件拆分已做；完整接口化待开发） | 03 §7 / [15](docs/specs/15-code-layout.md) | R5、R6 | `refactor/feature-layout` |
+| LAY1 | 代码功能分布：规格 15 + remote/settings/shell 拆分（R7 启动） | 高 | 已完成 | [15](docs/specs/15-code-layout.md) | R1–R6 | `refactor/feature-layout` |
+| LAY2 | 助手 UI 大文件按功能拆分（纯移动） | 中 | 已完成 | [15](docs/specs/15-code-layout.md) | LAY1、AST-STOP | `refactor/assistant-layout` |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
 
@@ -374,6 +376,13 @@
 - **范围**：`updatemirror.go`（`http.DefaultClient` 的传输层：github.com release 下载按镜像顺序换线，每线 20 秒响应头超时；代理不跟随 `latest/download` 跳转，先 HEAD `releases/latest` 解析 tag 再走代理）、`statestore.go`（`updateMirrors`，默认 `https://tvv.tw/`→直连）、设置页「更新」显示下载线路、`main.go` 安装。签名仍由 mygo 用 `mygo.json` 的 `updates.publicKey` 校验。
 - **待用户**：本地 `mygo keygen` 生成密钥，私钥内容写入仓库 secret `UPDATE_PRIVATE_KEY`，`mygo-update.pub` 与 `mygo.json` 的 publicKey 必须一致（不一致则换公钥，且旧版无法自动更新到新签名），然后发新版本。
 
+## AST-STOP — 助手停止/取消立刻生效
+- **状态**：进行中 → 本分支落地
+- **目标**：Stop 在 1 秒内打断流式/工具/重试等待；composer 立刻可输入；部分回复保留并标已停止；迟到事件不污染新轮。
+- **范围**：`assistant_run.go`（`assistantRequestStop`、liveEpoch、halted）、`assistant_shell.go`（bash 使用 call ctx）、`assistant.go`/`assistant_slash.go`、`assistant_stop_test.go`；审计见 `docs/specs/14-ai-stability.md`。
+- **不做**：暂停后继续（Interrupt/Resume）大改；压缩包识别（另派）。
+- **验收**：`go test -run 'TestAssistantRequestStop|TestStopDuring|TestLateLive|TestStopClears|TestBashToolUses' .`；全量测试与交叉编译通过。
+
 ## AST1 助手报错后输入框可用
 
 - **状态**：已合入 `main`，未发版。Linux 上未复现 Windows 的遮挡，按代码推断修复。
@@ -457,3 +466,9 @@
 - **目标**：错误行可复制反馈：复制图标按钮（复用消息复制样式）、右键「复制错误信息」、展开详情文本可选中；复制内容含完整错误、时间、日志路径；详情区限高可滚动。
 - **范围**：`assistant_error.go`、`assistant.go`、`assistant_error_test.go`。
 - **状态**：已完成，合入 `main`。
+
+### LAY2 — 助手 UI 大文件按功能拆分
+- **目标**：把仍过大的助手（及顺带搜索框）主包文件按功能纯移动切开，单文件大多 <600 行；不改停止/halted/liveEpoch 等行为；AST guard 仍能扫到 `NewChatModelAgent`。
+- **范围**：`assistant.go`→`assistant_transcript`/`assistant_attach`；`assistant_run.go`→`assistant_run_stream`；`assistant_http.go`→`assistant_a2a`；`assistant_tools.go`→`assistant_tools_more`；`assistant_openui_paint.go`→`assistant_openui_widgets`；`assistant_memory.go`→`assistant_memory_tools`；`searchbox.go`→`searchbox_view`/`searchbox_frame`；更新 [15](docs/specs/15-code-layout.md)。
+- **验收**：`gofmt`、`go build ./...`、`go vet ./...`、windows/js,wasm/darwin 交叉编译、`go test -count=1 -timeout 900s ./...`；无 force-push / 不装 post-commit hook。
+- **状态**：已完成（本分支）。

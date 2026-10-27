@@ -15,11 +15,9 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-	"github.com/egoist/mygo"
 
 	"sunvale/internal/applog"
 	assistant "sunvale/internal/assistant"
-	"sunvale/internal/rename"
 )
 
 // assistant_run.go asks Eino's chat-model agent to answer one message.
@@ -120,6 +118,7 @@ func (a *App) assistantSubmit() {
 	a.assist.halted = false
 	a.assist.pending = ""
 	a.assist.resetLive()
+	a.assist.liveEpoch++
 	a.assist.turns = append(a.assist.turns, aiTurn{Role: "user", Text: text, Files: files, At: time.Now()})
 	a.assist.persistSession(root)
 	a.assist.running = true
@@ -168,6 +167,7 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 	defer assistantRunMu.Unlock()
 	var failed, asked bool
 	before := map[string]bool{}
+	epoch := a.assist.liveEpoch
 	defer func() {
 		saved := sunvaleToolState.drainPending()
 		undos := sunvaleToolState.drainUndos()
@@ -182,42 +182,57 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 		tail := lv.pending
 		lv.pending = nil
 		lv.mu.Unlock()
+		stopped := ctx.Err() != nil
 		a.postAssist(func() {
-			// The last partial of a stopped reply lands before the run
-			// closes its live line, not after as a second copy.
-			if tail != nil {
+			mine := a.assist.liveEpoch == epoch
+			// A stopped run's last partial lands only if this epoch still owns
+			// the pane; a newer Stop/submit must not be painted over.
+			if mine && tail != nil {
+				if stopped {
+					tail.turn.Stopped = true
+					tail.partial = false
+				}
 				a.applyAssistLive(tail)
 			}
-			a.assist.passwords = append(a.assist.passwords, saved...)
-			if len(a.assist.passwords) > assistMaxArchivePasswords {
-				a.assist.passwords = a.assist.passwords[len(a.assist.passwords)-assistMaxArchivePasswords:]
+			if mine {
+				a.assist.passwords = append(a.assist.passwords, saved...)
+				if len(a.assist.passwords) > assistMaxArchivePasswords {
+					a.assist.passwords = a.assist.passwords[len(a.assist.passwords)-assistMaxArchivePasswords:]
+				}
+				a.assist.save()
+				a.assist.applyMemory(memAdd, memDrop)
+				a.assist.persistSession(run.root)
 			}
-			a.assist.save()
-			a.assist.applyMemory(memAdd, memDrop)
-			a.assist.persistSession(run.root)
 			for _, op := range undos {
 				a.pushUndo(op)
 			}
-			a.assist.running = false
-			a.assist.stop = nil
-			a.assist.pending = ""
-			a.assist.resetLive()
-			a.assist.status = ""
-			a.assist.flowCool = time.Now().Add(assistFlowCool)
+			if mine {
+				a.assist.running = false
+				a.assist.stop = nil
+				a.assist.pending = ""
+				a.assist.resetLive()
+				a.assist.status = ""
+				if stopped {
+					a.assist.halted = true
+				}
+				a.assist.flowCool = time.Now().Add(assistFlowCool)
+			}
 			aiFx.endRun()
-			a.reloadAfterFx()
-			for _, id := range plans {
-				a.assistantApplyPlan(id)
-			}
-			if nav != "" {
-				a.navigate(nav)
-			}
-			// A queued message waited out this run: it goes out now, as
-			// ZCode's queue panel sends when the turn frees up.
-			if a.assist.queued != "" {
-				a.assist.draft = a.assist.queued
-				a.assist.queued = ""
-				a.assistantSubmit()
+			if mine {
+				a.reloadAfterFx()
+				for _, id := range plans {
+					a.assistantApplyPlan(id)
+				}
+				if nav != "" {
+					a.navigate(nav)
+				}
+				// Queued Send after Stop waits here. Stop itself clears the
+				// queue so an accidental double-Stop does not resurrect text.
+				if a.assist.queued != "" {
+					a.assist.draft = a.assist.queued
+					a.assist.queued = ""
+					a.assistantSubmit()
+				}
 			}
 		})
 	}()
@@ -239,13 +254,13 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 
 	before = sunvaleToolState.planIDs()
 	run.onLive = func(id int, turn aiTurn, partial bool) {
-		a.noteAssistLive(id, turn, partial)
+		a.noteAssistLive(epoch, id, turn, partial)
 	}
 	run.onStatus = func(status string) {
-		a.noteAssistStatus(status)
+		a.noteAssistStatus(epoch, status)
 	}
 	run.onPending = func(name string) {
-		a.noteAssistPending(name)
+		a.noteAssistPending(epoch, name)
 	}
 	result, err := runAssistantHeadless(ctx, run)
 	asked = result.Asked
@@ -355,10 +370,23 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 		Instruction: assistant.EffectiveInstruction(run.prefs.ExtraInstruction),
 		Model:       budget,
 		ToolsConfig: adk.ToolsConfig{
-			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: tools},
+			ToolsNodeConfig: compose.ToolsNodeConfig{
+				Tools: tools,
+				// File tools share one bind; parallel writes would race.
+				ExecuteSequentially: true,
+				// A hallucinated name must come back as text the model can
+				// correct, not as an error that kills the whole turn.
+				UnknownToolsHandler: unknownAssistTool,
+			},
 		},
 		MaxIterations: iters,
 		GenModelInput: assistant.GenModelInput,
+		// Transient network / 5xx only. 429 stays with runWithRateFallback
+		// so the two retry layers do not amplify each other.
+		ModelRetryConfig: &adk.ModelRetryConfig{
+			MaxRetries:  2,
+			IsRetryAble: func(_ context.Context, err error) bool { return assistant.TransientModelError(err) },
+		},
 	})
 	if err != nil {
 		return assistRunResult{}, err
@@ -462,6 +490,16 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 	return result, nil
 }
 
+// unknownAssistTool answers a hallucinated tool name with text the model can
+// act on. Returning an error here would abort the whole ReAct loop.
+func unknownAssistTool(_ context.Context, name, _ string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "?"
+	}
+	return fmt.Sprintf("没有名为 %q 的工具。请改用系统提示里列出的工具名重试，不要编造工具。", name), nil
+}
+
 // budgetFinishTurn salvages a turn the iteration budget cut off. The
 // transcript turns already published carry the model's work (assistant text,
 // tool calls and results); replaying them with the wrap-up note and no tools
@@ -482,6 +520,10 @@ func budgetFinishTurn(ctx context.Context, run assistRun, chatModel model.BaseCh
 
 // budgetFinishAsk is the single user message of the salvage call: a compact
 // transcript of the cut-off turn plus the demand for an answer now.
+// budgetFinishAskMax is the rune ceiling for the salvage prompt. The wrap-up
+// call has no tools and must stay inside ordinary context windows.
+const budgetFinishAskMax = 12000
+
 func budgetFinishAsk(result *assistRunResult) string {
 	var b strings.Builder
 	b.WriteString("刚才的一轮对话在工具预算用尽时被截断，以下是已发生的轮次：\n\n")
@@ -492,337 +534,16 @@ func budgetFinishAsk(result *assistRunResult) string {
 			if text == "" {
 				continue
 			}
-			fmt.Fprintf(&b, "[工具 %s] %s\n\n", ev.Tool, assistant.ToolText(text))
+			fmt.Fprintf(&b, "[工具 %s] %s\n\n", ev.Tool, assistant.LimitRunes(assistant.ToolText(text), 2000))
 		case "assistant":
 			if t := strings.TrimSpace(ev.Text); t != "" {
-				fmt.Fprintf(&b, "[助手] %s\n\n", t)
+				fmt.Fprintf(&b, "[助手] %s\n\n", assistant.LimitRunes(t, 2000))
 			}
 		}
-	}
-	b.WriteString("请只根据上面的内容直接回答用户最初的问题：给出结论与必要的路径、数字；未完成的部分明确说明做到了哪一步、下一步该做什么。不要调用工具，不要再描述计划。")
-	return b.String()
-}
-
-// publishAssist paints a line and, once it is finished, keeps it for the
-// headless result. Partials only update the open slot.
-func publishAssist(run assistRun, id int, turn aiTurn, partial bool, result *assistRunResult) {
-	if run.onLive != nil {
-		run.onLive(id, turn, partial)
-	}
-	if partial {
-		return
-	}
-	if result == nil {
-		return
-	}
-	result.Events = append(result.Events, turn)
-	if turn.Text != "" {
-		result.Text = turn.Text
-	}
-	if turn.Plan != "" {
-		result.Plan = turn.Plan
-	}
-	if turn.Choice != nil {
-		result.Choice = turn.Choice
-		result.Asked = true
-	}
-}
-
-// assistModelHistory appends the named-file excerpts to the last user
-// message, and the pictures with them when the model can see. The caller's
-// history is left alone: its messages are shared with the visible
-// transcript, and the excerpts must not be written to disk.
-func assistModelHistory(run assistRun) []*schema.Message {
-	hist := append([]*schema.Message(nil), run.hist...)
-	if len(run.files) == 0 || len(hist) == 0 {
-		return hist
-	}
-	last := hist[len(hist)-1]
-	if last == nil || last.Role != schema.User {
-		return hist
-	}
-	note, frames := specifiedFileNote(run.files)
-	body := last.Content
-	if body != "" {
-		body += "\n\n"
-	}
-	body += note
-	if !run.prov.VisionEnabled() {
-		frames = nil
-	}
-	hist[len(hist)-1] = attachFiles(body, frames)
-	return hist
-}
-
-// assistEventTurn converts one Eino event into a transcript line. A
-// choice ends the turn: the next user message is the selection, not a
-// prompt for the model to answer itself.
-func assistEventTurn(ev *adk.AgentEvent) (aiTurn, bool, *aiChoice) {
-	if ev == nil || ev.Output == nil || ev.Output.MessageOutput == nil {
-		return aiTurn{}, false, nil
-	}
-	mv := ev.Output.MessageOutput
-	return messageTurn(mv.Role, mv.ToolName, mv.Message)
-}
-
-// messageTurn is the visible form of one finished model or tool message.
-// A tool line is kept even when its text is empty, so the call itself shows.
-func messageTurn(role schema.RoleType, tool string, msg *schema.Message) (aiTurn, bool, *aiChoice) {
-	if msg == nil {
-		return aiTurn{}, false, nil
-	}
-	if tool == "" {
-		tool = msg.ToolName
-	}
-	content := msg.Content
-	if role == schema.Tool {
-		content = assistant.ToolText(content)
-	}
-	// Tool output can quote fences from a file. Only assistant prose hides
-	// an unfinished choice or OpenUI block.
-	if role != schema.Tool {
-		content = streamShown(content)
-	}
-	display, choice := parseChoices(content)
-	if choice != nil && strings.TrimSpace(display) == "" {
-		display = choice.Prompt
-	}
-	if role == schema.Tool {
-		if strings.TrimSpace(display) == "" && tool == "" && choice == nil {
-			return aiTurn{}, false, nil
-		}
-		return aiTurn{Role: "tool", Text: display, Tool: tool, Plan: planIDFrom(display), Choice: choice}, true, choice
-	}
-	if strings.TrimSpace(display) == "" && choice == nil {
-		return aiTurn{}, false, nil
-	}
-	return aiTurn{Role: "assistant", Text: display, Choice: choice}, true, choice
-}
-
-func selectionText(paths []string) string {
-	if len(paths) == 0 {
-		return "无"
-	}
-	more := 0
-	if len(paths) > 30 {
-		more = len(paths) - 30
-		paths = paths[:30]
-	}
-	text := strings.Join(paths, "\n")
-	if more > 0 {
-		text += fmt.Sprintf("\n还有 %d 个", more)
-	}
-	return text
-}
-
-// assistHistory is the tail of this session. Older turns stay on screen and
-// on disk, but the model only sees the recent part so one long chat cannot
-// crowd out the current folder.
-func (a *App) assistHistory() []*schema.Message {
-	return modelHistory(a.assist.turns)
-}
-
-// showAssistEvent reports whether the reply is a choice the user has to
-// answer before the agent should keep calling tools.
-func (a *App) showAssistEvent(ev *adk.AgentEvent) bool {
-	t, ok, choice := assistEventTurn(ev)
-	if !ok {
-		return false
-	}
-	a.postAssist(func() {
-		a.assist.turns = append(a.assist.turns, t)
-		a.assist.scroll.JumpToLatest()
-		a.assist.persistSession(a.assist.folder)
-	})
-	return choice != nil
-}
-
-func planIDFrom(text string) string {
-	const mark = "plan_id:"
-	i := strings.Index(text, mark)
-	if i < 0 {
-		return ""
-	}
-	id := strings.TrimSpace(text[i+len(mark):])
-	if n := strings.IndexAny(id, "\n "); n >= 0 {
-		id = id[:n]
-	}
-	return id
-}
-
-func (a *App) failAssist(err error) {
-	a.postAssist(func() {
-		a.assist.turns = append(a.assist.turns, aiTurn{Role: "assistant", Text: assistErrorText(err), Error: true, At: time.Now()})
-		// The composer must take input again right away: the run's own
-		// cleanup follows, but an error never leaves the box busy.
-		a.assist.running = false
-		a.assist.stop = nil
-		a.assist.pending = ""
-		a.assist.status = ""
-		a.assist.persistSession(a.assist.folder)
-	})
-}
-
-// assistLiveEvery is how often a growing reply repaints: a model sends
-// tokens far faster than a person reads, and each repaint is a hop to the
-// main thread and a frame.
-const assistLiveEvery = 33 * time.Millisecond
-
-// assistLive coalesces the growing line of a reply: the latest partial
-// waits up to assistLiveEvery and replaces any before it. seq orders every
-// update, so a partial landing after the finished line it led to is
-// dropped instead of reopening it.
-type assistLive struct {
-	mu      sync.Mutex
-	pending *assistLiveUpdate
-	armed   bool
-	seq     uint64
-	applied uint64
-}
-
-type assistLiveUpdate struct {
-	seq     uint64
-	id      int
-	turn    aiTurn
-	partial bool
-}
-
-func (a *App) noteAssistLive(id int, turn aiTurn, partial bool) {
-	lv := &a.assist.live
-	lv.mu.Lock()
-	lv.seq++
-	up := &assistLiveUpdate{seq: lv.seq, id: id, turn: turn, partial: partial}
-	if partial && mygo.App.IsReady() {
-		lv.pending = up
-		if !lv.armed {
-			lv.armed = true
-			time.AfterFunc(assistLiveEvery, a.flushAssistLive)
-		}
-		lv.mu.Unlock()
-		return
-	}
-	// A finished line replaces whatever partial of it is waiting; another
-	// line's partial goes first, so the transcript keeps its order.
-	prev := lv.pending
-	lv.pending = nil
-	lv.mu.Unlock()
-	if prev != nil && prev.id == id {
-		prev = nil
-	}
-	a.postAssist(func() {
-		if prev != nil {
-			a.applyAssistLive(prev)
-		}
-		a.applyAssistLive(up)
-	})
-}
-
-func (a *App) flushAssistLive() {
-	lv := &a.assist.live
-	lv.mu.Lock()
-	up := lv.pending
-	lv.pending = nil
-	lv.armed = false
-	lv.mu.Unlock()
-	if up != nil {
-		a.postAssist(func() { a.applyAssistLive(up) })
-	}
-}
-
-// applyAssistLive runs on the main thread.
-func (a *App) applyAssistLive(up *assistLiveUpdate) {
-	lv := &a.assist.live
-	lv.mu.Lock()
-	stale := up.seq <= lv.applied
-	if !stale {
-		lv.applied = up.seq
-	}
-	lv.mu.Unlock()
-	if stale {
-		return
-	}
-	follow := a.assist.scroll.AtLatest()
-	a.assist.applyLive(up.id, up.turn, up.partial)
-	if up.turn.Role == "tool" && !up.partial {
-		a.assist.pending = ""
-	}
-	if !up.partial {
-		a.assist.persistSession(a.assist.folder)
-	}
-	if follow {
-		a.assist.scroll.JumpToLatest()
-	}
-}
-
-func (a *App) noteAssistStatus(status string) {
-	if status == "" {
-		return
-	}
-	a.postAssist(func() { a.assist.status = status })
-}
-
-func (a *App) noteAssistPending(name string) {
-	a.postAssist(func() {
-		a.assist.pending = name
-		if name != "" {
-			a.assist.status = "正在调用 " + name
-		}
-	})
-}
-
-func (a *App) postAssist(fn func()) {
-	run := func() {
-		fn()
-		if a.win != nil && !a.win.IsDestroyed() {
-			a.win.Invalidate()
+		if len([]rune(b.String())) > budgetFinishAskMax {
+			break
 		}
 	}
-	if !mygo.App.IsReady() {
-		fn()
-		return
-	}
-	mygo.RunOnMain(run)
-}
-
-func (a *App) assistantApplyPlan(id string) {
-	plan, ok := sunvaleToolState.takePlan(id)
-	if !ok {
-		a.statusMsg = "方案已失效"
-		return
-	}
-	moved, failed := rename.Apply(plan.Dir, plan.Rows)
-	for _, m := range moved {
-		aiFx.markRenamed(m.From, m.To)
-	}
-	if a.assist.applied == nil {
-		a.assist.applied = map[string]bool{}
-	}
-	a.assist.applied[id] = true
-	if len(moved) > 0 {
-		op := undoOp{Desc: "重命名"}
-		for _, m := range moved {
-			op.Moved = append(op.Moved, undoMove{From: m.From, To: m.To})
-		}
-		a.pushUndo(op)
-	}
-	if len(failed) > 0 {
-		a.statusMsg = "部分重命名失败：" + failed[0]
-	} else {
-		a.statusMsg = "已应用重命名方案"
-	}
-	a.reload()
-}
-
-// reloadAfterFx is the run's closing reload. Rows the assistant moved away
-// are still sliding out (aifx.go); the reload waits for the last of them,
-// so none of them vanishes mid-slide.
-func (a *App) reloadAfterFx() {
-	d := aiFx.pendingLeave()
-	if d <= 0 {
-		a.reload()
-		return
-	}
-	time.AfterFunc(d+30*time.Millisecond, func() {
-		a.postAssist(a.reload)
-	})
+	body := assistant.LimitRunes(b.String(), budgetFinishAskMax)
+	return body + "请只根据上面的内容直接回答用户最初的问题：给出结论与必要的路径、数字；未完成的部分明确说明做到了哪一步、下一步该做什么。不要调用工具，不要再描述计划。"
 }

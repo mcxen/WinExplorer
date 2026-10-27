@@ -22,7 +22,7 @@ func (a *App) doOpen() {
 		return
 	}
 	if len(sel) == 1 && sel[0].IsDir {
-		a.navigate(sel[0].Path)
+		a.openDirEntry(sel[0])
 		return
 	}
 	var failed []string
@@ -39,6 +39,24 @@ func (a *App) doOpen() {
 	if len(failed) > 0 {
 		a.statusMsg = "无法打开：" + strings.Join(failed, "、")
 	}
+}
+
+// openDirEntry navigates into a folder, or on macOS launches an .app the
+// way Finder's double-click does. Other package directories still open as
+// folders so 显示包内容 stays reachable without a menu.
+func (a *App) openDirEntry(e Entry) {
+	if !e.IsDir {
+		return
+	}
+	if shouldLaunchAppBundle(e) {
+		if err := openWithOS(e.Path); err != nil {
+			a.statusMsg = "无法打开：" + e.Name
+			return
+		}
+		a.recordRecent(e.Path)
+		return
+	}
+	a.navigate(e.Path)
 }
 
 // openWithOS opens a file with the OS default application (platform.go).

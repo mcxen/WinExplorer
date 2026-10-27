@@ -78,16 +78,20 @@ var copyText = func(text string) error {
 
 func sunvaleSession(ctx context.Context) (*mcp.ClientSession, error) {
 	mcpOnce.Do(func() {
+		// The in-process MCP session is process-wide. Connecting with a run's
+		// cancelable ctx would let the first stopped turn permanently poison
+		// mcpConnectErr with context.Canceled for every later run.
+		initCtx := context.Background()
 		server := newSunvaleServer()
 		client := mcp.NewClient(&mcp.Implementation{Name: "sunvale-eino", Version: "0.1.0"}, nil)
 		ct, st := mcp.NewInMemoryTransports()
-		sess, err := server.Connect(ctx, st, nil)
+		sess, err := server.Connect(initCtx, st, nil)
 		if err != nil {
 			mcpConnectErr = err
 			return
 		}
 		mcpServerSide = sess
-		mcpClient, mcpConnectErr = client.Connect(ctx, ct, nil)
+		mcpClient, mcpConnectErr = client.Connect(initCtx, ct, nil)
 	})
 	return mcpClient, mcpConnectErr
 }

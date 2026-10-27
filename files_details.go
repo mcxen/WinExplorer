@@ -28,6 +28,9 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 	head := ui.Row(c).Height(a.detailsRowH()).FillWidth().Shrink(0).Clip().
 		AlignItems(ui.Center).Margin(0, rowInset).MinWidth(width).
 		BorderWidth(0, 0, 1, 0).BorderColor(colorDivider())
+	if visualV2 {
+		head.BorderColor(colorDivider().Alpha(0.55))
+	}
 	searching := strings.TrimSpace(a.cur().query) != ""
 	head.Children(func() {
 		a.headerCell(c, "名称", SortName, a.nameColW(), a.colWidths.name <= 0, &a.colWidths.name)

@@ -17,10 +17,13 @@ import (
 const (
 	tabMaxW = 220
 	tabMinW = 96
-	// tabChromeW is what the title bar holds besides the tabs: the left
-	// padding, the 新建标签页 button and the strip's tail, the window's drag
-	// area and the three caption buttons.
+	// tabChromeW is what the classic title bar holds besides the tabs: the
+	// left padding, the 新建标签页 button and the strip's tail, the window's
+	// drag area and the three Windows caption buttons.
 	tabChromeW = 8 + 30 + 24 + tabDragMinW + 3*46
+	// tabChromeMacW is the macOS 26 title bar's non-tab footprint: traffic
+	// lights on the left, plus button, strip tail and a drag strip.
+	tabChromeMacW = 16 + 3*14 + 2*8 + 8 + 30 + 16 + tabDragMinW
 	// tabDragMinW keeps a piece of title bar to move the window by however
 	// many tabs there are.
 	tabDragMinW = 48
@@ -30,22 +33,28 @@ const (
 	tabDropHoverDelay = 600 * time.Millisecond
 )
 
-// tabStrip is the Windows 11 title bar: the tab strip and the caption
-// buttons share one row, and the window is frameless, so this bar is the
-// topmost chrome. The bar right of the strip drags the window; a double
-// click there maximizes. A double click on the strip's own empty space —
-// between the tabs and past the last one — opens a new tab. There is no rule
-// under it — the command bar sits on the same mica, as in Explorer.
+// tabStrip is the frameless title bar: tabs plus caption controls share one
+// row. Classic keeps Windows 11 captions on the right; macOS 26 puts the
+// traffic lights on the left and leaves a drag strip on the right. The bar
+// right of the strip drags the window; a double click there maximizes. A
+// double click on the strip's empty space opens a new tab.
 func (a *App) tabStrip(c *ui.Context) {
+	padL := float32(8)
+	if visualV2 {
+		padL = 0
+	}
 	bar := windowBG(c, ui.Row(c.Key("title-bar")).Height(40).FillWidth().Shrink(0).
-		AlignItems(ui.Center).Padding(0, 0, 0, 8).
+		AlignItems(ui.Center).Padding(0, 0, 0, padL).
 		DragWindow())
 	tabW := a.tabWidth(bar.Bounds().W)
 	bar.Children(func() {
+		if visualV2 {
+			a.macTrafficLights(c)
+		}
 		// The strip's bar runs along the top edge, above the tabs, where it
 		// covers no title.
 		strip := ui.ScrollHorizontal(c.Key("tab-strip")).Height(40).Shrink(1).MinWidth(0).
-			AlignItems(ui.Center).Gap(2).Padding(0, 24, 0, 0).Label("标签页").
+			AlignItems(ui.Center).Gap(2).Padding(0, 16, 0, 0).Label("标签页").
 			ScrollbarInsets(0, 0, 35, 0)
 		strip.Children(func() {
 			// A snapshot: a drag or a close in this frame reshapes a.tabs
@@ -76,11 +85,18 @@ func (a *App) tabStrip(c *ui.Context) {
 
 // tabWidth is each tab's width for a title bar barW wide (the frame
 // before's; zero on the first frame, which takes the full width).
+func tabChromeFootprint() float32 {
+	if visualV2 {
+		return tabChromeMacW
+	}
+	return tabChromeW
+}
+
 func tabWidth(barW float32, n int) float32 {
 	if barW <= 0 || n <= 0 {
 		return tabMaxW
 	}
-	w := (barW-tabChromeW)/float32(n) - 2
+	w := (barW-tabChromeFootprint())/float32(n) - 2
 	return min(max(w, tabMinW), tabMaxW)
 }
 
@@ -99,8 +115,12 @@ func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
 	}
 	active := i == a.activeTab
 	title := tabTitle(t.path)
+	tabR := float32(4)
+	if visualV2 {
+		tabR = 8
+	}
 	tab := ui.Row(c.Key(fmt.Sprintf("tab-%d", id))).Height(32).Width(w).
-		Padding(0, 8, 0, 8).Gap(6).Radius(4, 4, 0, 0).Shrink(0).
+		Padding(0, 8, 0, 8).Gap(6).Radius(tabR).Shrink(0).
 		AlignItems(ui.Center).Role(ui.RoleTab).Label(title).
 		Tooltip(tabTooltip(t.path))
 	if active {
@@ -297,13 +317,16 @@ func tabTooltip(path string) string {
 	return path
 }
 
-// windowControls ends the title bar: the empty strip that drags, then the
-// three caption buttons Windows 11 puts at the right end — minimize,
-// maximize, close — each a 46×40 flat target. Close hovers red.
+// windowControls ends the title bar: the empty strip that drags, then — in
+// classic — the three Windows 11 caption buttons. macOS 26 already drew the
+// traffic lights on the left, so only the drag filler remains.
 func (a *App) windowControls(c *ui.Context) {
 	// The bar itself drags; this filler only claims the room, and keeps a
 	// piece of it however many tabs the strip holds.
 	ui.Box(c).Grow(1).MinWidth(tabDragMinW).Height(40).DragWindow()
+	if visualV2 {
+		return
+	}
 	a.winControl(c, "最小化", drawWinMin, false, func() {
 		if a.win != nil {
 			a.win.Minimize()
@@ -319,6 +342,46 @@ func (a *App) windowControls(c *ui.Context) {
 			a.win.Close()
 		}
 	})
+}
+
+// macTrafficLights is the macOS 26 window chrome: close / minimize /
+// maximize as 12 DIP discs on the left of the title bar.
+func (a *App) macTrafficLights(c *ui.Context) {
+	ui.Row(c).Height(40).Padding(0, 16).Gap(8).AlignItems(ui.Center).Shrink(0).Children(func() {
+		a.macTraffic(c, "关闭", ui.Hex("#FF5F57"), ui.Hex("#E0443E"), func() {
+			if a.win != nil {
+				a.win.Close()
+			}
+		})
+		a.macTraffic(c, "最小化", ui.Hex("#FEBC2E"), ui.Hex("#DEA123"), func() {
+			if a.win != nil {
+				a.win.Minimize()
+			}
+		})
+		a.macTraffic(c, "最大化", ui.Hex("#28C840"), ui.Hex("#1AAB29"), func() {
+			if a.win != nil {
+				a.win.ToggleMaximize()
+			}
+		})
+	})
+}
+
+func (a *App) macTraffic(c *ui.Context, label string, fill, press ui.Color, act func()) {
+	// 14 DIP discs read clearly at 1280-wide demo shots; hit target stays
+	// the disc (macOS uses a larger invisible hit area, but MyGo's ButtonBase
+	// sizes to the face).
+	btn := ui.ButtonBase(c).Size(14, 14).Radius(7).Shrink(0).Label(label).Tooltip(label)
+	bg := fill
+	switch {
+	case btn.Pressed():
+		bg = press
+	case btn.Hovered():
+		bg = fill.Mix(ui.RGB(0, 0, 0), 0.12)
+	}
+	btn.Background(bg)
+	if btn.Clicked() {
+		act()
+	}
 }
 
 func (a *App) winControl(c *ui.Context, label string, glyph func(*ui.Painter, ui.Rect, ui.Color), danger bool, act func()) {
@@ -404,8 +467,12 @@ func (a *App) commandBar(c *ui.Context) {
 	hasSel := len(a.cur().selected) > 0
 	canPaste := a.canPaste()
 
-	windowBG(c, ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
-		Padding(0, 6).Gap(2)).
+	barH := float32(44)
+	if visualV2 {
+		barH = 40
+	}
+	windowBG(c, ui.Row(c).Height(barH).FillWidth().AlignItems(ui.Center).
+		Padding(0, 10).Gap(6)).
 		FocusGroup(ui.Horizontal).Children(func() {
 		a.commandMenu(c, lucide.FolderPlus, "新建", "新建", func(m *ui.Menu) {
 			if m.Item("文件夹").Chosen() {
@@ -445,7 +512,7 @@ func (a *App) toolGroup(c *ui.Context, fn func()) {
 		fn()
 		return
 	}
-	macPill(c, ui.Row(c).Shrink(0).Margin(0, 3), a.flipLowEnd).Children(fn)
+	macPill(c, ui.Row(c).Shrink(0).Margin(0, 2), a.flipLowEnd).Children(fn)
 }
 
 // commandSep is the 1px hairline between command groups, about 16 tall.

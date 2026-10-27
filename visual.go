@@ -45,11 +45,11 @@ func (a *App) syncVisual() {
 // resolveV2 overrides the classic tokens with v2's (called from
 // resolveTokens).
 func resolveV2() {
-	tokWindow = pick("#ECECEF", "#1C1C1E")
+	tokWindow = pick("#E4E5EA", "#161618")
 	tokChrome, tokNav, tokStatus = tokWindow, tokWindow, tokWindow
-	tokContent = pick("#FFFFFF", "#232325")
-	tokSurface = pick("#FFFFFF", "#2A2A2D")
-	tokAddress = pick("#FFFFFF", "#323235").Alpha(0.72)
+	tokContent = pick("#FFFFFF", "#2C2C2E")
+	tokSurface = pick("#F7F7F9", "#2A2A2D")
+	tokAddress = pick("#FFFFFF", "#3A3A3C").Alpha(0.78)
 	// labelColor 85%, secondaryLabelColor 50% (blended opaque).
 	if darkMode() {
 		tokText, tokMuted = ui.RGBA(255, 255, 255, 0.85), ui.RGBA(255, 255, 255, 0.55)
@@ -78,9 +78,9 @@ func resolveV2() {
 
 // v2Wash is Kero's "mist" backdrop: cool blue-grey above, warm grey below.
 func v2Wash() ui.LinearGradient {
-	hex := []string{"#E6E9F0", "#ECEDF1", "#EFEFF1"}
+	hex := []string{"#DDE1EA", "#E6E8EE", "#EBECEF"}
 	if darkMode() {
-		hex = []string{"#17181C", "#1A1A1D", "#1C1C1E"}
+		hex = []string{"#121214", "#161618", "#1A1A1C"}
 	}
 	stops := make([]ui.GradientStop, len(hex))
 	for i, h := range hex {
@@ -93,11 +93,9 @@ func v2Wash() ui.LinearGradient {
 // top-to-bottom hairline over three tight shadows in the dark.
 func v2Raised(e ui.Element) ui.Element {
 	if darkMode() {
-		return e.Border(1, tokText.Alpha(0.1)).BorderLinearGradient(ui.LinearGradient{
-			Angle: 180, From: tokText.Alpha(0.16), To: tokText.Alpha(0.05),
-		}).Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.2)).Shadow(0, 2, 2, -1, ui.RGBA(0, 0, 0, 0.2)).Shadow(0, 4, 6, -3, ui.RGBA(0, 0, 0, 0.24))
+		return e.Border(1, tokText.Alpha(0.06)).Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, 0.35))
 	}
-	return e.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.07)).Shadow(0, 1, 6, 0, ui.RGBA(0, 0, 0, 0.035))
+	return e.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.06)).Shadow(0, 2, 10, 0, ui.RGBA(0, 0, 0, 0.05))
 }
 
 // v2Chosen is the sidebar's chosen row: a white chip with an even ring
@@ -177,26 +175,36 @@ func glassTint() ui.Color {
 	return ui.RGBA(246, 246, 248, 0.78)
 }
 
-// macHairline is the 0.5-1 DIP rim Tahoe draws around floating glass.
+// macHairline is the quiet rim Tahoe draws around floating glass.
 func macHairline(e ui.Element) ui.Element {
 	if darkMode() {
-		return e.Border(1, ui.RGBA(255, 255, 255, 0.10))
+		return e.Border(1, ui.RGBA(255, 255, 255, 0.06))
 	}
-	return e.Border(1, ui.RGBA(0, 0, 0, 0.06))
+	return e.Border(1, ui.RGBA(0, 0, 0, 0.04))
 }
 
-// macFloat is a floating pane: glass, hairline, soft shadow, pane radius.
+// macFloat is a floating pane: glass, soft hairline, soft shadow, pane radius.
 func macFloat(c *ui.Context, e ui.Element, lowEnd bool) ui.Element {
 	e = macGlass(c, e.Radius(v2PaneRadius).Clip(), lowEnd)
-	if !darkMode() {
-		e = macHairline(e)
+	e = macHairline(e)
+	// Softer than full keroFloating so the sidebar does not read as a
+	// boxed card against the wash.
+	if darkMode() {
+		return e.Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, 0.28))
 	}
-	return keroFloating(e)
+	return e.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.04)).Shadow(0, 4, 14, 0, ui.RGBA(0, 0, 0, 0.05))
 }
 
 // macPill is a toolbar capsule grouping buttons, as Tahoe's toolbar does.
+// A quiet fill + hairline (no glass/shadow) keeps the command bar from
+// reading as a stack of floating chips.
 func macPill(c *ui.Context, e ui.Element, lowEnd bool) ui.Element {
-	return keroFace(macGlass(c, e.Height(32).Radius(v2PillRadius).Padding(0, 4).Gap(0).AlignItems(ui.Center), lowEnd))
+	_ = lowEnd
+	e = e.Height(32).Radius(v2PillRadius).Padding(0, 4).Gap(0).AlignItems(ui.Center)
+	if darkMode() {
+		return e.Background(ui.RGBA(255, 255, 255, 0.08)).Border(1, ui.RGBA(255, 255, 255, 0.08))
+	}
+	return e.Background(ui.RGBA(255, 255, 255, 0.62)).Border(1, ui.RGBA(0, 0, 0, 0.06))
 }
 
 // sidebarSidePad insets the nav rows inside the floating pane so the

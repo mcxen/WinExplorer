@@ -189,7 +189,7 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 	return []components.SettingsGroup{{
 		ID: "theme", Title: "主题",
 		Items: []components.SettingsItem{{
-			ID: "mode", Title: "外观模式", Description: "选择应用的外观",
+			ID: "mode", Title: "外观模式",
 			Build: func(c *ui.Context) {
 				seg := ui.Segmented(c, &v, "跟随系统", "浅色", "深色").Shrink(0)
 				if seg.Changed() {
@@ -200,7 +200,7 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
-			ID: "visual", Title: "视觉风格", Description: visualStyleLabel + "（默认）：毛玻璃侧栏与工具栏、同心圆角；经典为 Windows 11 扁平",
+			ID: "visual", Title: "视觉风格",
 			Build: func(c *ui.Context) {
 				sv := 0
 				if a.store.settings().VisualStyle == "v2" {
@@ -211,7 +211,7 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
-			ID: "font", Title: "界面字体", Description: visualStyleLabel + " 风格下：内嵌 Inter + 思源黑体（Noto Sans SC）或系统字体",
+			ID: "font", Title: "界面字体",
 			Build: func(c *ui.Context) {
 				fv := 0
 				if a.store.settings().SystemFont {
@@ -222,7 +222,7 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
-			ID: "progress", Title: "进度样式", Description: "助手任务卡",
+			ID: "progress", Title: "进度样式",
 			Build: func(c *ui.Context) {
 				pv := 0
 				if a.assistProgressStyle() == progressStyleGauge {

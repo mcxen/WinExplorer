@@ -374,8 +374,12 @@ func (a *App) navPaneRow(c *ui.Context, r navRow) {
 // 快速访问 takes a drop and pins it, collapsed or not. A folder row under
 // the heading still moves a drop into that folder; only the heading pins.
 func (a *App) navSectionRow(c *ui.Context, r navRow) {
-	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
-		Radius(4).Padding(0, 8, 0, 2).Gap(4).AlignItems(ui.Center).Justify(ui.Start).Label(r.label)
+	top := navRowGap
+	if visualV2 {
+		top = 10 // Finder-style section breathing room
+	}
+	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(top, navRowPad).
+		Radius(rowR()).Padding(0, 8, 0, 2).Gap(4).AlignItems(ui.Center).Justify(ui.Start).Label(r.label)
 	a.paintNavRow(row, r)
 	row.Children(func() {
 		chev := a.navTwist(c, r, "折叠 "+r.label)
@@ -409,7 +413,7 @@ func (a *App) navSetSectionOpen(r navRow, open bool) {
 // files dropped on the row move there, as anywhere else in the app.
 func (a *App) navPlaceRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
-		Radius(4).Padding(0, 4, 0, r.indent).Gap(8).AlignItems(ui.Center).
+		Radius(rowR()).Padding(0, 4, 0, r.indent).Gap(8).AlignItems(ui.Center).
 		Label(r.label).Selected(r.sel)
 	a.paintNavRow(row, r)
 	row.Children(func() {
@@ -451,7 +455,7 @@ func navCanDrag(r navRow) bool {
 // them, and the row itself, which navigates to the This PC page.
 func (a *App) navThisPCRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
-		Radius(4).Padding(0, 2).Gap(4).AlignItems(ui.Center).
+		Radius(rowR()).Padding(0, 2).Gap(4).AlignItems(ui.Center).
 		Label(r.label).Selected(a.cur().path == pathThisPC)
 	a.paintNavRow(row, r)
 	row.Children(func() {
@@ -474,7 +478,7 @@ func (a *App) navThisPCRow(c *ui.Context, r navRow) {
 // navigate, its context menu; files dropped on it move into it.
 func (a *App) navFolderRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowHt()).Margin(navRowGap, navRowPad).
-		Radius(4).Padding(0, 2).Gap(4).AlignItems(ui.Center).
+		Radius(rowR()).Padding(0, 2).Gap(4).AlignItems(ui.Center).
 		Label(r.label).Selected(r.sel)
 	a.paintNavRow(row, r)
 	row.Children(func() {

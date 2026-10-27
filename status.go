@@ -21,8 +21,8 @@ func (a *App) statusBar(c *ui.Context) {
 		AlignItems(ui.Center)).
 		BorderWidth(1, 0, 0, 0).BorderColor(colorDivider())
 	if visualV2 {
-		// macOS 26: no rule; the floating panes end above a quiet strip.
-		bar.Height(24).Padding(0, 16).BorderWidth(0, 0, 0, 0)
+		// macOS 26: no rule; quiet strip aligned with the floating gutter.
+		bar.Height(22).Padding(0, 12+v2Gutter).BorderWidth(0, 0, 0, 0)
 	}
 	bar.Children(func() {
 		left := a.statusLeft()

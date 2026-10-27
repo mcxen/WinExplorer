@@ -46,23 +46,23 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **v2（默认，`visual.go`）**：内容卡 / 任务卡 `v2CardRadius = 8`；行 / 侧栏选中 / 主题 Radius `v2RowRadius = 4`（对话框加倍为 8）；地址栏/搜索 `v2InputRadius = 4`；内容卡外侧 gutter 8。详见 `docs/specs/11-visual-language.md`。
 - **圆角令牌**：代码不写死随风格变化的圆角。`cardRadius()`（页级卡：磁盘卡——经典 12 / v2 8）、`innerRadius()`（卡内软面：缩略图框、图表、徽标、助手卡——经典 6 / v2 4）、`fieldRadius()`（地址/搜索输入——经典 6 / v2 4）。胶囊与半高圆（清除按钮 8/16、播放 16 等）是几何形状，不随风格变化，仍写死。
 - 行内边距 `files.go:rowInset = 4`。
-- 设置 → 外观 → 视觉风格可切回经典。截图 `docs/assets/shots/VISUAL2/`。
+- 设置 → 外观 → 视觉风格可切回经典。macOS 26 默认：左侧红绿灯标题栏、静音工具栏胶囊、浮动侧栏。截图 `docs/assets/shots/MACOS26-V2/`（历史 `MACOS26/`、`VISUAL2/`）。
 
 ### 1.4 尺寸
 
 | 项 | 值 | 位置 |
 | --- | --- | --- |
-| 标题栏/标签条高 | 40；单个标签高 32，宽 96–220 | `chrome_tab.go:tabStrip`、`tabMinW/tabMaxW` |
+| 标题栏/标签条高 | 40；单个标签高 32，宽 96–220；macOS 26 左侧红绿灯 14 DIP | `chrome_tab.go:tabStrip`、`macTrafficLights`、`tabMinW/tabMaxW` |
 | 窗口控制按钮 | 46×40 | `chrome_tab.go:winControl` |
-| 命令栏 | 高 44，按钮高 32 | `chrome_tab.go:commandBar`、`commandMenu` |
-| 导航栏（前进后退+地址栏+搜索） | 高 44；地址栏 32；面包屑按钮 24；文件夹搜索框 220×32 | `chrome_nav.go`、`addressbar.go:addressField`/`crumbButton` |
+| 命令栏 | 高 44（经典）/ 40（macOS 26），按钮高 32；macOS 26 静音胶囊分组 | `chrome_tab.go:commandBar`、`toolGroup`、`macPill` |
+| 导航栏（前进后退+地址栏+搜索） | 高 44（经典）/ 38（macOS 26）；地址栏 32；面包屑按钮 24；文件夹搜索框 220×32 | `chrome_nav.go`、`addressbar.go:addressField`/`crumbButton` |
 | 侧栏 | 宽 180–420，行高 32，树每级缩进 14，最多 96 | `sidebar.go:navMinWidth/navMaxWidth/navRowH`、`navtree.go:navTreeStep/navTreeMaxIndent` |
 | 详细信息行 | 30，紧凑视图 22 | `files.go:detailsRowH` |
 | 列表视图行 | 28，紧凑视图 22 | `files.go:listRowH` |
 | 详细信息列 | 名称弹性（最小 160），修改日期 168，类型 120，大小 96，位置 200 | `files.go` 常量 |
 | 图标视图 | 小 32 / 中 48 / 大 72 / 超大 96，可放大 1–4 倍 | `files_icon.go:iconBaseSize`、`tabs.go:iconZoomSteps` |
 | 预览窗格 | 宽 220–460 | `preview.go:previewMinW/previewMaxW` |
-| 状态栏 | 高 28，字号 12 | `status.go` |
+| 状态栏 | 高 28（经典）/ 22（macOS 26），字号 12/11 | `status.go`、`statusFont` |
 | 助手面板 | 默认宽 380，最小 320 | `assistant.go:assistantPaneW/assistantMinW` |
 | 快速搜索 | 960 宽（独立面板 960×560），列表高 120–384，结果行高 44：24px 图标、完整文件名与相对路径、150px 右对齐的“大小 · 类型 / 修改日期”；分组标题行高 24；右侧预览宽 270 | `searchbox.go:searchHitRowH`、`searchDisplayRowAt`、`searchHitMetaW`、`searchpreview.go` |
 | 地址建议下拉 | 与地址栏同宽，最高 360，行高 28 | `addressbar.go:pathDropdown` |
@@ -75,7 +75,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 
 ![详细信息视图](assets/ui/details.png)
 
-- **标题栏/标签条**（`chrome_tab.go:tabStrip`、`tabItem`）：标签可拖动排序、中键关闭、双击空白新建、溢出时收窄并可横向滚动；标签悬停提示完整路径（`tabTooltip`）。特殊页的标签名见 §5。右侧空白区可拖动窗口（`DragWindow`）。
+- **标题栏/标签条**（`chrome_tab.go:tabStrip`、`tabItem`）：标签可拖动排序、中键关闭、双击空白新建、溢出时收窄并可横向滚动；标签悬停提示完整路径（`tabTooltip`）。特殊页的标签名见 §5。右侧空白区可拖动窗口（`DragWindow`）。macOS 26 在左侧自绘红绿灯（`macTrafficLights`），经典仍用右侧 Windows 式按钮（`windowControls`）。
 - **命令栏**（`commandBar`）：新建、剪切/复制/粘贴/重命名/分享/删除、排序、查看、更多（`moreButton`）。图标按钮不可用时置灰。
 - **导航栏**：后退/前进/上一级/地址栏/刷新/文件夹搜索。地址栏两种状态：面包屑（`breadcrumbBar`，溢出折叠为「…」菜单 `crumbOverflow`，分隔箭头弹出子文件夹菜单 `crumbSeparator`；右侧下拉「最近访问」列出 `visitList` 中的文件夹「标题 · 路径」，点选导航，见 ADDR-RECENT）与编辑（`pathEditor`，补全下拉 `pathDropdown`，行内错误提示；进入编辑：空白处单击 / Ctrl+L / F4 / Alt+D）。
 - **侧栏**（`sidebar.go:sidebar`）：主文件夹、画廊、快速访问（可拖放固定）、最近位置、此电脑（卷 → 目录树）、回收站；虚拟列表。

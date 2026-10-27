@@ -234,8 +234,12 @@ func TestTabStripOverflow(t *testing.T) {
 		a.openTab(filepath.Join(root, "a"))
 		if i == 2 {
 			tt.Frame()
-			if r, ok := tt.Find("新建标签页"); !ok || r.X > 4*(tabMaxW+2)+20 {
-				t.Fatalf("few tabs: 新建标签页 at %v, want after four full tabs", r)
+			maxX := float32(4*(tabMaxW+2) + 20)
+			if visualV2 {
+				maxX += tabChromeMacW - tabDragMinW // traffic lights + plus footprint, no right captions
+			}
+			if r, ok := tt.Find("新建标签页"); !ok || r.X > maxX {
+				t.Fatalf("few tabs: 新建标签页 at %v, want after four full tabs (maxX=%v)", r, maxX)
 			}
 		}
 	}
@@ -252,14 +256,18 @@ func TestTabStripOverflow(t *testing.T) {
 	if w := tabWidth(1000, 32); w != tabMinW {
 		t.Fatalf("32 tabs are %v wide, want the minimum", w)
 	}
-	if r, ok := tt.Find("新建标签页"); !ok || r.X+r.W > 1000-3*46 || r.W == 0 {
+	rightReserve := float32(3 * 46)
+	if visualV2 {
+		rightReserve = tabDragMinW
+	}
+	if r, ok := tt.Find("新建标签页"); !ok || r.X+r.W > 1000-rightReserve || r.W == 0 {
 		t.Fatalf("新建标签页 scrolled out of reach: %v", r)
 	}
 	// Ctrl+1 brings the first tab forward and scrolls it into view.
 	tt.Key(ui.Ctrl, ui.Key1)
 	tt.Frame()
 	tt.Frame()
-	if r, ok := tt.Find("zeta"); ok && r.X < 1000-3*46-tabDragMinW && r.W > 0 {
+	if r, ok := tt.Find("zeta"); ok && r.X < 1000-rightReserve-tabDragMinW && r.W > 0 {
 		t.Fatalf("the strip did not scroll back: zeta still at %v", r)
 	}
 }

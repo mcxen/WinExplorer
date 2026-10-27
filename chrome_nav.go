@@ -12,7 +12,11 @@ import (
 // from the content, as in Explorer.
 func (a *App) navRow(c *ui.Context) {
 	windowBG(c, ui.Column(c).FillWidth().Shrink(0)).Children(func() {
-		ui.Row(c).Height(44).FillWidth().Padding(6, 10).Gap(6).
+		navH, padY := float32(44), float32(6)
+		if visualV2 {
+			navH, padY = 38, 4
+		}
+		ui.Row(c).Height(navH).FillWidth().Padding(padY, 10).Gap(6).
 			AlignItems(ui.Center).Children(func() {
 			a.toolGroup(c, func() {
 				a.navIconButton(c, lucide.ArrowLeft, "后退", a.canBack(), a.back)

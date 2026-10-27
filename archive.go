@@ -51,7 +51,9 @@ func archiveKind(name string) string {
 	return ""
 }
 
-// isArchive 报告 name 是否为受支持的归档。
+// isArchive 报告 name 是否为受支持的归档扩展名。只看名字，不管路径是
+// 文件还是目录——调用方必须自行排除目录（或用 entryIsArchive /
+// isArchivePath），否则像 Foo.app 这样的包目录会被误判。
 func isArchive(name string) bool { return archiveKind(name) != "" }
 
 // doCompress 把当前选择压缩为当前文件夹中的一个 ZIP。单个项目以它
@@ -133,7 +135,7 @@ func (a *App) doExtract() {
 	a.assist.ensure()
 	var archives []Entry
 	for _, e := range sel {
-		if e.IsDir || !isArchive(e.Name) {
+		if !entryIsArchive(e) {
 			continue
 		}
 		archives = append(archives, e)

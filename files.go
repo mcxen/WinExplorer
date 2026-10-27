@@ -562,7 +562,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	anySel := len(sel) > 0
 	allArchives := anySel
 	for _, e := range sel {
-		if e.IsDir || !isArchive(e.Name) {
+		if !entryIsArchive(e) {
 			allArchives = false
 			break
 		}
@@ -572,6 +572,12 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 
 	if m.Item("打开").Disabled(!anySel).Chosen() {
 		a.doOpen()
+	}
+	// Finder's 显示包内容: walk into a macOS package without launching it.
+	if one && isMacOSBundle(sel[0]) && !onSpecial {
+		if m.Item("显示包内容").Chosen() {
+			a.navigate(sel[0].Path)
+		}
 	}
 	if one && !sel[0].IsDir && !onSpecial {
 		m.Submenu("打开方式", func(n *ui.Menu) {
@@ -663,10 +669,13 @@ func formatModTime(t time.Time) string {
 	return t.Format("2006/1/2 15:04")
 }
 
-// typeLabel is 文件夹 for a directory, otherwise "PNG 文件", "文本文档", or
-// "文件" from the extension.
+// typeLabel is 文件夹 for a directory, "应用程序" (etc.) for a macOS
+// package, otherwise "PNG 文件", "文本文档", or "文件" from the extension.
 func typeLabel(e Entry) string {
 	if e.IsDir {
+		if label := bundleTypeLabel(e.Name); label != "" {
+			return label
+		}
 		return "文件夹"
 	}
 	switch e.Ext {

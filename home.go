@@ -77,7 +77,8 @@ func (a *App) pinnedPlaces() []Place {
 // it — the same thing the address bar does with a file path.
 func (a *App) openPinned(path string, dir bool) {
 	if dir {
-		a.navigate(path)
+		e := Entry{Name: filepath.Base(path), Path: path, IsDir: true}
+		a.openDirEntry(e)
 		return
 	}
 	a.cur().selectPath = path
@@ -232,10 +233,13 @@ func (a *App) displayName(e Entry) string {
 }
 
 // recordRecent notes an opened file for the Home page, as Explorer's
-// 最近使用的文件 does.
+// 最近使用的文件 does. macOS .app launches count too — Finder lists them
+// under Recents — while ordinary folders stay out.
 func (a *App) recordRecent(path string) {
 	if info, err := os.Lstat(path); err == nil && info.IsDir() {
-		return
+		if !isAppBundleName(filepath.Base(path)) {
+			return
+		}
 	}
 	a.store.pushRecent(path)
 }

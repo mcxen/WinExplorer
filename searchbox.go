@@ -655,7 +655,7 @@ func (a *App) openSearchHit(e Entry) {
 	a.searchBoxClose()
 	a.showExplorer()
 	if e.IsDir {
-		a.navigate(e.Path)
+		a.openDirEntry(e)
 		return
 	}
 	a.revealSearchHit(e)

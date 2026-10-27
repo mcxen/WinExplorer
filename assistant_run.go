@@ -120,6 +120,7 @@ func (a *App) assistantSubmit() {
 	a.assist.halted = false
 	a.assist.pending = ""
 	a.assist.resetLive()
+	a.assist.liveEpoch++
 	a.assist.turns = append(a.assist.turns, aiTurn{Role: "user", Text: text, Files: files, At: time.Now()})
 	a.assist.persistSession(root)
 	a.assist.running = true
@@ -168,6 +169,7 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 	defer assistantRunMu.Unlock()
 	var failed, asked bool
 	before := map[string]bool{}
+	epoch := a.assist.liveEpoch
 	defer func() {
 		saved := sunvaleToolState.drainPending()
 		undos := sunvaleToolState.drainUndos()
@@ -182,42 +184,57 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 		tail := lv.pending
 		lv.pending = nil
 		lv.mu.Unlock()
+		stopped := ctx.Err() != nil
 		a.postAssist(func() {
-			// The last partial of a stopped reply lands before the run
-			// closes its live line, not after as a second copy.
-			if tail != nil {
+			mine := a.assist.liveEpoch == epoch
+			// A stopped run's last partial lands only if this epoch still owns
+			// the pane; a newer Stop/submit must not be painted over.
+			if mine && tail != nil {
+				if stopped {
+					tail.turn.Stopped = true
+					tail.partial = false
+				}
 				a.applyAssistLive(tail)
 			}
-			a.assist.passwords = append(a.assist.passwords, saved...)
-			if len(a.assist.passwords) > assistMaxArchivePasswords {
-				a.assist.passwords = a.assist.passwords[len(a.assist.passwords)-assistMaxArchivePasswords:]
+			if mine {
+				a.assist.passwords = append(a.assist.passwords, saved...)
+				if len(a.assist.passwords) > assistMaxArchivePasswords {
+					a.assist.passwords = a.assist.passwords[len(a.assist.passwords)-assistMaxArchivePasswords:]
+				}
+				a.assist.save()
+				a.assist.applyMemory(memAdd, memDrop)
+				a.assist.persistSession(run.root)
 			}
-			a.assist.save()
-			a.assist.applyMemory(memAdd, memDrop)
-			a.assist.persistSession(run.root)
 			for _, op := range undos {
 				a.pushUndo(op)
 			}
-			a.assist.running = false
-			a.assist.stop = nil
-			a.assist.pending = ""
-			a.assist.resetLive()
-			a.assist.status = ""
-			a.assist.flowCool = time.Now().Add(assistFlowCool)
+			if mine {
+				a.assist.running = false
+				a.assist.stop = nil
+				a.assist.pending = ""
+				a.assist.resetLive()
+				a.assist.status = ""
+				if stopped {
+					a.assist.halted = true
+				}
+				a.assist.flowCool = time.Now().Add(assistFlowCool)
+			}
 			aiFx.endRun()
-			a.reloadAfterFx()
-			for _, id := range plans {
-				a.assistantApplyPlan(id)
-			}
-			if nav != "" {
-				a.navigate(nav)
-			}
-			// A queued message waited out this run: it goes out now, as
-			// ZCode's queue panel sends when the turn frees up.
-			if a.assist.queued != "" {
-				a.assist.draft = a.assist.queued
-				a.assist.queued = ""
-				a.assistantSubmit()
+			if mine {
+				a.reloadAfterFx()
+				for _, id := range plans {
+					a.assistantApplyPlan(id)
+				}
+				if nav != "" {
+					a.navigate(nav)
+				}
+				// Queued Send after Stop waits here. Stop itself clears the
+				// queue so an accidental double-Stop does not resurrect text.
+				if a.assist.queued != "" {
+					a.assist.draft = a.assist.queued
+					a.assist.queued = ""
+					a.assistantSubmit()
+				}
 			}
 		})
 	}()
@@ -239,13 +256,13 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 
 	before = sunvaleToolState.planIDs()
 	run.onLive = func(id int, turn aiTurn, partial bool) {
-		a.noteAssistLive(id, turn, partial)
+		a.noteAssistLive(epoch, id, turn, partial)
 	}
 	run.onStatus = func(status string) {
-		a.noteAssistStatus(status)
+		a.noteAssistStatus(epoch, status)
 	}
 	run.onPending = func(name string) {
-		a.noteAssistPending(name)
+		a.noteAssistPending(epoch, name)
 	}
 	result, err := runAssistantHeadless(ctx, run)
 	asked = result.Asked
@@ -355,10 +372,23 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 		Instruction: assistant.EffectiveInstruction(run.prefs.ExtraInstruction),
 		Model:       budget,
 		ToolsConfig: adk.ToolsConfig{
-			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: tools},
+			ToolsNodeConfig: compose.ToolsNodeConfig{
+				Tools: tools,
+				// File tools share one bind; parallel writes would race.
+				ExecuteSequentially: true,
+				// A hallucinated name must come back as text the model can
+				// correct, not as an error that kills the whole turn.
+				UnknownToolsHandler: unknownAssistTool,
+			},
 		},
 		MaxIterations: iters,
 		GenModelInput: assistant.GenModelInput,
+		// Transient network / 5xx only. 429 stays with runWithRateFallback
+		// so the two retry layers do not amplify each other.
+		ModelRetryConfig: &adk.ModelRetryConfig{
+			MaxRetries:  2,
+			IsRetryAble: func(_ context.Context, err error) bool { return assistant.TransientModelError(err) },
+		},
 	})
 	if err != nil {
 		return assistRunResult{}, err
@@ -462,6 +492,16 @@ func runFileAssistantInner(ctx context.Context, run assistRun) (assistRunResult,
 	return result, nil
 }
 
+// unknownAssistTool answers a hallucinated tool name with text the model can
+// act on. Returning an error here would abort the whole ReAct loop.
+func unknownAssistTool(_ context.Context, name, _ string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "?"
+	}
+	return fmt.Sprintf("没有名为 %q 的工具。请改用系统提示里列出的工具名重试，不要编造工具。", name), nil
+}
+
 // budgetFinishTurn salvages a turn the iteration budget cut off. The
 // transcript turns already published carry the model's work (assistant text,
 // tool calls and results); replaying them with the wrap-up note and no tools
@@ -482,6 +522,10 @@ func budgetFinishTurn(ctx context.Context, run assistRun, chatModel model.BaseCh
 
 // budgetFinishAsk is the single user message of the salvage call: a compact
 // transcript of the cut-off turn plus the demand for an answer now.
+// budgetFinishAskMax is the rune ceiling for the salvage prompt. The wrap-up
+// call has no tools and must stay inside ordinary context windows.
+const budgetFinishAskMax = 12000
+
 func budgetFinishAsk(result *assistRunResult) string {
 	var b strings.Builder
 	b.WriteString("刚才的一轮对话在工具预算用尽时被截断，以下是已发生的轮次：\n\n")
@@ -492,15 +536,18 @@ func budgetFinishAsk(result *assistRunResult) string {
 			if text == "" {
 				continue
 			}
-			fmt.Fprintf(&b, "[工具 %s] %s\n\n", ev.Tool, assistant.ToolText(text))
+			fmt.Fprintf(&b, "[工具 %s] %s\n\n", ev.Tool, assistant.LimitRunes(assistant.ToolText(text), 2000))
 		case "assistant":
 			if t := strings.TrimSpace(ev.Text); t != "" {
-				fmt.Fprintf(&b, "[助手] %s\n\n", t)
+				fmt.Fprintf(&b, "[助手] %s\n\n", assistant.LimitRunes(t, 2000))
 			}
 		}
+		if len([]rune(b.String())) > budgetFinishAskMax {
+			break
+		}
 	}
-	b.WriteString("请只根据上面的内容直接回答用户最初的问题：给出结论与必要的路径、数字；未完成的部分明确说明做到了哪一步、下一步该做什么。不要调用工具，不要再描述计划。")
-	return b.String()
+	body := assistant.LimitRunes(b.String(), budgetFinishAskMax)
+	return body + "请只根据上面的内容直接回答用户最初的问题：给出结论与必要的路径、数字；未完成的部分明确说明做到了哪一步、下一步该做什么。不要调用工具，不要再描述计划。"
 }
 
 // publishAssist paints a line and, once it is finished, keeps it for the
@@ -650,6 +697,33 @@ func planIDFrom(text string) string {
 	return id
 }
 
+// assistantRequestStop is the Stop button: cancel the run ctx immediately,
+// free the composer (halted clears Running), drop the queue, and discard
+// coalesced live paints. liveEpoch is NOT bumped here — the run's defer
+// still owns cleanup (running/stop); halted alone drops late paints.
+func (a *App) assistantRequestStop() {
+	if !a.assist.running && a.assist.stop == nil {
+		return
+	}
+	a.assist.queued = ""
+	a.assist.halted = true
+	a.assist.pending = ""
+	a.assist.status = ""
+	lv := &a.assist.live
+	lv.mu.Lock()
+	lv.pending = nil
+	lv.armed = false
+	lv.mu.Unlock()
+	if n := len(a.assist.turns); n > 0 {
+		a.assist.turns[n-1].Stopped = true
+	}
+	if a.assist.stop != nil {
+		a.assist.stop()
+		a.assist.stop = nil
+	}
+	a.assist.persistSession(a.assist.folder)
+}
+
 func (a *App) failAssist(err error) {
 	a.postAssist(func() {
 		a.assist.turns = append(a.assist.turns, aiTurn{Role: "assistant", Text: assistErrorText(err), Error: true, At: time.Now()})
@@ -687,9 +761,13 @@ type assistLiveUpdate struct {
 	partial bool
 }
 
-func (a *App) noteAssistLive(id int, turn aiTurn, partial bool) {
+func (a *App) noteAssistLive(epoch uint64, id int, turn aiTurn, partial bool) {
 	lv := &a.assist.live
 	lv.mu.Lock()
+	if a.assist.liveEpoch != epoch || a.assist.halted {
+		lv.mu.Unlock()
+		return
+	}
 	lv.seq++
 	up := &assistLiveUpdate{seq: lv.seq, id: id, turn: turn, partial: partial}
 	if partial && mygo.App.IsReady() {
@@ -710,6 +788,9 @@ func (a *App) noteAssistLive(id int, turn aiTurn, partial bool) {
 		prev = nil
 	}
 	a.postAssist(func() {
+		if a.assist.liveEpoch != epoch || a.assist.halted {
+			return
+		}
 		if prev != nil {
 			a.applyAssistLive(prev)
 		}
@@ -723,9 +804,15 @@ func (a *App) flushAssistLive() {
 	up := lv.pending
 	lv.pending = nil
 	lv.armed = false
+	halted := a.assist.halted
 	lv.mu.Unlock()
-	if up != nil {
-		a.postAssist(func() { a.applyAssistLive(up) })
+	if up != nil && !halted {
+		a.postAssist(func() {
+			if a.assist.halted {
+				return
+			}
+			a.applyAssistLive(up)
+		})
 	}
 }
 
@@ -754,15 +841,23 @@ func (a *App) applyAssistLive(up *assistLiveUpdate) {
 	}
 }
 
-func (a *App) noteAssistStatus(status string) {
+func (a *App) noteAssistStatus(epoch uint64, status string) {
 	if status == "" {
 		return
 	}
-	a.postAssist(func() { a.assist.status = status })
+	a.postAssist(func() {
+		if a.assist.liveEpoch != epoch || a.assist.halted {
+			return
+		}
+		a.assist.status = status
+	})
 }
 
-func (a *App) noteAssistPending(name string) {
+func (a *App) noteAssistPending(epoch uint64, name string) {
 	a.postAssist(func() {
+		if a.assist.liveEpoch != epoch || a.assist.halted {
+			return
+		}
 		a.assist.pending = name
 		if name != "" {
 			a.assist.status = "正在调用 " + name

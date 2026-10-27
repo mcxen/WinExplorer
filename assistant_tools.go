@@ -90,13 +90,17 @@ type pathsArgs struct {
 	Paths []string `json:"paths" jsonschema:"要读的路径，相对当前文件夹或绝对路径，最多 12 个"`
 }
 
-func (s *sunvaleTools) readFiles(_ context.Context, _ *mcp.CallToolRequest, args pathsArgs) (*mcp.CallToolResult, any, error) {
+func (s *sunvaleTools) readFiles(ctx context.Context, _ *mcp.CallToolRequest, args pathsArgs) (*mcp.CallToolResult, any, error) {
 	if len(args.Paths) == 0 {
 		return mcpErr(fmt.Errorf("paths 不能为空")), nil, nil
 	}
 	var b strings.Builder
 	n := 0
 	for _, raw := range args.Paths {
+		if ctx.Err() != nil {
+			b.WriteString("（已停止）\n")
+			break
+		}
 		if n >= assistReadFiles {
 			b.WriteString("（其余路径未读，一次最多 12 个）\n")
 			break

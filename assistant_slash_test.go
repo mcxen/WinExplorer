@@ -210,8 +210,8 @@ func TestAssistantSlashStopWhileRunningDraft(t *testing.T) {
 	if err := tt.Click("停止"); err != nil {
 		t.Fatal(err)
 	}
-	if !stopped || a.assist.status != "正在停止…" {
-		t.Fatalf("stop: stopped=%v status=%q", stopped, a.assist.status)
+	if !stopped || !a.assist.halted || a.assist.status != "" || a.assist.pending != "" {
+		t.Fatalf("stop: stopped=%v halted=%v status=%q pending=%q", stopped, a.assist.halted, a.assist.status, a.assist.pending)
 	}
 }
 

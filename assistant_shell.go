@@ -200,13 +200,21 @@ func registerShellTool(s *sunvaleTools, server *mcp.Server) {
 	}, s.bash)
 }
 
-func (s *sunvaleTools) bash(_ context.Context, _ *mcp.CallToolRequest, args bashArgs) (*mcp.CallToolResult, any, error) {
+func (s *sunvaleTools) bash(ctx context.Context, _ *mcp.CallToolRequest, args bashArgs) (*mcp.CallToolResult, any, error) {
 	root, _ := s.bound()
 	if strings.TrimSpace(args.Script) == "" {
 		return mcpErr(fmt.Errorf("script 不能为空")), nil, nil
 	}
-	out, err := runBash(shellCtx(), root, args.Script)
+	// ctx is the run's cancelable context: Stop must interrupt a long script
+	// instead of waiting out shellTimeout on a detached Background.
+	out, err := runBash(ctx, root, args.Script)
 	if err != nil {
+		if ctx.Err() != nil {
+			if out != "" {
+				return mcpText(out + "\n已停止"), nil, nil
+			}
+			return mcpText("已停止"), nil, nil
+		}
 		if out != "" {
 			return mcpText(out + "\n" + err.Error()), nil, nil
 		}
@@ -217,7 +225,3 @@ func (s *sunvaleTools) bash(_ context.Context, _ *mcp.CallToolRequest, args bash
 	}
 	return mcpText(out), nil, nil
 }
-
-// shellCtx is a run's background context; the tools carry no cancellation
-// of their own beyond the interpreter's timeout.
-func shellCtx() context.Context { return context.Background() }

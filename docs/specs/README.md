@@ -19,6 +19,8 @@
 | 10 | [统一任务系统（TASKSYS，设计稿）](10-task-system.md) |
 | 11 | [视觉语言 v2（VISUAL2）](11-visual-language.md) |
 | 12 | [诊断日志（LOG1）](12-logging.md) |
+| 13 | [聊天历史侧列（CHATHIST）](13-chat-history.md) |
+| 14 | [助手 AI 稳定性审计与停止链路](14-ai-stability.md) |
 | 09 | [压缩 / 解压进度与进度样式（ARCHIVE-PROG、PROG-STYLE）](09-archive-progress.md) |
 | 15 | [代码功能分布与可维护性布局](15-code-layout.md) |
 

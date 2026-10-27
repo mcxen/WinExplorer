@@ -276,13 +276,13 @@ func (a *App) assistantComposerTrailing(c *ui.Context) {
 	// GlassComposer shows Stop only when Running and the draft is empty; a
 	// slash draft would hide it. Put Stop back in Trailing so the user can
 	// still cancel while typing.
-	if !a.assist.running || strings.TrimSpace(a.assist.draft) == "" {
+	// Show Stop while a run is live, including after the draft has text.
+	// Once halted, the main composer already left Running mode.
+	if !a.assist.running || a.assist.halted || strings.TrimSpace(a.assist.draft) == "" {
 		return
 	}
-	if chat.IconAction(c, "停止", lucide.Square).Clicked() && a.assist.stop != nil {
-		a.assist.queued = ""
-		a.assist.stop()
-		a.assist.status = "正在停止…"
+	if chat.IconAction(c, "停止", lucide.Square).Clicked() {
+		a.assistantRequestStop()
 	}
 }
 

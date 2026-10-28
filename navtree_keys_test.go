@@ -158,6 +158,9 @@ func TestNavTreeKeysLeaveOnTabAndFilePane(t *testing.T) {
 func TestNavRowsCarryTreeDepth(t *testing.T) {
 	a, _, dir := navTreeApp(t)
 	sub := filepath.Join(dir, "a-sub")
+	if a.navTree.open == nil {
+		a.navTree.open = map[string]bool{}
+	}
 	a.navTree.open[dir] = true
 	rows := a.navRows()
 	depths := map[string]int{}

@@ -137,6 +137,7 @@ func (a *App) navTreeSetOpen(r navRow, open bool) {
 		a.navTree.open = map[string]bool{}
 	}
 	a.navTree.open[r.path] = open
+	delete(a.navTree.auto, r.path) // the user's own now
 }
 
 func (a *App) navTreeActivate(r navRow) {

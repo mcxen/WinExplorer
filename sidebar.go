@@ -483,6 +483,7 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 					a.navTree.open = map[string]bool{}
 				}
 				a.navTree.open[r.path] = !a.navTree.open[r.path]
+				delete(a.navTree.auto, r.path) // the user's own now
 				return
 			}
 		} else {

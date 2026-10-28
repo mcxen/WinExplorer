@@ -75,8 +75,12 @@ type persistedState struct {
 type appSettings struct {
 	Appearance string `json:"appearance,omitempty"`
 	ShowHidden bool   `json:"showHidden"`
-	// TreeNoExpand turns off 展开到打开的文件夹: navigating leaves the
-	// sidebar tree as the user opened it (Explorer's option off).
+	// TreeExpand is 展开到打开的文件夹: navigating opens the sidebar tree's
+	// ancestor chain down to the current folder. nil (never chosen) is off,
+	// as in Windows Explorer; v0.3.5 and earlier defaulted to on.
+	TreeExpand *bool `json:"treeExpand,omitempty"`
+	// TreeNoExpand is the pre-0.3.6 switch for the same option (true = off).
+	// Kept so an old explicit off still reads as off; new saves use TreeExpand.
 	TreeNoExpand bool `json:"treeNoExpand,omitempty"`
 	// VisualStyle is 视觉风格: "v2" (default for fresh installs), "" 经典 (visual.go).
 	VisualStyle    string `json:"visualStyle,omitempty"`

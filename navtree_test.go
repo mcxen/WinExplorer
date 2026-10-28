@@ -25,6 +25,10 @@ func navTreeApp(t *testing.T) (*App, *ui.Tester, string) {
 		t.Fatal(err)
 	}
 	a.navPCExpanded = true
+	// These tests drive 展开到打开的文件夹, off by default since 0.3.6.
+	on := true
+	a.applySettings(func(x *appSettings) { x.TreeExpand = &on })
+	a.navTree.synced = "" // follow the folder keynavWindow opened
 	// A real pane takes width — the test app starts at 0 — or its rows have no
 	// box to click or paint.
 	a.navWidth = navMinWidth

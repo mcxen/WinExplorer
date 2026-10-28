@@ -47,8 +47,11 @@ type navTree struct {
 	// takes to show it — and list is the pane's scrolling.
 	synced string
 	reveal string
-	row    int
-	list   ui.ListState
+	// auto holds the folders navSync opened (not the user): the next follow
+	// closes those off the new chain.
+	auto map[string]bool
+	row  int
+	list ui.ListState
 	// clicked is the key of the pane row the user clicked, and clickedPath
 	// where it went: that row, not a twin elsewhere in the pane, is the one
 	// selected while the tab stays there. noSync is a place reached from
@@ -155,11 +158,31 @@ func (a *App) navSync(path string) {
 	if a.navTree.open == nil {
 		a.navTree.open = map[string]bool{}
 	}
+	// Only the chain down to the current folder stays open: the ancestors a
+	// previous follow opened close again unless they are on the new chain,
+	// so walking around never leaves a long trail of opened folders. Folders
+	// the user opened by hand are not in auto and are left as they are.
+	chain := map[string]bool{}
 	root := volumeRootOf(path)
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
-		a.navTree.open[dir] = true
+		chain[dir] = true
 		if dir == root || dir == filepath.Dir(dir) {
-			return
+			break
+		}
+	}
+	for dir := range a.navTree.auto {
+		if !chain[dir] {
+			delete(a.navTree.open, dir)
+			delete(a.navTree.auto, dir)
+		}
+	}
+	if a.navTree.auto == nil {
+		a.navTree.auto = map[string]bool{}
+	}
+	for dir := range chain {
+		if !a.navTree.open[dir] {
+			a.navTree.open[dir] = true
+			a.navTree.auto[dir] = true
 		}
 	}
 }
@@ -213,7 +236,12 @@ func (a *App) navTreeFollow() {
 	a.navSync(path)
 }
 
-func (a *App) treeNoExpand() bool { return a.store != nil && a.store.settings().TreeNoExpand }
+func (a *App) treeNoExpand() bool { return a.store != nil && !a.store.settings().treeExpand() }
+
+// treeExpand reports 展开到打开的文件夹: off unless the user turned it on.
+func (s appSettings) treeExpand() bool {
+	return s.TreeExpand != nil && *s.TreeExpand && !s.TreeNoExpand
+}
 
 // navTreeReveal shows the current folder's row when the tab moved there: the
 // pane's list keeps only what shows, so a row at the end of a long tree is

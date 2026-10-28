@@ -90,37 +90,43 @@ func (a *App) detailsWidth() float32 {
 
 // nameColW is the 名称 column's width: the user's once dragged,
 // otherwise the flex default's footprint in the row width math.
-func (a *App) nameColW() float32 {
-	return colW(a.colWidths.name, colNameFlexW)
-}
-
-func (a *App) dateColW() float32 { d, _ := a.fittedCols(); return d }
-func (a *App) typColW() float32  { _, t := a.fittedCols(); return t }
+func (a *App) nameColW() float32 { n, _, _ := a.fittedCols(); return n }
+func (a *App) dateColW() float32 { _, d, _ := a.fittedCols(); return d }
+func (a *App) typColW() float32  { _, _, t := a.fittedCols(); return t }
 
 // Floors the details view squeezes its default columns to, enough for
 // "2026/10/20 19:48" and for a short type name.
 const (
+	colNameFitMin float32 = 120
 	colDateFitMin float32 = 112
 	colTypeFitMin float32 = 80
 )
 
-// fittedCols is the 修改日期 and 类型 widths for the pane the details view
-// laid out in last frame. When the pane is narrower than the row (the
-// assistant panel or the preview pane open beside it), the default
-// columns give way, the date first, so 大小 stays on screen; a width the
-// user dragged is theirs and never squeezed.
-func (a *App) fittedCols() (date, typ float32) {
+// fittedCols is the 名称, 修改日期 and 类型 widths for the pane the details
+// view laid out in last frame. When the pane is narrower than the row (the
+// assistant panel or the preview pane open beside it), the default columns
+// give way — the name's share first (its text ellipsizes), then the date,
+// then the type — so 大小 stays on screen; a width the user dragged is
+// theirs and never squeezed.
+func (a *App) fittedCols() (name, date, typ float32) {
+	name = colW(a.colWidths.name, colNameFlexW)
 	date, typ = colW(a.colWidths.date, colDateW), colW(a.colWidths.typ, colTypeW)
 	pane := a.cur().detailsPaneW
 	if pane <= 0 {
-		return date, typ
+		return name, date, typ
 	}
 	other := typ
 	if strings.TrimSpace(a.cur().query) != "" {
 		other = a.locColW()
 	}
-	need := a.nameColW() + date + other + a.sizeColW() + rowInset*2
-	return squeezeCols(need-pane, date, typ, a.colWidths.date <= 0, a.colWidths.typ <= 0)
+	over := name + date + other + a.sizeColW() + rowInset*2 - pane
+	if over > 0 && a.colWidths.name <= 0 {
+		cut := min(over, max(name-colNameFitMin, 0))
+		name -= cut
+		over -= cut
+	}
+	date, typ = squeezeCols(over, date, typ, a.colWidths.date <= 0, a.colWidths.typ <= 0)
+	return name, date, typ
 }
 
 // squeezeCols takes over from the date column, down to its floor, then

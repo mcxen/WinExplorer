@@ -63,3 +63,17 @@ func TestTabTitleAndKnownFolders(t *testing.T) {
 		t.Error("other folders still open the tree")
 	}
 }
+
+// 助手面板打开后文件窗格变窄：名称列先让出宽度，大小列仍完整可见。
+func TestFittedColsSqueezeNameFirstKeepSize(t *testing.T) {
+	a, _, _ := keynavWindow(t, 1)
+	full := a.detailsWidth()
+	a.cur().detailsPaneW = full - 60
+	if a.nameColW() != colNameFlexW-60 || a.dateColW() != colW(0, colDateW) {
+		t.Fatalf("name %v date %v: the name column must give way first", a.nameColW(), a.dateColW())
+	}
+	a.cur().detailsPaneW = 420
+	if w := a.detailsWidth(); w > 420 && a.nameColW() > colNameFitMin {
+		t.Fatalf("row %v wider than the pane while the name could still shrink", w)
+	}
+}

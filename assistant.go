@@ -168,7 +168,10 @@ func (a *App) toggleAssistant() {
 	a.assistantOpen = !a.assistantOpen
 	if a.assistantOpen {
 		a.assist.ensure()
-		if len(a.assist.turns) == 0 && len(a.assist.sessions) > 0 {
+		// The history column opens on its own only where it leaves the
+		// conversation and its composer room: a narrow pane keeps the user's
+		// own choice (会话 in the header toggles it, and it is remembered).
+		if len(a.assist.turns) == 0 && len(a.assist.sessions) > 0 && (a.assist.full || a.assist.width >= assistHistAutoW) {
 			a.assist.showHist = true
 		}
 		a.requestComposerFocus()
@@ -188,6 +191,10 @@ func (a *App) requestComposerFocus() {
 	a.assist.focusComposer = true
 	a.assist.blurToPane = false
 }
+
+// assistHistAutoW is the narrowest pane the history column opens in by
+// itself: below it the column would leave the composer a sliver.
+const assistHistAutoW = 560
 
 func (a *App) assistantPane(c *ui.Context) {
 	a.assist.ensure()

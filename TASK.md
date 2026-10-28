@@ -81,6 +81,11 @@
 | OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
 | TASKSYS | 统一任务系统：internal/tasks、中间区翻转任务视图、助手任务工具（T1–T7） | 高 | 进行中（T1–T4） | [10](docs/specs/10-task-system.md) | ARCHIVE-PROG、PROG-STYLE | — |
 | TREE-NOEXPAND | 设置「展开到打开的文件夹」：关闭后导航不展开侧栏树，保留手动展开，当前文件夹不可见时淡标最近可见祖先 | 低 | 完成 | — | — | — |
+| FIX035-CLIP | v0.3.5「非常难用」：视图逐帧同步读系统剪贴板卡住主循环（不重绘/最大化只画左上角/画面慢一拍/CPU 满/输入被吞/启动后卡顿）→ 只读缓存，获焦后台刷新、只读 FileList | 高 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |
+| FIX035-CLI | 命令行打开目录/文件（相对、~、Windows 路径），已运行时转发到新标签页并前置；`--version`/`--help` 不起界面 | 高 | 已完成 | README「单实例」 | — | `fix/v035-usability` → `main` |
+| FIX035-TREE | 侧栏树默认不自动展开跟随（`treeExpand`，未设置=关）；开启时只保留当前目录祖先链 | 中 | 已完成 | `docs/UI.md` TREE-NOEXPAND | TREE-NOEXPAND | `fix/v035-usability` → `main` |
+| FIX035-ASSIST | 助手：回复结束聚焦输入框即刻生效；续聊保留旧消息回归测试；窄面板不自动开历史；名称列先让宽保大小列 | 中 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |
+| FIX035-MENU | 右键菜单：Linux 探测更多终端；不可用的「在终端中打开」「刷新统计」隐藏而非灰显 | 中 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |
 | FLIP-PERF | 任务视图翻转降卡顿：翻转期间冻结两面数据、预热任务视图、背面只建 8 张卡、边缘模糊、超 20ms 回退淡入淡出、落定 80ms 淡入；`TestFlipFrameTimes` 2000 文件 + 500 历史：p50 67.8→17.5ms、p95 149→27ms | 中 | 完成 | — | TASKSYS | — |
 | VISUAL2 | 视觉语言 v2：小圆角令牌、默认 v2、经典可切、纵向对齐 | 高 | 已完成 | [11](docs/specs/11-visual-language.md) | — | — |
 | ADDR-RECENT | 地址栏下拉：最近访问文件夹（标题·路径），点选导航 | 中 | 已完成 | — | — | — |

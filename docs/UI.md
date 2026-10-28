@@ -66,6 +66,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 助手面板 | 默认宽 380，最小 320 | `assistant.go:assistantPaneW/assistantMinW` |
 | 快速搜索 | 960 宽（独立面板 960×560），列表高 120–384，结果行高 44：24px 图标、完整文件名与相对路径、150px 右对齐的“大小 · 类型 / 修改日期”；分组标题行高 24；右侧预览宽 270 | `searchbox.go:searchHitRowH`、`searchDisplayRowAt`、`searchHitMetaW`、`searchpreview.go` |
 | 地址建议下拉 | 与地址栏同宽，最高 360，行高 28 | `addressbar.go:pathDropdown` |
+| 命令栏菜单（经典，Fluent MenuFlyout） | 外框圆角 8、内边距 4、最小宽 200；项高 32、悬停圆角 4 内缩 4、文字左右 12；勾选列 16+8、图标列 16+12；快捷键 11 号次级色右对齐（与文字≥28）；分割线 1px 上下 4；子菜单 › 12；按钮下方 4 弹出 | `menuflyout.go`（v2 用系统菜单） |
 | 助手斜杠菜单 | 与输入框同宽，最高 220，行高 28 | `assistant_slash.go:assistantSlashMenu` |
 | 快速预览标题栏 | 高 40：‹ › 32×32、「打开」分割按钮高 32（▾ 宽 28）、更多、关闭 | `quicklook_bar.go` |
 | 按钮最小宽 | 80 | `uikit.go:btnMinW` |
@@ -77,7 +78,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 ![详细信息视图](assets/ui/details.png)
 
 - **标题栏/标签条**（`chrome_tab.go:tabStrip`、`tabItem`）：标签可拖动排序、中键关闭、双击空白新建、溢出时收窄并可横向滚动；标签悬停提示完整路径（`tabTooltip`）。特殊页的标签名见 §5。右侧空白区可拖动窗口（`DragWindow`）。
-- **命令栏**（`commandBar`）：新建、剪切/复制/粘贴/重命名/分享/删除、排序、查看、任务、助手、更多（`moreButton`：撤销 ｜ 全选、全部取消 ｜ 插件项 ｜ 属性、设置）。预览窗格/助手开关在「查看 > 显示」。图标按钮不可用时置灰。菜单分组与快捷键标注见 `docs/specs/16-commands-layout.md`。
+- **命令栏**（`commandBar`）：新建、剪切/复制/粘贴/重命名/分享/删除、排序、查看、任务、助手、更多（`moreButton`：撤销 ｜ 全选、全部取消、反向选择 ｜ 插件 ▸ ｜ 属性、设置，每项带图标）。预览窗格/助手开关在「查看 > 显示」。图标按钮不可用时置灰。菜单分组与快捷键标注见 `docs/specs/16-commands-layout.md`。
 - **导航栏**：后退/前进/上一级/地址栏/刷新/文件夹搜索。地址栏两种状态：面包屑（`breadcrumbBar`，溢出折叠为「…」菜单 `crumbOverflow`，分隔箭头弹出子文件夹菜单 `crumbSeparator`；右侧下拉「最近访问」列出 `visitList` 中的文件夹「标题 · 路径」，点选导航，见 ADDR-RECENT）与编辑（`pathEditor`，补全下拉 `pathDropdown`，行内错误提示；进入编辑：空白处单击 / Ctrl+L / F4 / Alt+D）。
 - **侧栏**（`sidebar.go:sidebar`）：主文件夹、画廊、快速访问（可拖放固定）、最近位置、此电脑（卷 → 目录树）、回收站；虚拟列表。
 - **文件窗格**：详细信息（`files_details.go`）、列表（`files_list.go`）、小/中/大/超大图标（`files_icon.go`）、画廊（`gallery.go`）。

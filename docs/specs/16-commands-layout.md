@@ -78,23 +78,24 @@
 
 #### 改后（默认启用插件）
 
-顶层 **6 项**、3 组分割线；插件叶子进「插件 ▸」：
+顶层 7 项、3 组分割线，每项都有图标（对照 Win11 资源管理器「…」：撤销、全选、全部取消、反向选择、属性、选项）；插件叶子进「插件 ▸」：
 
 ```
-撤销（Ctrl+Z）
-────────
-全选（Ctrl+A）
-全部取消
-────────
-插件 ▸
-  ├ 远程访问
-  └ 复制远程地址
-────────
-属性（Alt+Enter）
-设置（Ctrl+,）
+↶ 撤销              Ctrl+Z
+──────────────
+✓✓ 全选             Ctrl+A
+⬚ 全部取消
+⇄ 反向选择          （新增，`invertSelection`）
+──────────────
+🧩 插件                  ›
+     ├ 远程访问
+     └ 复制远程地址
+──────────────
+ⓘ 属性           Alt+Enter
+⚙ 设置              Ctrl+,
 ```
 
-插件全关时顶层 5 项、2 组分割线（无「插件 ▸」）。
+插件全关时无「插件 ▸」及其分割线。
 
 #### 被移走的项去向
 
@@ -103,7 +104,34 @@
 | 远程访问、复制远程地址（及今后一切 `MoreItems`） | 「查看更多 ▸ 插件」子菜单（设置里关插件则整组消失） |
 | 预览窗格、助手（更早一轮已移出更多） | 「查看 ▸ 显示」；助手另有命令栏按钮 |
 
-示意对比图：`docs/assets/shots/CLASSIC-FLUENT/06-more-menu.png`。`chrome_more_test.go` 断言默认顺序、项数上限（≤8 项 / ≤3 分割线）以及无插件时的收拢。
+#### 菜单样式（经典：窗口内 Fluent MenuFlyout）
+
+上一版命令栏菜单用的是系统菜单（`ui.Menu` → mygo `internal/windows/menudraw.go` 自绘 Win32 菜单，在外部模块里，不能加图标、也不能调整列）：没有图标列、无论有没有勾选都留一列 28 宽的勾选位、各项看起来没有分组层次。经典风格下命令栏的 新建 / 排序 / 查看 / 查看更多 改为窗口内绘制的 Fluent 弹出菜单（`menuflyout.go`），v2 仍用系统菜单；两边共用同一份 `[]*menuEntry`，项、顺序、快捷键不会走样。
+
+| 项 | 值（DIP） | 常量 |
+| --- | --- | --- |
+| 外框 | 圆角 8，内边距 4，1px 边框（浅 `rgba(0,0,0,.08)` / 深 `rgba(255,255,255,.08)`），底色浅 `#F9F9F9` / 深 `#2C2C2C` | `flyRadius`、`flyPad`、`colorFlyout*` |
+| 阴影 | `0 8 16` 浅 14% / 深 36% 黑，外加 `0 0 2` 半强度 | `flyPanel` |
+| 最小宽 | 200 | `flyMinWidth` |
+| 菜单项 | 高 32；悬停/按下底色圆角 4，随外框内边距左右内缩 4；文字距底色边 12 | `flyRowH`、`flyRowRadius`、`flyRowPadX` |
+| 勾选列 | 16 宽 + 8 间距，仅菜单内有勾选/单选项时出现；单选为 6px 圆点，开关为 14px ✓ | `flyMarkW`、`flyMarkGap` |
+| 图标列 | 16px，与文字间距 12；无图标的项在同一菜单里也留空位，文字左对齐一致 | `flyIcon`、`flyIconGap` |
+| 文字 | 正文 12，禁用为正文 36% 不透明 | `flyFont` |
+| 快捷键 | 11，次级文字色，右对齐，与文字至少隔 28；Windows 写法 `Ctrl+Shift+=`，mac 用 ⌘⇧ | `flyAccelFont`、`flyAccelGap`、`shortcutText` |
+| 分割线 | 1px，上下各 4（共 9），左右随外框内缩 4 | `flySepMargin` |
+| 子菜单 | 12px › 右对齐；悬停即展开，贴在本行右侧，顶部上移 4 使首项与本行对齐 | `flyChevron`、`flySubOverlap` |
+| 弹出位置 | 按钮下方 4；新建/排序/查看左对齐按钮，查看更多右对齐按钮；越界自动翻转 | `flyAnchorGap`、`attachCommandMenu` |
+
+排序（名称/修改日期/类型/大小 · 递增/递减）、查看（六种视图 · 紧凑视图 · 放大/缩小 · 显示 ▸ · 分组依据 ▸）同样每项带图标，当前项以圆点标记。
+
+截图（离屏 tester 真实渲染，1200×800，`menuflyout_shot_test.go`，`SUNVALE_SHOT_DIR=… go test -run TestMenuFlyoutShots`）：
+
+- `docs/assets/shots/CLASSIC-FLUENT/07-more-before.png`：改前。系统菜单无法在离屏 tester 中渲染，按 menudraw.go 的度量（无图标、固定勾选列、行高 32）用同一外框复刻；
+- `08-more-after-light.png` / `09-more-after-dark.png`：改后浅色 / 深色；
+- `10-more-zoom.png`：菜单区域 2× 放大，左改前右改后；
+- `11-sort-after.png`、`12-view-after.png`：排序、查看（展开「显示 ▸」）。
+
+`chrome_more_test.go` 断言顶层顺序、每项有图标、插件全关时收拢，以及经典下窗口内弹出、点选执行并关闭，v2 下仍是系统菜单。
 
 ### 3.3 查看 ▸ 显示
 

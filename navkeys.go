@@ -7,7 +7,7 @@ import "github.com/egoist/mygo/ui"
 // Explorer does.
 
 func (a *App) navTreeKeys(c *ui.Context) bool {
-	if !a.navTree.focused || a.fieldFocused || a.quickLook || a.propsOpen {
+	if !a.navTree.focused || a.fieldFocused || a.quickLook || a.propsOpen || a.fly.open != "" || a.assist.composerFocused {
 		return false
 	}
 	if c.Shortcut(0, ui.KeyTab) {

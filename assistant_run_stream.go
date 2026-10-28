@@ -191,6 +191,7 @@ func (a *App) assistantRequestStop() {
 		a.assist.stop = nil
 	}
 	a.assist.persistSession(a.assist.folder)
+	a.requestComposerFocus()
 }
 
 func (a *App) failAssist(err error) {

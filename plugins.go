@@ -8,7 +8,7 @@ import (
 // plugins.go is the registry of Sunvale's built-in plugins: features that
 // ship with the app but that the user can turn off, in the settings
 // dialog's 插件 section. Each feature registers itself with RegisterPlugin
-// — its hooks say where it appears: context menus, the 查看更多 menu, the
+// — its hooks say where it appears: context menus, the 查看更多 ▸ 插件 submenu, the
 // sidebar, the preview pane's metadata, its own rows in the 插件 section.
 // The collectors below gather only the enabled plugins' contributions, so
 // a switched-off plugin stops appearing or animating. The store records
@@ -39,7 +39,7 @@ type Plugin struct {
 	// menu passes an empty sel; a row's menu passes the selection. Return
 	// nil to stay out of that menu.
 	MenuItems func(a *App, sel []Entry) []PluginMenuItem
-	// MoreItems contributes entries to the command bar's 查看更多 menu.
+	// MoreItems contributes entries to the command bar's 查看更多 ▸ 插件 submenu.
 	MoreItems func(a *App) []PluginMenuItem
 	// NavItems contributes sidebar places, after 主文件夹, in order.
 	NavItems func(a *App) []PluginNavItem
@@ -215,7 +215,7 @@ func (a *App) pluginMenuItems(sel []Entry) []PluginMenuItem {
 	return out
 }
 
-// pluginMoreItems gathers the enabled plugins' 查看更多 menu entries.
+// pluginMoreItems gathers the enabled plugins' 查看更多 ▸ 插件 submenu entries.
 func (a *App) pluginMoreItems() []PluginMenuItem {
 	var out []PluginMenuItem
 	for _, p := range registeredPlugins() {

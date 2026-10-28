@@ -35,6 +35,7 @@ var assistStarters = []assistStarter{
 func (a *App) assistantTranscript(c *ui.Context) {
 	if len(a.assist.turns) == 0 {
 		a.assistantEmpty(c)
+		a.assistTranscriptBlank(c)
 		return
 	}
 	a.assist.open.keys = nil
@@ -42,6 +43,17 @@ func (a *App) assistantTranscript(c *ui.Context) {
 		a.assistantExchange(c, ex)
 	}
 	a.assistantOpenShortcuts(c)
+	a.assistTranscriptBlank(c)
+}
+
+// assistTranscriptBlank is the quiet strip under the turns: a click there
+// focuses the composer without covering the input or any message control.
+func (a *App) assistTranscriptBlank(c *ui.Context) {
+	blank := ui.ButtonBase(c.Key("assist-blank")).FillWidth().Height(48).
+		KeepFocus().Label("对话区")
+	if blank.Clicked() {
+		a.requestComposerFocus()
+	}
 }
 
 // assistExchange is one user request plus the tool steps and reply that

@@ -583,16 +583,36 @@ func (a *App) paintNavRow(row ui.Element, r navRow) {
 	case r.under:
 		row.Background(colorSelected().Alpha(0.35))
 	}
-	if r.focus && a.navTree.focused {
+	// Classic's chosen row carries NavigationView's selection pill: 3×16,
+	// accent, fully rounded, at the row's leading edge.
+	pill := r.sel && !visualV2
+	ring := r.focus && a.navTree.focused
+	if ring {
 		// Keep the toolkit's focus on the row the logical cursor names. Its
 		// Enter/Space activation is then the same one-shot action as a click;
 		// without this, a previously clicked twist would keep the key.
 		row.Focus()
-		row.FocusRing(false).DrawOver(func(p *ui.Painter, rect ui.Rect) {
-			p.FocusRing(rect, [4]float32{4, 4, 4, 4})
+		row.FocusRing(false)
+	}
+	if pill || ring {
+		row.DrawOver(func(p *ui.Painter, rect ui.Rect) {
+			if pill {
+				p.Fill(ui.Rect{X: rect.X, Y: rect.Y + (rect.H-navPillH)/2, W: navPillW, H: navPillH},
+					colorAccent(), navPillW/2)
+			}
+			if ring {
+				p.FocusRing(rect, [4]float32{4, 4, 4, 4})
+			}
 		})
 	}
 }
+
+// navPillW and navPillH size the classic selection pill (WinUI
+// NavigationViewItem's SelectionIndicator).
+const (
+	navPillW float32 = 3
+	navPillH float32 = 16
+)
 
 // navFolderMenu is the context menu a folder row of the pane carries, pinned
 // places and tree folders alike: open, unpin, a terminal, the plugins' folder

@@ -43,7 +43,9 @@ func (a *App) quickLookModal(c *ui.Context) {
 		return
 	}
 	quickLookWasOpen = true
-	floatDialog(c, &a.quickLook, "快速预览", quickLookWidth(c), true, func() {
+	// Classic sits on the solid Layer surface (Fluent 2 dialogs are opaque);
+	// v2 keeps its clear glass.
+	floatDialog(c, &a.quickLook, "快速预览", quickLookWidth(c), visualV2, func() {
 		a.quickLookBody(c)
 	})
 }
@@ -147,12 +149,14 @@ func (a *App) quickLookBody(c *ui.Context) {
 	st := a.preview.Load()
 	e := a.singleSelected()
 	loading := st == nil || st.path != e.Path || st.kind == previewNone
-	ui.Column(c).Gap(10).AlignItems(ui.Center).Padding(20, 16, 20, 12).Children(func() {
+	ui.Column(c).Gap(10).AlignItems(ui.Center).Padding(4, 12, 16, 12).Children(func() {
 		if loading {
+			a.quickLookBar(c, nil)
 			ui.Text(c, "正在加载预览…").FontSize(13).TextColor(colorMuted())
 			ui.Text(c, e.Name).FontSize(12).TextColor(colorMuted())
 			return
 		}
+		a.quickLookBar(c, st)
 		a.quickLookContent(c, st)
 		a.quickLookFacts(c, st)
 	})
@@ -163,7 +167,7 @@ func (a *App) quickLookBody(c *ui.Context) {
 func (a *App) quickLookContent(c *ui.Context, st *previewState) {
 	w, h := c.Size()
 	maxW := max(w-120, 240)
-	maxH := max(h-200, 200)
+	maxH := max(h-200-quickLookBarH, 200)
 	switch st.kind {
 	case previewImage:
 		// Interactive viewer: fit, wheel zoom, drag pan, same-folder strip.

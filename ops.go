@@ -101,7 +101,13 @@ func (a *App) storeClip(cut bool) {
 // readSystemClipboardFiles 读取系统剪贴板上的本地文件路径。X11 上这是一次
 // 与剪贴板持有者的往返（GTK 在其中跑嵌套主循环，持有者不响应时要等到超时），
 // 所以只能在用户动作或窗口获得焦点时调用，绝不能在逐帧构建的视图里调用。
+// errViewBlocked: the read was refused because a view is being built.
+var errViewBlocked = errors.New("blocking call refused during view build")
+
 var readSystemClipboardFiles = func() ([]string, error) {
+	if viewBlocked("clipboard read") {
+		return nil, errViewBlocked
+	}
 	if !mygo.App.IsReady() {
 		return nil, nil
 	}
@@ -139,6 +145,9 @@ func (a *App) refreshSystemClipboardAsync() {
 // 别的程序里复制了文件）和真正粘贴时调用。
 func (a *App) refreshSystemClipboard() []string {
 	paths, err := readSystemClipboardFiles()
+	if errors.Is(err, errViewBlocked) {
+		return a.sysClip
+	}
 	if err != nil {
 		paths = nil
 	}

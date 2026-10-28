@@ -137,6 +137,8 @@ func main() {
 		// Ctrl+K palette answers from the last walk's cache at once, while the
 		// volumes are walked again behind it.
 		go startSearchIndex()
+		// 右键菜单要知道有没有终端：$PATH 查找放后台（viewguard.go）。
+		go warmTerminal()
 		// Timed jobs (schedule.go): minute ticker inside the process,
 		// no OS cron. Must start after the store exists.
 		startScheduleRunner()
@@ -313,6 +315,8 @@ func newAppWithStore(store *persistedState) *App {
 // the window. Each band fills the width; the body and the file pane take
 // the remaining height.
 func (a *App) view(c *ui.Context) {
+	enterView()
+	defer leaveView()
 	if !a.bootLogged {
 		a.bootLogged = true
 		// A background disk probe landing redraws the window, so the

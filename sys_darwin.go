@@ -38,6 +38,8 @@ func sysReveal(path string) error {
 }
 
 // sysHasTerminal: Terminal.app / Windows Terminal or cmd are always there.
+func warmTerminal() {}
+
 func sysHasTerminal() bool { return true }
 
 func sysTerminal(dir string) error {

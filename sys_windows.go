@@ -205,6 +205,8 @@ func sysReveal(path string) error {
 // sysTerminal opens a terminal at dir: Windows Terminal when present,
 // otherwise the classic console.
 // sysHasTerminal: Terminal.app / Windows Terminal or cmd are always there.
+func warmTerminal() {}
+
 func sysHasTerminal() bool { return true }
 
 func sysTerminal(dir string) error {

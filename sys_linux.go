@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"sunvale/internal/fsops"
@@ -81,7 +82,22 @@ var linuxTerminal = sync.OnceValue(func() int {
 	return -1
 })
 
-func sysHasTerminal() bool { return linuxTerminal() >= 0 }
+// sysHasTerminal answers from the lookup warmTerminal ran at startup; asked
+// from a view before it finished, it says no rather than walk $PATH there.
+func sysHasTerminal() bool {
+	if !terminalWarm.Load() && viewBlocked("terminal lookup") {
+		return false
+	}
+	return linuxTerminal() >= 0
+}
+
+var terminalWarm atomic.Bool
+
+// warmTerminal looks the terminal up off the UI thread (main.go).
+func warmTerminal() {
+	linuxTerminal()
+	terminalWarm.Store(true)
+}
 
 func sysTerminal(dir string) error {
 	i := linuxTerminal()

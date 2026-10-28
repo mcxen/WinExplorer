@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -520,7 +521,8 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 			a.doPaste()
 		}
 		m.Separator()
-		if m.Item("在终端中打开").Disabled(special).Chosen() {
+		// Items that cannot run here do not show (no greyed-out puzzles).
+		if !special && sysHasTerminal() && m.Item("在终端中打开").Chosen() {
 			a.openInTerminal(a.cur().path)
 		}
 		// The plugins' pane-background items — dups' scan, usage's treemap.
@@ -535,7 +537,7 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 		}
 		// 刷新统计 drops the folder's cached sizes and walks its subtree
 		// again: only the size column moves — no reload, no new thumbnails.
-		if m.Item("刷新统计").Disabled(special).Chosen() {
+		if !special && m.Item("刷新统计").Chosen() {
 			refreshDirStats(a.cur().path)
 		}
 		if m.Item("显示隐藏的项目").Checked(a.showHidden).Chosen() {
@@ -627,12 +629,21 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 		a.doExtract()
 	}
 	m.Separator()
-	if m.Item("在终端中打开").Disabled(!oneDir).Chosen() {
-		a.openInTerminal(sel[0].Path)
+	// 在终端中打开: the selected folder, or a single file's folder. Shown
+	// only when a terminal is installed and there is a folder to open.
+	termDir := ""
+	switch {
+	case oneDir:
+		termDir = sel[0].Path
+	case one && !onSpecial:
+		termDir = filepath.Dir(sel[0].Path)
+	}
+	if termDir != "" && sysHasTerminal() && m.Item("在终端中打开").Chosen() {
+		a.openInTerminal(termDir)
 	}
 	// 刷新统计 rewalks the one selected folder's subtree for the size
 	// column, as the pane menu's item does for the current folder.
-	if m.Item("刷新统计").Disabled(!oneDir || onSpecial).Chosen() {
+	if oneDir && !onSpecial && m.Item("刷新统计").Chosen() {
 		refreshDirStats(sel[0].Path)
 	}
 	// The plugins' row-menu items — usage's treemap of the selected folder.

@@ -140,17 +140,14 @@ func TestRefreshStatsMenus(t *testing.T) {
 	}
 
 	// With a file selected alongside the folder there is no one folder to
-	// rewalk: the item stays but cannot be chosen.
+	// rewalk: the item does not show at all (no greyed-out entry).
 	a.selectOnly(loose)
 	a.toggleSelect(proj)
 	if err := tt.RightClick("proj"); err != nil {
 		t.Fatal(err)
 	}
-	if menuIndexOf(tt.Menu(), "刷新统计") < 0 {
-		t.Fatalf("row menu = %v: no 刷新统计", tt.Menu())
-	}
-	if err := tt.ChooseMenuItem("刷新统计"); err == nil {
-		t.Fatal("刷新统计 chose with a file selected alongside the folder")
+	if menuIndexOf(tt.Menu(), "刷新统计") >= 0 {
+		t.Fatalf("row menu = %v: 刷新统计 shown with no single folder", tt.Menu())
 	}
 	tt.CloseMenu()
 
@@ -185,9 +182,9 @@ func TestRefreshStatsMenus(t *testing.T) {
 		t.Fatal("proj's cache survived the pane-menu refresh of its parent")
 	}
 
-	// On the 主文件夹 page no folder stands behind the pane: the item
-	// stays but cannot be chosen. Pinning proj keeps the page's sections
-	// built even on an account without the default folders.
+	// On the 主文件夹 page no folder stands behind the pane. Pinning proj keeps the page's sections
+	// built even on an account without the default folders. The item does
+	// not show there at all.
 	a.store.pin(proj)
 	a.navigate(pathHome)
 	tt.Frame()
@@ -197,11 +194,8 @@ func TestRefreshStatsMenus(t *testing.T) {
 	}
 	tt.RightClickAt(m.X+m.W/2, m.Y+m.H/2)
 	menu = tt.Menu()
-	if menuIndexOf(menu, "刷新统计") < 0 {
-		t.Fatalf("pane menu = %v: no 刷新统计", menu)
-	}
-	if err := tt.ChooseMenuItem("刷新统计"); err == nil {
-		t.Fatal("刷新统计 chose on the 主文件夹 page")
+	if menuIndexOf(menu, "刷新统计") >= 0 || menuIndexOf(menu, "在终端中打开") >= 0 {
+		t.Fatalf("pane menu = %v: folder-only items shown on the 主文件夹 page", menu)
 	}
 	tt.CloseMenu()
 }

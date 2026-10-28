@@ -204,6 +204,9 @@ func sysReveal(path string) error {
 
 // sysTerminal opens a terminal at dir: Windows Terminal when present,
 // otherwise the classic console.
+// sysHasTerminal: Terminal.app / Windows Terminal or cmd are always there.
+func sysHasTerminal() bool { return true }
+
 func sysTerminal(dir string) error {
 	if _, err := exec.LookPath("wt.exe"); err == nil {
 		return exec.Command("wt.exe", "-d", dir).Start()

@@ -37,6 +37,9 @@ func sysReveal(path string) error {
 	return exec.Command("open", "-R", path).Run()
 }
 
+// sysHasTerminal: Terminal.app / Windows Terminal or cmd are always there.
+func sysHasTerminal() bool { return true }
+
 func sysTerminal(dir string) error {
 	return exec.Command("open", "-a", "Terminal", dir).Run()
 }

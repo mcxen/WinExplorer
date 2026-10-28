@@ -27,6 +27,8 @@ func sysOpenAs(path string) error { return sysOpen(path) }
 
 func sysReveal(path string) error { return sysOpen(path) }
 
+func sysHasTerminal() bool { return false }
+
 func sysTerminal(dir string) error { return fmt.Errorf("此平台不支持终端") }
 
 func sysTerminalRun(script string) error { return fmt.Errorf("此平台不支持终端") }

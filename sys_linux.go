@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"sunvale/internal/fsops"
@@ -48,38 +49,65 @@ func sysReveal(path string) error {
 }
 
 // linuxTerminals are the terminals that take a working directory, most
-// specific first; whichever is installed runs.
+// specific first; whichever is installed runs. flag "" means the terminal
+// has no such option and starts in the command's own directory (cmd.Dir).
 var linuxTerminals = []struct {
 	name string
 	flag string
 }{
-	{"gnome-terminal", "--working-directory"},
-	{"konsole", "--workdir"},
-	{"xfce4-terminal", "--working-directory"},
-	{"kitty", "--directory"},
-	{"foot", "--working-directory"},
-	{"x-terminal-emulator", "--working-directory"},
+	{"x-terminal-emulator", ""}, // Debian's alternative: the user's choice
+	{"gnome-terminal", "--working-directory="},
+	{"konsole", "--workdir="},
+	{"xfce4-terminal", "--working-directory="},
+	{"mate-terminal", "--working-directory="},
+	{"lxterminal", "--working-directory="},
+	{"tilix", "--working-directory="},
+	{"terminator", "--working-directory="},
+	{"kitty", "--directory="},
+	{"alacritty", "--working-directory="},
+	{"wezterm", ""},
+	{"foot", "--working-directory="},
+	{"xterm", ""},
 }
 
-func sysTerminal(dir string) error {
-	for _, t := range linuxTerminals {
-		if _, err := exec.LookPath(t.name); err != nil {
-			continue
+// linuxTerminal is the first installed terminal, looked up once: the
+// context menu asks every frame whether 在终端中打开 can show.
+var linuxTerminal = sync.OnceValue(func() int {
+	for i, t := range linuxTerminals {
+		if _, err := exec.LookPath(t.name); err == nil {
+			return i
 		}
-		return exec.Command(t.name, t.flag+"="+dir).Start()
 	}
-	return fmt.Errorf("找不到终端程序")
+	return -1
+})
+
+func sysHasTerminal() bool { return linuxTerminal() >= 0 }
+
+func sysTerminal(dir string) error {
+	i := linuxTerminal()
+	if i < 0 {
+		return fmt.Errorf("找不到终端程序")
+	}
+	t := linuxTerminals[i]
+	var cmd *exec.Cmd
+	if t.flag != "" {
+		cmd = exec.Command(t.name, t.flag+dir)
+	} else {
+		cmd = exec.Command(t.name)
+	}
+	// Every terminal starts its shell in its own working directory when it
+	// has no flag, and x-terminal-emulator may be any of them.
+	cmd.Dir = dir
+	return cmd.Start()
 }
 
 // sysTerminalRun runs script in a new terminal window, with sh.
 func sysTerminalRun(script string) error {
-	for _, t := range linuxTerminals {
-		if _, err := exec.LookPath(t.name); err != nil {
-			continue
-		}
-		return exec.Command(t.name, "-e", "sh", "-c", script).Start()
+	i := linuxTerminal()
+	if i < 0 {
+		return fmt.Errorf("找不到终端程序")
 	}
-	return fmt.Errorf("找不到终端程序")
+	return exec.Command(linuxTerminals[i].name, "-e", "sh", "-c", script).Start()
 }
 
 // sysThumbImage: no standard thumbnail CLI; the stdlib formats cover the

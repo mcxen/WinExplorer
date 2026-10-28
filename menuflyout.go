@@ -115,10 +115,12 @@ func nativeMenu(m *ui.Menu, es []*menuEntry) {
 	}
 }
 
-// flyState is the open flyout: its button's id and the open submenu's
-// label.
+// flyState is the open flyout: its button's id, the open submenu's label,
+// and the keyboard highlight in the active level (idx). parentIdx is the
+// root row that opened the submenu, so ← / Esc can put the highlight back.
 type flyState struct {
-	open, sub string
+	open, sub      string
+	idx, parentIdx int // -1 = clamp to the first enabled row on draw
 }
 
 // attachCommandMenu opens build's menu from btn: in the window under 经典,
@@ -133,7 +135,7 @@ func (a *App) attachCommandMenu(c *ui.Context, btn ui.Element, id string, alignE
 		if a.fly.open == id {
 			a.fly = flyState{}
 		} else {
-			a.fly = flyState{open: id}
+			a.fly = flyState{open: id, idx: -1, parentIdx: -1}
 		}
 	}
 	if a.fly.open != id {
@@ -153,20 +155,21 @@ func (a *App) attachCommandMenu(c *ui.Context, btn ui.Element, id string, alignE
 		var subEs []*menuEntry
 		panel := a.flyPanel(c.Key("fly:"+id), es, func(e *menuEntry, row ui.Element) {
 			subRow, subEs = row, e.sub
-		}).AttachTo(btn, at, self).Margin(flyAnchorGap, 0, 0, 0)
-		if panel.OverlayShortcut(0, ui.KeyEscape) {
-			a.fly = flyState{}
-		}
+		}).AttachTo(btn, at, self).Margin(flyAnchorGap, 0, 0, 0).AutoFocus()
+		a.flyKeys(panel, es, false)
 		if subEs != nil && a.fly.sub != "" {
-			a.flyPanel(c.Key("fly:"+id+">"+a.fly.sub), subEs, nil).
+			sub := a.flyPanel(c.Key("fly:"+id+">"+a.fly.sub), subEs, nil).
 				AttachTo(subRow, ui.AnchorTopEnd, ui.AnchorTopStart).
 				Top(-flyPad).Left(flySubOverlap - flyPad)
+			a.flyKeys(sub, subEs, true)
 		}
 	})
 }
 
 // flyPanel draws one level of a flyout. openSub reports the row of the
-// open submenu, so the caller can attach its panel there.
+// open submenu, so the caller can attach its panel there. Keyboard
+// navigation lives in flyKeys: the panel keeps focus so ↑↓ stay with the
+// overlay instead of the file pane.
 func (a *App) flyPanel(c *ui.Context, es []*menuEntry, openSub func(e *menuEntry, row ui.Element)) ui.Element {
 	marks, icons, subs := false, false, false
 	for _, e := range es {
@@ -177,7 +180,7 @@ func (a *App) flyPanel(c *ui.Context, es []*menuEntry, openSub func(e *menuEntry
 	panel := ui.Column(c).MinWidth(flyMinWidth).Padding(flyPad).Radius(flyRadius).
 		Background(colorFlyout()).Border(1, colorFlyoutBorder()).
 		Shadow(0, 8, 16, 0, colorFlyoutShadow()).Shadow(0, 0, 2, 0, colorFlyoutShadow().Alpha(0.5)).
-		FocusGroup(ui.Vertical).Role(ui.RoleMenu)
+		KeepFocus().Role(ui.RoleMenu)
 	panel.Children(func() {
 		for i, e := range es {
 			if e.sep {
@@ -185,22 +188,29 @@ func (a *App) flyPanel(c *ui.Context, es []*menuEntry, openSub func(e *menuEntry
 					Background(colorFlyoutBorder()).Shrink(0)
 				continue
 			}
-			a.flyRow(c.Key("row"+itoa(i)+e.label), e, marks, icons, subs, openSub)
+			a.flyRow(c.Key("row"+itoa(i)+e.label), i, e, marks, icons, subs, openSub)
 		}
 	})
 	return panel
 }
 
-func (a *App) flyRow(c *ui.Context, e *menuEntry, marks, icons, subs bool, openSub func(*menuEntry, ui.Element)) {
+func (a *App) flyRow(c *ui.Context, i int, e *menuEntry, marks, icons, subs bool, openSub func(*menuEntry, ui.Element)) {
 	row := ui.ButtonBase(c).FillWidth().Height(flyRowH).Padding(0, flyRowPadX).
-		Radius(flyRowRadius).AlignItems(ui.Center).Shrink(0).Label(e.label).Disabled(e.disabled)
-	isOpen := e.sub != nil && openSub != nil && a.fly.sub == e.label
+		Radius(flyRowRadius).AlignItems(ui.Center).Shrink(0).Label(e.label).Disabled(e.disabled).
+		KeepFocus().Role(ui.RoleMenuItem)
+	isRoot := openSub != nil
+	active := isRoot == (a.fly.sub == "")
+	isOpen := e.sub != nil && isRoot && a.fly.sub == e.label
+	kb := active && !e.disabled && i == a.fly.idx
 	switch {
 	case e.disabled:
 	case row.Pressed():
 		row.Background(colorFlyoutPressed())
-	case row.Hovered() || isOpen:
+	case row.Hovered() || isOpen || kb:
 		row.Background(colorFlyoutHover())
+	}
+	if row.Hovered() && !e.disabled {
+		a.fly.idx = i
 	}
 	fg := colorText()
 	if e.disabled {
@@ -249,6 +259,10 @@ func (a *App) flyRow(c *ui.Context, e *menuEntry, marks, icons, subs bool, openS
 	}
 	if e.sub != nil {
 		if (row.Hovered() || row.Clicked()) && !e.disabled {
+			if a.fly.sub != e.label {
+				a.fly.parentIdx = i
+				a.fly.idx = -1
+			}
 			a.fly.sub = e.label
 		}
 		if a.fly.sub == e.label {
@@ -264,6 +278,117 @@ func (a *App) flyRow(c *ui.Context, e *menuEntry, marks, icons, subs bool, openS
 		if e.run != nil {
 			e.run()
 		}
+	}
+}
+
+// flyEnabled lists the indexes of rows ↑↓ may land on: not a separator,
+// not disabled.
+func flyEnabled(es []*menuEntry) []int {
+	out := make([]int, 0, len(es))
+	for i, e := range es {
+		if !e.sep && !e.disabled {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func flyClampIdx(es []*menuEntry, idx int) int {
+	en := flyEnabled(es)
+	if len(en) == 0 {
+		return -1
+	}
+	for _, i := range en {
+		if i == idx {
+			return idx
+		}
+	}
+	return en[0]
+}
+
+func flyStep(es []*menuEntry, idx, delta int) int {
+	en := flyEnabled(es)
+	if len(en) == 0 {
+		return -1
+	}
+	at := 0
+	for i, j := range en {
+		if j == idx {
+			at = i
+			break
+		}
+	}
+	at = (at + delta) % len(en)
+	if at < 0 {
+		at += len(en)
+	}
+	return en[at]
+}
+
+// flyKeys steals the menu's keys through OverlayShortcut so the file pane
+// never sees them: ↑↓ (skip sep/disabled, wrap), Home/End, → opens a
+// submenu on its first row, ← / Esc close a layer, Enter/Space run the
+// highlighted row (or open its submenu).
+func (a *App) flyKeys(panel ui.Element, es []*menuEntry, isSub bool) {
+	if isSub != (a.fly.sub != "") {
+		return
+	}
+	a.fly.idx = flyClampIdx(es, a.fly.idx)
+	closeSub := func() {
+		a.fly.sub = ""
+		a.fly.idx = a.fly.parentIdx
+		a.fly.parentIdx = -1
+	}
+	openSubAt := func(i int) {
+		if i < 0 || i >= len(es) || es[i].sub == nil {
+			return
+		}
+		a.fly.parentIdx = i
+		a.fly.sub = es[i].label
+		a.fly.idx = -1
+	}
+	activate := func() {
+		i := a.fly.idx
+		if i < 0 || i >= len(es) {
+			return
+		}
+		e := es[i]
+		if e.sub != nil {
+			openSubAt(i)
+			return
+		}
+		a.fly = flyState{}
+		if e.run != nil {
+			e.run()
+		}
+	}
+	switch {
+	case panel.OverlayShortcut(0, ui.KeyEscape):
+		if isSub {
+			closeSub()
+		} else {
+			a.fly = flyState{}
+		}
+	case panel.OverlayShortcut(0, ui.KeyDown):
+		a.fly.idx = flyStep(es, a.fly.idx, 1)
+	case panel.OverlayShortcut(0, ui.KeyUp):
+		a.fly.idx = flyStep(es, a.fly.idx, -1)
+	case panel.OverlayShortcut(0, ui.KeyHome):
+		if en := flyEnabled(es); len(en) > 0 {
+			a.fly.idx = en[0]
+		}
+	case panel.OverlayShortcut(0, ui.KeyEnd):
+		if en := flyEnabled(es); len(en) > 0 {
+			a.fly.idx = en[len(en)-1]
+		}
+	case panel.OverlayShortcut(0, ui.KeyRight):
+		openSubAt(a.fly.idx)
+	case panel.OverlayShortcut(0, ui.KeyLeft):
+		if isSub {
+			closeSub()
+		}
+	case panel.OverlayShortcut(0, ui.KeyEnter), panel.OverlayShortcut(0, ui.KeySpace):
+		activate()
 	}
 }
 

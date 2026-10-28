@@ -445,6 +445,11 @@ func (a *App) handleKeys(c *ui.Context) {
 	if a.cur().editingPath {
 		return
 	}
+	// The command-bar flyout owns ↑↓←→ Enter Esc (menuflyout.go); leave the
+	// pane and the nav tree alone while it is open.
+	if a.fly.open != "" {
+		return
+	}
 	// The navigation pane owns its cursor after a row click. Its arrows move
 	// that cursor; Enter/Space is the explicit navigation action.
 	if a.navTreeKeys(c) {

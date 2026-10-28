@@ -99,7 +99,7 @@
 | R7 | 远程处理函数移入 internal/remote | 低 | 部分完成（文件拆分已做；完整接口化待开发） | 03 §7 / [15](docs/specs/15-code-layout.md) | R5、R6 | `refactor/feature-layout` |
 | LAY1 | 代码功能分布：规格 15 + remote/settings/shell 拆分（R7 启动） | 高 | 已完成 | [15](docs/specs/15-code-layout.md) | R1–R6 | `refactor/feature-layout` |
 | LAY2 | 助手 UI 大文件按功能拆分（纯移动） | 中 | 已完成 | [15](docs/specs/15-code-layout.md) | LAY1、AST-STOP | `refactor/assistant-layout` |
-| CLASSIC-FLUENT | 经典外观对齐 Fluent 2 + 命令入口梳理（快速预览标题栏、更多菜单、快捷键标注） | 高 | 进行中（demo，待确认合并） | [16](docs/specs/16-commands-layout.md) | — | `feat/classic-fluent` |
+| CLASSIC-FLUENT | 经典外观对齐 Fluent 2 + 命令入口梳理（快速预览标题栏、更多菜单、快捷键标注、自绘菜单键盘导航） | 高 | 完成 | [16](docs/specs/16-commands-layout.md) | — | `feat/classic-fluent` |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
 
 

@@ -114,6 +114,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 快速搜索（`searchbox.go:searchBoxKeys`）：↑↓、PageUp/PageDown、Enter 打开、Ctrl+Enter 定位、Esc 关闭。
 - 助手输入框（Onevra `chat.GlassComposer`，`assistant.go:assistantComposer` / `assistant_slash.go`）：Enter 发送、Shift+Enter 换行；草稿为单行 `/…` 时上方弹出命令菜单（含 `/分类` `/立即执行`），`↑`/`↓` 选择、`Enter` 选用、`Esc` 关闭（关闭后同一草稿不再弹出，直到离开斜杠查询）。回答中且草稿非空时 Trailing 提供停止。
 - 侧栏方向键导航（`navkeys.go`）：点击侧栏后 `↑`/`↓`、`Home`/`End` 移动焦点，`→` 展开或进入子级，`←` 折叠或回到父级，`Enter`/空格导航，`Tab` 交还焦点；移动不改变当前标签（`docs/specs/02-tree-polish.md` C）。
+- 命令栏 Fluent 菜单（经典，`menuflyout.go`）：`↑`/`↓`/`Home`/`End` 移动（跳过分割线与禁用项），`→`/`←` 开关子菜单，`Enter`/`Space` 执行，`Esc` 逐层关闭；打开时文件窗格快捷键让路。
 - 空格快速预览（`quicklook.go`、图片见 `imageview.go`、视频见 `videoview.go`）：`空格` 打开/关闭；`Esc` 或点外部关闭。图片：滚轮缩放（1×–8×，适配为 1×）、拖拽平移、`←`/`→` 或标题栏 ‹ › 切换**同目录图片**；标题栏（`quicklook_bar.go`）右侧为「打开」分割按钮（▾ 打开方式）、「更多」（在文件夹中显示、复制路径、复制 ｜ 分享 ｜ 属性）、关闭；经典风格对话框为不透明面；坏图显示 `ImageOff` 占位。视频：关键帧 + 细进度条 scrub 抽帧（`ffmpeg`），按钮「用系统播放器打开」（无内嵌播放器）；点画面播放提示同样走系统播放器。非图片/非视频：`←`/`→` 步进可见项；音频打开时为快退/快进 5 秒。侧栏预览窗格（`preview_pane.go`）选中图片时只做 Contain 适配大图；选中视频时显示关键帧海报 +「用系统播放器打开」，不重复 scrub 控件。
 
 ## 4. 中文文案

@@ -54,6 +54,10 @@ func unregisterApp(a *App) {
 func main() {
 	// 日志最先启动（applog_glue.go）：Windows GUI 程序没有控制台，
 	// 之后的启动错误和顶层 panic 都要落到日志文件里。
+	// --version / --help 只打印后退出，不起界面、不抢单实例锁。
+	if cliFlags(os.Args[1:], os.Stdout) {
+		return
+	}
 	startLogging()
 	startPprof()
 	defer applog.Close()
@@ -93,9 +97,16 @@ func main() {
 		app = newAppWithStore(store)
 	}
 	registerApp(app)
+	// 命令行上的目录/文件（cli.go）：冷启动时在第一个窗口打开。
+	if wd, err := os.Getwd(); err == nil {
+		app.openCLITargets(cliTargets(os.Args[1:], wd), true)
+	}
 	// The archive associations in mygo.json open a folder for the
 	// archive: a new window shows it, ready to 全部解压.
 	mygo.App.OnOpenFile(func(path string) {
+		if _, done := cliHandled.LoadAndDelete(path); done {
+			return // 命令行已在标签页里打开并选中
+		}
 		app.openArchiveWindow(path)
 	})
 	mygo.App.WhenReady(func() {

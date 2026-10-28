@@ -71,9 +71,14 @@ func installSingleInstance() bool {
 	}
 	// Another launch: bring a window back from the tray and to the front.
 	// An archive on its command line opens through OnOpenFile as usual.
-	mygo.App.OnSecondInstance(func([]string, string) {
+	// 命令行上的目录/文件在已有窗口的新标签页打开（cli.go）。
+	mygo.App.OnSecondInstance(func(args []string, wd string) {
 		if mygo.App.IsReady() {
-			trayMainApp()
+			app := trayMainApp()
+			if targets := cliTargets(args, wd); len(targets) > 0 {
+				app.openCLITargets(targets, false)
+				app.win.Invalidate()
+			}
 		}
 	})
 	slog.Info("single-instance: lock acquired")

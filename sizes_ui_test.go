@@ -88,6 +88,7 @@ func TestSelectedBytes(t *testing.T) {
 // background's the current folder — both without a reload — and neither
 // chooses where it does not apply.
 func TestRefreshStatsMenus(t *testing.T) {
+	warmTerminal() // main warms it off the UI thread; the menu then lists 在终端中打开
 	root := t.TempDir()
 	proj := filepath.Join(root, "proj")
 	loose := filepath.Join(root, "loose.txt")

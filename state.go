@@ -110,6 +110,8 @@ type marqueeState struct {
 // fields are reached through cur() so the rest of the code reads a.path as
 // before.
 type App struct {
+	fly flyState // the command bar's open flyout (menuflyout.go)
+
 	// tasksFlipped turns the middle area to the task view (tasks_flip.go);
 	// tasksTab is its tab and tasksOpen its expanded member lists.
 	flip         *flipState // non-nil while the middle area is turning

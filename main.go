@@ -719,3 +719,18 @@ func (a *App) selectedEntries() []Entry {
 	}
 	return out
 }
+
+// invertSelection selects what is visible and unselected, and drops the
+// rest, as Explorer's 反向选择.
+func (a *App) invertSelection() {
+	t := a.cur()
+	next := map[string]bool{}
+	for _, e := range a.visibleEntries() {
+		if !t.selected[e.Path] {
+			next[e.Path] = true
+		}
+	}
+	t.selected = next
+	t.anchor, t.cursor = "", ""
+	a.requestPreview()
+}

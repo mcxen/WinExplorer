@@ -407,11 +407,7 @@ func (a *App) commandBar(c *ui.Context) {
 	windowBG(c, ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
 		Padding(0, 6).Gap(2)).
 		FocusGroup(ui.Horizontal).Children(func() {
-		a.commandMenu(c, lucide.FolderPlus, "新建", "新建", func(m *ui.Menu) {
-			if m.Item("文件夹").Chosen() {
-				a.doNewFolder()
-			}
-		})
+		a.commandMenu(c, lucide.FolderPlus, "新建", "新建", a.newMenu)
 
 		a.commandSep(c)
 
@@ -449,13 +445,13 @@ func (a *App) commandIconButton(c *ui.Context, icon func() *ui.SVG, tip string, 
 	}
 }
 
-// commandMenu is a command button that opens a system menu: a Lucide icon,
-// a label and a chevron. The menu is attached with Element.Menu so the button
-// keeps the command-bar look instead of MenuButton's themed face.
-func (a *App) commandMenu(c *ui.Context, icon func() *ui.SVG, label, tip string, build func(m *ui.Menu)) {
+// commandMenu is a command button that opens a menu: a Lucide icon, a
+// label and a chevron. Under 经典 the menu is a Fluent flyout drawn in the
+// window (menuflyout.go); under v2 the system's.
+func (a *App) commandMenu(c *ui.Context, icon func() *ui.SVG, label, tip string, build func() []*menuEntry) {
 	btn := ui.ButtonBase(c).Height(32).Padding(4, 8).Gap(4).Radius(4).
 		Shrink(0).Label(label).Tooltip(tip)
-	if btn.Hovered() || btn.Pressed() {
+	if btn.Hovered() || btn.Pressed() || a.fly.open == label {
 		btn.Background(colorHover())
 	}
 	btn.TextColor(colorText()).Children(func() {
@@ -463,143 +459,132 @@ func (a *App) commandMenu(c *ui.Context, icon func() *ui.SVG, label, tip string,
 		ui.Text(c, label).FontSize(12).SingleLine()
 		chevronIcon(c, true, 10)
 	})
-	btn.Menu(build)
+	a.attachCommandMenu(c, btn, label, false, build)
 }
 
-// moreButton is the 查看更多 overflow at the command bar's right end.
+// moreButton is the 查看更多 overflow at the command bar's right end; its
+// flyout lines up with the button's right edge, as Explorer's does.
 func (a *App) moreButton(c *ui.Context) {
 	btn := components.IconButton(c, lucide.Ellipsis(), "查看更多", components.IconButtonPlain)
-	btn.Menu(a.moreMenu)
+	a.attachCommandMenu(c, btn, "查看更多", true, a.moreMenu)
+}
+
+func (a *App) newMenu() []*menuEntry {
+	var l menuList
+	l.item("文件夹", lucide.FolderPlus, a.doNewFolder).shortcut(ui.Cmd|ui.Shift, ui.KeyN)
+	return l.es
 }
 
 // moreMenu builds the command bar's 查看更多 menu. Layout mirrors Windows 11
-// Explorer and Files: undo, selection verbs, a 插件 submenu for extension
-// entries, then properties and settings. Top-level stays at most ~8 items
-// and 3 separator groups so the flyout stays scannable
+// Explorer's 「…」: undo; the selection verbs; a 插件 submenu for extension
+// entries; then properties and settings, every row with a glyph
 // (docs/specs/16-commands-layout.md). The panes (预览窗格, 助手) live under
 // 查看 > 显示 and the bar's own 助手 button, so they are not repeated here.
-func (a *App) moreMenu(m *ui.Menu) {
-	if m.Item("撤销").Shortcut(ui.Cmd, ui.KeyZ).Disabled(!a.canUndo()).Chosen() {
-		a.doUndo()
-	}
-	m.Separator()
-	if m.Item("全选").Shortcut(ui.Cmd, ui.KeyA).Chosen() {
-		a.selectAll()
-	}
-	if m.Item("全部取消").Disabled(len(a.cur().selected) == 0).Chosen() {
-		a.clearSelection()
-	}
+func (a *App) moreMenu() []*menuEntry {
+	var l menuList
+	l.item("撤销", lucide.Undo2, a.doUndo).shortcut(ui.Cmd, ui.KeyZ).off(!a.canUndo())
+	l.sep()
+	l.item("全选", lucide.CheckCheck, a.selectAll).shortcut(ui.Cmd, ui.KeyA)
+	l.item("全部取消", lucide.SquareDashed, a.clearSelection).off(len(a.cur().selected) == 0)
+	l.item("反向选择", lucide.ArrowLeftRight, a.invertSelection)
 	if items := a.pluginMoreItems(); len(items) > 0 {
-		m.Separator()
+		l.sep()
 		// Plugin overflow items nest under 插件 so a few plugins cannot
 		// flatten the top-level flyout. A plugin being off keeps its items
 		// out: the settings page's 插件 switch is what brings them back.
-		m.Submenu("插件", func(n *ui.Menu) {
-			for _, it := range items {
-				if n.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
-					it.Run()
-				}
+		var sub menuList
+		for _, it := range items {
+			e := sub.item(it.Label, nil, it.Run).off(it.Disabled)
+			if it.Checked {
+				e.check(true)
 			}
-		})
+		}
+		l.submenu("插件", lucide.Puzzle, sub.es)
 	}
-	m.Separator()
-	if m.Item("属性").Shortcut(ui.Alt, ui.KeyEnter).Disabled(len(a.selectedEntries()) != 1).Chosen() {
-		a.showProperties()
-	}
-	if m.Item("设置").Shortcut(ui.Cmd, ui.KeyComma).Chosen() {
-		a.settingsOpen = true
-	}
+	l.sep()
+	l.item("属性", lucide.Info, a.showProperties).shortcut(ui.Alt, ui.KeyEnter).off(len(a.selectedEntries()) != 1)
+	l.item("设置", lucide.Settings, func() { a.settingsOpen = true }).shortcut(ui.Cmd, ui.KeyComma)
+	return l.es
 }
 
-func (a *App) sortMenu(m *ui.Menu) {
+func (a *App) sortMenu() []*menuEntry {
+	var l menuList
 	keys := []struct {
+		label string
+		icon  func() *ui.SVG
+		key   SortKey
+	}{
+		{"名称", lucide.CaseSensitive, SortName},
+		{"修改日期", lucide.Calendar, SortDate},
+		{"类型", lucide.FileType, SortType},
+		{"大小", lucide.Ruler, SortSize},
+	}
+	for _, k := range keys {
+		key := k.key
+		l.item(k.label, k.icon, func() { a.toggleSort(key) }).choice(a.sortKey == key)
+	}
+	l.sep()
+	l.item("递增", lucide.ArrowUpNarrowWide, func() {
+		if !a.sortAsc {
+			a.toggleSort(a.sortKey)
+		}
+	}).choice(a.sortAsc)
+	l.item("递减", lucide.ArrowDownNarrowWide, func() {
+		if a.sortAsc {
+			a.toggleSort(a.sortKey)
+		}
+	}).choice(!a.sortAsc)
+	return l.es
+}
+
+func (a *App) viewMenu() []*menuEntry {
+	var l menuList
+	modes := []struct {
+		label string
+		icon  func() *ui.SVG
+		mode  ViewMode
+	}{
+		{"超大图标", lucide.Grid2x2, ViewExtraLarge},
+		{"大图标", lucide.LayoutGrid, ViewLargeIcons},
+		{"中等图标", lucide.Grid3x3, ViewMediumIcons},
+		{"小图标", lucide.LayoutList, ViewSmallIcons},
+		{"列表", lucide.List, ViewList},
+		{"详细信息", lucide.TableProperties, ViewDetails},
+	}
+	for _, m := range modes {
+		mode := m.mode
+		l.item(m.label, m.icon, func() { a.setMode(mode) }).choice(a.mode == mode)
+	}
+	l.sep()
+	l.item("紧凑视图", lucide.Rows3, func() { a.compact = !a.compact }).check(a.compact)
+	l.sep()
+	l.item("放大图标", lucide.ZoomIn, a.zoomIn).shortcut(ui.Cmd|ui.Shift, ui.KeyEqual).off(!a.canZoomIn())
+	l.item("缩小图标", lucide.ZoomOut, a.zoomOut).shortcut(ui.Cmd|ui.Shift, ui.KeyMinus).off(!a.canZoomOut())
+	l.sep()
+	var show menuList
+	// The panes first, as Explorer's 查看 > 显示 lists 预览窗格.
+	show.item("预览窗格", nil, a.togglePreview).shortcut(ui.Alt, ui.KeyP).check(a.previewOpen)
+	show.item("助手", nil, a.toggleAssistant).check(a.assistantOpen)
+	show.sep()
+	show.item("文件扩展名", nil, func() { a.showExt = !a.showExt }).check(a.showExt)
+	show.item("隐藏的项目", nil, a.toggleHidden).check(a.showHidden)
+	show.item("项目复选框", nil, func() { a.itemCheckboxes = !a.itemCheckboxes }).check(a.itemCheckboxes)
+	l.submenu("显示", lucide.Eye, show.es)
+	var group menuList
+	groups := []struct {
 		label string
 		key   SortKey
 	}{
+		{"无", groupNone},
 		{"名称", SortName},
 		{"修改日期", SortDate},
 		{"类型", SortType},
 		{"大小", SortSize},
 	}
-	for _, k := range keys {
-		if m.Item(k.label).Checked(a.sortKey == k.key).Chosen() {
-			a.toggleSort(k.key)
-		}
+	for _, g := range groups {
+		key := g.key
+		group.item(g.label, nil, func() { a.grouping = key }).choice(a.grouping == key)
 	}
-	m.Separator()
-	if m.Item("递增").Checked(a.sortAsc).Chosen() {
-		if !a.sortAsc {
-			a.toggleSort(a.sortKey)
-		}
-	}
-	if m.Item("递减").Checked(!a.sortAsc).Chosen() {
-		if a.sortAsc {
-			a.toggleSort(a.sortKey)
-		}
-	}
-}
-
-func (a *App) viewMenu(m *ui.Menu) {
-	modes := []struct {
-		label string
-		mode  ViewMode
-	}{
-		{"超大图标", ViewExtraLarge},
-		{"大图标", ViewLargeIcons},
-		{"中等图标", ViewMediumIcons},
-		{"小图标", ViewSmallIcons},
-		{"列表", ViewList},
-		{"详细信息", ViewDetails},
-	}
-	for _, mode := range modes {
-		if m.Item(mode.label).Checked(a.mode == mode.mode).Chosen() {
-			a.setMode(mode.mode)
-		}
-	}
-	if m.Item("紧凑视图").Checked(a.compact).Chosen() {
-		a.compact = !a.compact
-	}
-	m.Separator()
-	if m.Item("放大图标").Shortcut(ui.Cmd|ui.Shift, ui.KeyEqual).Disabled(!a.canZoomIn()).Chosen() {
-		a.zoomIn()
-	}
-	if m.Item("缩小图标").Shortcut(ui.Cmd|ui.Shift, ui.KeyMinus).Disabled(!a.canZoomOut()).Chosen() {
-		a.zoomOut()
-	}
-	m.Submenu("显示", func(n *ui.Menu) {
-		// The panes first, as Explorer's 查看 > 显示 lists 预览窗格.
-		if n.Item("预览窗格").Shortcut(ui.Alt, ui.KeyP).Checked(a.previewOpen).Chosen() {
-			a.togglePreview()
-		}
-		if n.Item("助手").Checked(a.assistantOpen).Chosen() {
-			a.toggleAssistant()
-		}
-		n.Separator()
-		if n.Item("文件扩展名").Checked(a.showExt).Chosen() {
-			a.showExt = !a.showExt
-		}
-		if n.Item("隐藏的项目").Checked(a.showHidden).Chosen() {
-			a.toggleHidden()
-		}
-		if n.Item("项目复选框").Checked(a.itemCheckboxes).Chosen() {
-			a.itemCheckboxes = !a.itemCheckboxes
-		}
-	})
-	m.Submenu("分组依据", func(n *ui.Menu) {
-		groups := []struct {
-			label string
-			key   SortKey
-		}{
-			{"无", groupNone},
-			{"名称", SortName},
-			{"修改日期", SortDate},
-			{"类型", SortType},
-			{"大小", SortSize},
-		}
-		for _, g := range groups {
-			if n.Item(g.label).Checked(a.grouping == g.key).Chosen() {
-				a.grouping = g.key
-			}
-		}
-	})
+	l.submenu("分组依据", lucide.Group, group.es)
+	return l.es
 }

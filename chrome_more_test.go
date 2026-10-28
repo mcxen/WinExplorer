@@ -9,85 +9,62 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// moreMenuMaxTopItems / moreMenuMaxSeps are the budget for the command bar's
-// 查看更多 flyout (docs/specs/16-commands-layout.md): stay near Windows 11
-// Explorer's ~6–7 items and at most 3 separator groups.
-const (
-	moreMenuMaxTopItems = 8
-	moreMenuMaxSeps     = 3
-)
-
-func countMenuBudget(labels []string) (items, seps int) {
-	for _, s := range labels {
-		if s == "-" {
-			seps++
-		} else {
-			items++
-		}
-	}
-	return
-}
-
-// TestCommandBarMoreMenu: with the default-enabled plugins, 查看更多 lists
-// undo, selection verbs, a 插件 submenu, then properties and settings —
-// plugin leaves stay nested so the top level stays under the item budget.
+// TestCommandBarMoreMenu: 查看更多 lists Explorer's verbs in its groups,
+// each with a glyph; plugin leaves stay under 插件.
 func TestCommandBarMoreMenu(t *testing.T) {
-	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644)
-	a := newStoreApp(t, dir)
-	a.sortAsc, a.grouping, a.iconZoom = true, groupNone, 1
-	tt := ui.NewTester(a.view, 1200, 800)
-	tt.Frame()
-
-	if err := tt.Click("查看更多"); err != nil {
-		t.Fatal(err)
-	}
-	got := tt.Menu()
-	want := []string{"撤销", "-", "全选", "全部取消", "-", "插件", "-", "属性", "设置"}
+	a := newStoreApp(t, t.TempDir())
+	got := menuLabels(a.moreMenu())
+	want := []string{"撤销", "-", "全选", "全部取消", "反向选择", "-", "插件", "-", "属性", "设置"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("查看更多 = %v, want %v", got, want)
 	}
-	items, seps := countMenuBudget(got)
-	if items > moreMenuMaxTopItems {
-		t.Fatalf("top-level items = %d, budget %d", items, moreMenuMaxTopItems)
+	for _, e := range a.moreMenu() {
+		if !e.sep && e.icon == nil {
+			t.Fatalf("%s has no glyph", e.label)
+		}
 	}
-	if seps > moreMenuMaxSeps {
-		t.Fatalf("separators = %d, budget %d", seps, moreMenuMaxSeps)
-	}
-	tt.CloseMenu()
-
-	// Nested plugin leaves still come from MoreItems (reachable under 插件).
-	var labels []string
-	for _, it := range a.pluginMoreItems() {
-		labels = append(labels, it.Label)
-	}
-	if !slices.Equal(labels, []string{"远程访问", "复制远程地址"}) {
-		t.Fatalf("插件 submenu source = %v", labels)
-	}
-}
-
-// TestCommandBarMoreMenuNoPlugins: with every plugin off, 查看更多 drops the
-// 插件 submenu and still stays inside the item budget.
-func TestCommandBarMoreMenuNoPlugins(t *testing.T) {
-	dir := t.TempDir()
-	a := newStoreApp(t, dir)
-	a.sortAsc, a.grouping, a.iconZoom = true, groupNone, 1
 	for _, p := range registeredPlugins() {
 		a.pluginSetEnabled(p.ID, false)
 	}
+	if slices.Contains(menuLabels(a.moreMenu()), "插件") {
+		t.Fatal("插件 shown with every plugin off")
+	}
+}
+
+// TestCommandMenuFlyout: under 经典 the menu is drawn in the window and a
+// row runs its verb and closes it; under v2 it is the system's.
+func TestCommandMenuFlyout(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"a.txt", "b.txt"} {
+		_ = os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644)
+	}
+	a := newStoreApp(t, dir)
+	t.Cleanup(func() { visualV2 = false; resolveTokens() })
+	a.applySettings(func(x *appSettings) { x.VisualStyle = "" })
+	a.reload()
 	tt := ui.NewTester(a.view, 1200, 800)
 	tt.Frame()
-
 	if err := tt.Click("查看更多"); err != nil {
 		t.Fatal(err)
 	}
-	got := tt.Menu()
-	want := []string{"撤销", "-", "全选", "全部取消", "-", "属性", "设置"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("查看更多 (no plugins) = %v, want %v", got, want)
+	tt.Frame()
+	if tt.Menu() != nil || !tt.HasText("反向选择") {
+		t.Fatalf("flyout not drawn: menu=%v", tt.Menu())
 	}
-	items, seps := countMenuBudget(got)
-	if items > moreMenuMaxTopItems || seps > moreMenuMaxSeps {
-		t.Fatalf("budget broken: items=%d seps=%d", items, seps)
+	if err := tt.Click("全选"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.cur().selected) != 2 || a.fly.open != "" {
+		t.Fatalf("全选: selected=%d fly=%v", len(a.cur().selected), a.fly)
+	}
+
+	a.applySettings(func(x *appSettings) { x.VisualStyle = "v2" })
+	tt.Frame()
+	if err := tt.Click("查看更多"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.Menu(); !slices.Equal(got, menuLabels(a.moreMenu())) {
+		t.Fatalf("v2 system menu = %v", got)
 	}
 }

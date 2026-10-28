@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"sunvale/internal/fsops"
 	"sunvale/internal/rename"
@@ -99,24 +98,28 @@ func (a *App) storeClip(cut bool) {
 	}
 }
 
-// systemClipboardFiles returns the local file paths on the system
-// clipboard, cached briefly so per-frame affordances stay cheap.
-func (a *App) systemClipboardFiles() []string {
-	if time.Since(a.sysClipAt) < 400*time.Millisecond {
-		return a.sysClip
-	}
-	a.sysClipAt = time.Now()
-	a.sysClip = nil
+// readSystemClipboardFiles 读取系统剪贴板上的本地文件路径。X11 上这是一次
+// 与剪贴板持有者的往返（GTK 在其中跑嵌套主循环，持有者不响应时要等到超时），
+// 所以只能在用户动作或窗口获得焦点时调用，绝不能在逐帧构建的视图里调用。
+var readSystemClipboardFiles = func() ([]string, error) {
 	if !mygo.App.IsReady() {
-		return nil
+		return nil, nil
 	}
-	data, err := mygo.Clipboard.Read()
+	return mygo.Clipboard.ReadFiles()
+}
+
+// systemClipboardFiles 返回上次刷新时系统剪贴板上的文件路径，只读缓存。
+// 视图（命令栏、右键菜单的「粘贴」）每帧都会问它，v0.3.5 之前它每 400ms
+// 同步读一次整个剪贴板，在 X11 上把主循环卡住数秒：窗口不重绘、输入被吞、
+// CPU 跑满。刷新改由 refreshSystemClipboard 在窗口获得焦点时做。
+func (a *App) systemClipboardFiles() []string { return a.sysClip }
+
+// refreshSystemClipboard 重新读取系统剪贴板，在窗口获得焦点（用户可能刚在
+// 别的程序里复制了文件）和真正粘贴时调用。
+func (a *App) refreshSystemClipboard() []string {
+	paths, err := readSystemClipboardFiles()
 	if err != nil {
-		return nil
-	}
-	paths, err := data.Files()
-	if err != nil {
-		return nil
+		paths = nil
 	}
 	a.sysClip = paths
 	return paths
@@ -137,7 +140,7 @@ func (a *App) doPaste() {
 	if len(srcPaths) == 0 {
 		// Nothing of our own: paste files another application copied,
 		// as a copy — Finder and Windows cannot signal a cut.
-		srcPaths, cut = a.systemClipboardFiles(), false
+		srcPaths, cut = a.refreshSystemClipboard(), false
 		if len(srcPaths) == 0 {
 			return
 		}

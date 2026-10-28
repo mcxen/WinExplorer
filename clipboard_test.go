@@ -3,7 +3,6 @@ package main
 import (
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/egoist/mygo/transfer"
 )
@@ -43,8 +42,26 @@ func TestCanPasteGuards(t *testing.T) {
 	}
 	a.clipPaths = nil
 	a.sysClip = []string{"/Users/x/f.txt"}
-	a.sysClipAt = time.Now()
 	if !a.canPaste() {
 		t.Fatal("cached system clipboard should paste")
+	}
+}
+
+// 视图每帧都问 canPaste：它只能读缓存，绝不能去读系统剪贴板——X11 上那是
+// 一次会卡住主循环的往返（v0.3.5 窗口不重绘、输入被吞的根因）。
+func TestCanPasteNeverReadsSystemClipboard(t *testing.T) {
+	reads := 0
+	old := readSystemClipboardFiles
+	readSystemClipboardFiles = func() ([]string, error) { reads++; return []string{"/f"}, nil }
+	defer func() { readSystemClipboardFiles = old }()
+	a := &App{}
+	for range 100 {
+		a.canPaste()
+	}
+	if reads != 0 {
+		t.Fatalf("canPaste read the system clipboard %d times", reads)
+	}
+	if got := a.refreshSystemClipboard(); len(got) != 1 || !a.canPaste() || reads != 1 {
+		t.Fatalf("refresh = %v, reads = %d", got, reads)
 	}
 }

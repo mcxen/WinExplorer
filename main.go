@@ -55,6 +55,7 @@ func main() {
 	// 日志最先启动（applog_glue.go）：Windows GUI 程序没有控制台，
 	// 之后的启动错误和顶层 panic 都要落到日志文件里。
 	startLogging()
+	startPprof()
 	defer applog.Close()
 	defer applog.Recover("main", true)
 	// The updater plugin's window is native UI, as this app's windows
@@ -208,6 +209,12 @@ func newAppWindow(app *App) *mygo.Window {
 	// taskbar, so the process — and its background size statistics — keeps
 	// running out of sight.
 	win.OnMinimize(func() { minimizeToTray(win) })
+	// 回到窗口时刷新一次系统剪贴板（别的程序可能刚复制了文件），
+	// 视图只读这份缓存，不再逐帧读剪贴板（ops.go）。
+	win.OnFocus(func() {
+		app.refreshSystemClipboard()
+		win.Invalidate()
+	})
 	// The caption close and the system's close both hide the window in the
 	// tray. The process keeps running; 退出晴谷 is what actually quits.
 	win.OnClose(func(e *mygo.CloseEvent) {

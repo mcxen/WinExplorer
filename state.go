@@ -158,11 +158,10 @@ type App struct {
 	clipPaths []string
 	clipCut   bool
 
-	// sysClip caches the file paths on the system clipboard, refreshed at
-	// most every 400ms so the paste affordances can check it per frame
-	// without a native read every frame.
-	sysClip   []string
-	sysClipAt time.Time
+	// sysClip caches the file paths on the system clipboard, refreshed on
+	// window focus and on paste only (refreshSystemClipboard): views read
+	// it every frame and must never touch the native clipboard.
+	sysClip []string
 
 	navWidth    float32
 	previewOpen bool    // Windows preview pane toggle

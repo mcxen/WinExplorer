@@ -355,6 +355,14 @@ func (a *App) view(c *ui.Context) {
 		a.navRow(c)
 		a.bodyRow(c)
 		a.statusBar(c)
+		// Esc in the assistant composer Focuses this sink so the file list
+		// owns the keyboard again (handleKeys). Size 0 keeps it invisible.
+		sink := ui.Box(c.Key("file-pane-focus")).Size(0, 0).Focusable().Label("文件列表")
+		if a.assist.blurToPane {
+			sink.Focus()
+			a.assist.blurToPane = false
+			a.assist.composerFocused = false
+		}
 	})
 	a.quickLookModal(c)
 	a.propertiesModal(c)
@@ -448,6 +456,12 @@ func (a *App) handleKeys(c *ui.Context) {
 	// The command-bar flyout owns ↑↓←→ Enter Esc (menuflyout.go); leave the
 	// pane and the nav tree alone while it is open.
 	if a.fly.open != "" {
+		return
+	}
+	// The assistant composer holds the keyboard: Enter sends there, Esc
+	// returns focus to the file list (wireComposerFocus). File-pane binds
+	// must not fire over a focused draft.
+	if a.assist.composerFocused {
 		return
 	}
 	// The navigation pane owns its cursor after a row click. Its arrows move
@@ -570,7 +584,7 @@ func (a *App) handleKeys(c *ui.Context) {
 	// Shift extends from the anchor as Shift+click does. A modal owns the
 	// keys while it is up, and the search field keeps them while it has
 	// the focus.
-	if a.quickLook || a.propsOpen || a.fieldFocused {
+	if a.quickLook || a.propsOpen || a.fieldFocused || a.assist.composerFocused {
 		return
 	}
 	switch {

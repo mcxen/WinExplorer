@@ -258,3 +258,107 @@ func TestAssistantHistoryGroupsAndCurrentRow(t *testing.T) {
 		t.Fatalf("open reached %q behind a running turn", a.assist.sessionID)
 	}
 }
+
+// TestAssistantComposerAutoFocus: opening the pane puts the keyboard in the
+// input so typing and Enter work without a prior click; Shift+Enter keeps a
+// newline; with the input focused, Enter does not open a selected file.
+func TestAssistantComposerAutoFocus(t *testing.T) {
+	a, tt, dir := keynavWindow(t, 1)
+	a.assist.loaded = true
+	a.assist.diskPath = filepath.Join(t.TempDir(), "assistant.json")
+	a.assist.providers = []aiProvider{{
+		ID: "p", Name: "local", Model: "m1", BaseURL: "http://127.0.0.1:9/v1", APIKey: "k",
+	}}
+	a.assist.activeID = "p"
+	a.homePath = dir
+	a.selectOnly(filepath.Join(dir, "f000.txt"))
+
+	sent := make(chan string, 1)
+	old := runAssistantHeadless
+	done := make(chan struct{})
+	runAssistantHeadless = func(ctx context.Context, run assistRun) (assistRunResult, error) {
+		last := run.hist[len(run.hist)-1]
+		sent <- last.Content
+		<-ctx.Done()
+		close(done)
+		return assistRunResult{}, ctx.Err()
+	}
+	t.Cleanup(func() { runAssistantHeadless = old })
+
+	a.toggleAssistant()
+	tt.Frame()
+	if !a.assistantOpen {
+		t.Fatal("pane did not open")
+	}
+	if !tt.Focused("给助手的消息") {
+		t.Fatal("opening the pane did not focus the composer")
+	}
+	pathBefore := a.cur().path
+	tt.Type("你好")
+	if a.assist.draft != "你好" {
+		t.Fatalf("typed into composer: draft=%q", a.assist.draft)
+	}
+	tt.Key(ui.Shift, ui.KeyEnter)
+	tt.Type("第二行")
+	if a.assist.draft != "你好\n第二行" {
+		t.Fatalf("Shift+Enter draft = %q", a.assist.draft)
+	}
+	// Enter sends; it must not navigate into the selected file.
+	tt.Key(0, ui.KeyEnter)
+	deadline := time.Now().Add(2 * time.Second)
+	for !a.assist.running && time.Now().Before(deadline) {
+		tt.Frame()
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !a.assist.running {
+		t.Fatal("Enter did not send")
+	}
+	if a.cur().path != pathBefore {
+		t.Fatalf("Enter opened the selection: path=%q", a.cur().path)
+	}
+	select {
+	case got := <-sent:
+		if got != "你好\n第二行" {
+			t.Fatalf("sent %q", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner never saw the message")
+	}
+	if a.assist.stop != nil {
+		a.assist.stop()
+	}
+	a.assist.diskPath = filepath.Join(os.TempDir(), "we-assist-autofocus-", time.Now().Format("20060102150405"))
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("run did not stop")
+	}
+}
+
+// TestAssistantComposerEscReturnsPane: Esc in the focused composer gives the
+// keyboard back to the file list so Enter opens a selected folder again.
+func TestAssistantComposerEscReturnsPane(t *testing.T) {
+	a, tt, dir := keynavWindow(t, 0)
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+	a.assist.loaded = true
+	a.assist.diskPath = filepath.Join(t.TempDir(), "assistant.json")
+	a.toggleAssistant()
+	tt.Frame()
+	if !tt.Focused("给助手的消息") {
+		t.Fatal("composer not focused after open")
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if tt.Focused("给助手的消息") {
+		t.Fatal("Esc left the composer focused")
+	}
+	a.selectOnly(filepath.Join(dir, "sub"))
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.cur().path != filepath.Join(dir, "sub") {
+		t.Fatalf("Enter after Esc went to %q", a.cur().path)
+	}
+}

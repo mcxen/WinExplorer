@@ -216,6 +216,7 @@ func (a *App) runAssistant(ctx context.Context, run assistRun) {
 					a.assist.halted = true
 				}
 				a.assist.flowCool = time.Now().Add(assistFlowCool)
+				a.requestComposerFocus()
 			}
 			aiFx.endRun()
 			if mine {

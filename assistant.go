@@ -148,6 +148,14 @@ type assistantUI struct {
 	slashIdx  int
 	slashHide bool
 
+	// focusComposer asks the next composer frame to Focus the input.
+	// composerFocused tracks whether that input held the keyboard last
+	// frame (handleKeys reads it before the pane rebuilds). blurToPane
+	// moves focus to the file-list sink after Esc in the composer.
+	focusComposer   bool
+	composerFocused bool
+	blurToPane      bool
+
 	// ops holds the file-operation cards' undo and timing (assistant_opcard.go).
 	assistOps
 }
@@ -163,7 +171,22 @@ func (a *App) toggleAssistant() {
 		if len(a.assist.turns) == 0 && len(a.assist.sessions) > 0 {
 			a.assist.showHist = true
 		}
+		a.requestComposerFocus()
+	} else {
+		a.assist.composerFocused = false
+		a.assist.focusComposer = false
 	}
+}
+
+// requestComposerFocus puts the keyboard in the assistant's input on the
+// next frame: opening the pane, switching sessions, and finishing a run
+// all land here so Enter sends without a prior click.
+func (a *App) requestComposerFocus() {
+	if !a.assistantOpen {
+		return
+	}
+	a.assist.focusComposer = true
+	a.assist.blurToPane = false
 }
 
 func (a *App) assistantPane(c *ui.Context) {
@@ -287,6 +310,7 @@ func (a *App) assistantComposer(c *ui.Context) {
 			},
 		})
 		comp.Root.FillWidth().Shrink(0)
+		a.wireComposerFocus(comp.Input)
 		if comp.Dragging {
 			// ZCode's drop overlay: hovering files over the card says what
 			// letting go does, over both the in-window drag and a native one.
@@ -463,6 +487,28 @@ func (a *App) assistantPasswords(c *ui.Context) {
 	})
 }
 
+// wireComposerFocus applies focusComposer / Esc→文件列表 and records whether
+// the input holds the keyboard for handleKeys. GlassComposer already sends on
+// Enter (IME composition and Shift+Enter keep their own behaviour).
+func (a *App) wireComposerFocus(input ui.Element) {
+	if a.assist.focusComposer {
+		input.Focus()
+		a.assist.focusComposer = false
+	}
+	a.assist.composerFocused = input.Focused()
+	if !a.assist.composerFocused {
+		return
+	}
+	// Esc returns the keyboard to the file list; slash menu owns Esc first.
+	if a.assistSlashOpen() {
+		return
+	}
+	if input.Shortcut(0, ui.KeyEscape) {
+		a.assist.composerFocused = false
+		a.assist.blurToPane = true
+	}
+}
+
 func (u *assistantUI) togglePanel(which string) {
 	if which == "hist" {
 		u.showHist = !u.showHist
@@ -510,6 +556,7 @@ func (a *App) assistantNewSession() {
 	a.assist.resetPaint()
 	a.assist.scroll = chat.ConversationState{}
 	a.statusMsg = "已新开会话"
+	a.requestComposerFocus()
 }
 
 func (a *App) assistantOpenSession(id string) {
@@ -527,6 +574,7 @@ func (a *App) assistantOpenSession(id string) {
 	a.assist.touchActive()
 	a.assist.resetPaint()
 	a.assist.scroll = chat.ConversationState{}
+	a.requestComposerFocus()
 }
 
 func (a *App) assistantDeleteSession(id string) {

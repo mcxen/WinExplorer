@@ -83,56 +83,14 @@ func (a *App) paintImageBroken(c *ui.Context, msg string) {
 	})
 }
 
-// imageQuickContent is the Space modal body for a picture: nav chrome,
-// the zoomable viewport, and a short hint line.
+// imageQuickContent is the Space modal body for a picture: the zoomable
+// viewport and its zoom level. Stepping and the name live in the bar
+// (quicklook_bar.go); the gestures are in the buttons' tooltips.
 func (a *App) imageQuickContent(c *ui.Context, st *previewState, maxW, maxH float32) {
 	a.resetImgQV(st.path)
-	a.imageQuickNav(c, st.path)
-	a.imageQuickViewport(c, st, maxW, maxH-36)
+	a.imageQuickViewport(c, st, maxW, maxH-20)
 	pct := int(a.imgQV.zoom*100 + 0.5)
-	ui.Text(c, fmt.Sprintf("滚轮缩放 · 拖拽平移 · ←/→ 上一张/下一张 · 空格/Esc 关闭 · %d%%", pct)).
-		FontSize(11).TextColor(colorMuted())
-}
-
-// imageQuickNav is the prev/next row above the picture.
-func (a *App) imageQuickNav(c *ui.Context, path string) {
-	imgs := a.sameDirImages(path)
-	idx := imageIndexOf(imgs, path)
-	label := filepath.Base(path)
-	if idx >= 0 && len(imgs) > 0 {
-		label = fmt.Sprintf("%s（%d / %d）", filepath.Base(path), idx+1, len(imgs))
-	}
-	row := ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center)
-	row.Children(func() {
-		prev := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).Label("上一张").
-			Tooltip("上一张图片（←）")
-		if idx <= 0 {
-			prev.Disabled(true)
-		} else if prev.Hovered() || prev.Pressed() {
-			prev.Background(colorHover())
-		}
-		prev.Children(func() {
-			components.Icon(c, lucide.ChevronLeft()).Size(14, 14).TextColor(colorText())
-		})
-		if prev.Clicked() {
-			a.quickLookStepImage(-1)
-		}
-		ui.Text(c, label).FontSize(12).TextColor(colorText()).Grow(1).MinWidth(0).
-			TextAlign(ui.Center).MaxLines(1)
-		next := ui.ButtonBase(c).Size(28, 28).Radius(4).Shrink(0).Label("下一张").
-			Tooltip("下一张图片（→）")
-		if idx < 0 || idx >= len(imgs)-1 {
-			next.Disabled(true)
-		} else if next.Hovered() || next.Pressed() {
-			next.Background(colorHover())
-		}
-		next.Children(func() {
-			components.Icon(c, lucide.ChevronRight()).Size(14, 14).TextColor(colorText())
-		})
-		if next.Clicked() {
-			a.quickLookStepImage(1)
-		}
-	})
+	ui.Text(c, fmt.Sprintf("%d%%", pct)).FontSize(11).TextColor(colorMuted())
 }
 
 // imageQuickViewport draws the picture (or a broken placeholder) inside a

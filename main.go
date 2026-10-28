@@ -405,7 +405,7 @@ func (a *App) contentPanes(c *ui.Context) {
 		a.contentRow(c, v2Card(row))
 		return
 	}
-	a.contentRow(c, row)
+	a.contentRow(c, classicContentFrame(row))
 }
 
 func (a *App) contentRow(c *ui.Context, row ui.Element) {
@@ -443,6 +443,11 @@ func (a *App) handleKeys(c *ui.Context) {
 		return
 	}
 	if a.cur().editingPath {
+		return
+	}
+	// The command-bar flyout owns ↑↓←→ Enter Esc (menuflyout.go); leave the
+	// pane and the nav tree alone while it is open.
+	if a.fly.open != "" {
 		return
 	}
 	// The navigation pane owns its cursor after a row click. Its arrows move
@@ -718,4 +723,19 @@ func (a *App) selectedEntries() []Entry {
 		}
 	}
 	return out
+}
+
+// invertSelection selects what is visible and unselected, and drops the
+// rest, as Explorer's 反向选择.
+func (a *App) invertSelection() {
+	t := a.cur()
+	next := map[string]bool{}
+	for _, e := range a.visibleEntries() {
+		if !t.selected[e.Path] {
+			next[e.Path] = true
+		}
+	}
+	t.selected = next
+	t.anchor, t.cursor = "", ""
+	a.requestPreview()
 }

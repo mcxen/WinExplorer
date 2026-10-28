@@ -92,33 +92,35 @@ func v2Card(e ui.Element) ui.Element {
 	return v2Raised(e.Radius(v2CardRadius).Clip().Background(tokContent))
 }
 
-// fieldRadius is the address and search field corner radius: v2's tighter
-// input token, classic's 6.
+// fieldRadius is the address and search field corner radius. Classic
+// follows WinUI's ControlCornerRadius 4 (Fluent 2 geometry), the value v2's
+// input token already had.
 func fieldRadius() float32 {
 	if visualV2 {
 		return v2InputRadius
 	}
-	return 6
+	return 4
 }
 
 // cardRadius is the page-card corner radius: a disk card, an occupant of
 // the content card. v2's content card is 8, so a 12-radius classic card
-// floating inside it would clash corners; classic keeps the dialog pair 12.
+// floating inside it would clash corners. Classic follows WinUI's
+// OverlayCornerRadius 8 for cards and flyouts, so both land on 8.
 func cardRadius() float32 {
 	if visualV2 {
 		return v2CardRadius
 	}
-	return 12
+	return 8
 }
 
 // innerRadius is the corner radius of the soft faces inside a card —
-// thumbnail boxes, charts, badges, assistant cards. Classic drew them at 6;
-// v2 tightens them to the row token so they stay under the card's 8.
+// thumbnail boxes, charts, badges, assistant cards: the control radius 4
+// in both styles, so they stay under the card's 8.
 func innerRadius() float32 {
 	if visualV2 {
 		return v2RowRadius
 	}
-	return 6
+	return 4
 }
 
 // sidebarListPad is the top inset of the nav list. v2 matches the content
@@ -128,4 +130,13 @@ func sidebarListPad() float32 {
 		return 4
 	}
 	return 8
+}
+
+// classicContentFrame is classic's content layer, WinUI NavigationView's
+// content frame: opaque, the top-leading corner rounded to the overlay
+// radius 8 and a 1 DIP card stroke along the top, set into the Mica chrome
+// so the list reads as one surface under the command bar.
+func classicContentFrame(e ui.Element) ui.Element {
+	return e.Radius(cardRadius(), 0, 0, 0).Clip().Background(tokContent).
+		BorderWidth(1, 0, 0, 1).BorderColor(tokDivider)
 }

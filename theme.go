@@ -108,10 +108,10 @@ func resolveTokens() {
 	tokChrome = tokWindow
 	tokNav = tokWindow
 	tokContent = pick("#FFFFFF", "#272727")
-	tokSel = pick("#CCE4F7", "#004C87")
+	tokSel = pick("#CCE4F7", "#26415C")
 	tokText = pick("#1A1A1A", "#F3F3F3")
-	tokMuted = pick("#5C5C5C", "#A0A0A0")
-	tokAccent = pick("#0067C0", "#4CC2FF")
+	tokMuted = pick("#5C5C5C", "#C5C5C5")
+	tokAccent = pick("#005FB8", "#60CDFF")
 	tokDivider = pick("#E5E5E5", "#383838")
 	tokFolder = pick("#F0C14D", "#E8B84A")
 	tokStatus = tokWindow
@@ -186,15 +186,13 @@ func appTheme(c *ui.Context) *ui.Theme {
 		Focus:          tokAccent.Alpha(0.6),
 		Scrollbar:      tokText.Alpha(0.32),
 		ScrollbarWidth: 6,
-		// Radius 6 rounds a dialog (components.Dialog doubles it) to 12;
-		// v2 uses 4 so dialogs land at 8. Spacing 4 is the unit the
-		// components size their paddings with.
-		Radius:   6,
+		// Radius 4 is WinUI's ControlCornerRadius; components.Dialog
+		// doubles it to OverlayCornerRadius 8, the Fluent 2 pair both
+		// styles share. Spacing 4 is the unit the components size their
+		// paddings with.
+		Radius:   4,
 		Spacing:  4,
 		FontSize: 12,
-	}
-	if visualV2 {
-		t.Radius = v2RowRadius
 	}
 	// The adjustments MyGo's own themes make for the desktop's preferences,
 	// so a text scale or a higher contrast setting still applies.

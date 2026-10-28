@@ -491,11 +491,16 @@ func (a *App) assistantPasswords(c *ui.Context) {
 // the input holds the keyboard for handleKeys. GlassComposer already sends on
 // Enter (IME composition and Shift+Enter keep their own behaviour).
 func (a *App) wireComposerFocus(input ui.Element) {
-	if a.assist.focusComposer {
+	// A Focus asked for this frame shows in Focused only from the next
+	// one, and no frame may come before the user's next key: count it as
+	// focused now, or that key's Enter reaches the file list's handleKeys
+	// and opens the selected file (v0.3.5: 回复完成后 Enter 打开了说明.txt).
+	focusing := a.assist.focusComposer
+	if focusing {
 		input.Focus()
 		a.assist.focusComposer = false
 	}
-	a.assist.composerFocused = input.Focused()
+	a.assist.composerFocused = focusing || input.Focused()
 	if !a.assist.composerFocused {
 		return
 	}

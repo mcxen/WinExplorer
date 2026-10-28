@@ -81,7 +81,7 @@
 | OPENUI-MORE | OpenUI 文件行 Files、步骤 Steps、指标 StatCards、图库 Gallery | 高 | 已完成 | [08](docs/specs/08-forms.md) OPENUI-MORE | OPENUI-MEDIA | `main` |
 | TASKSYS | 统一任务系统：internal/tasks、中间区翻转任务视图、助手任务工具（T1–T7） | 高 | 进行中（T1–T4） | [10](docs/specs/10-task-system.md) | ARCHIVE-PROG、PROG-STYLE | — |
 | TREE-NOEXPAND | 设置「展开到打开的文件夹」：关闭后导航不展开侧栏树，保留手动展开，当前文件夹不可见时淡标最近可见祖先 | 低 | 完成 | — | — | — |
-| FIX035-CLIP | v0.3.5「非常难用」：视图逐帧同步读系统剪贴板卡住主循环（不重绘/最大化只画左上角/画面慢一拍/CPU 满/输入被吞/启动后卡顿）→ 只读缓存，获焦后台刷新、只读 FileList | 高 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |
+| FIX035-CLIP | v0.3.5「非常难用」：视图逐帧同步读系统剪贴板卡住主循环（不重绘/最大化只画左上角/画面慢一拍/CPU 满/输入被吞/启动后卡顿）→ 只读缓存，获焦后台刷新、只读 FileList；视图阻塞守卫（viewguard.go）、终端探测后台预热 | 高 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |
 | FIX035-CLI | 命令行打开目录/文件（相对、~、Windows 路径），已运行时转发到新标签页并前置；`--version`/`--help` 不起界面 | 高 | 已完成 | README「单实例」 | — | `fix/v035-usability` → `main` |
 | FIX035-TREE | 侧栏树默认不自动展开跟随（`treeExpand`，未设置=关）；开启时只保留当前目录祖先链 | 中 | 已完成 | `docs/UI.md` TREE-NOEXPAND | TREE-NOEXPAND | `fix/v035-usability` → `main` |
 | FIX035-ASSIST | 助手：回复结束聚焦输入框即刻生效；续聊保留旧消息回归测试；窄面板不自动开历史；名称列先让宽保大小列 | 中 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |

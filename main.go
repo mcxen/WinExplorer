@@ -222,10 +222,7 @@ func newAppWindow(app *App) *mygo.Window {
 	win.OnMinimize(func() { minimizeToTray(win) })
 	// 回到窗口时刷新一次系统剪贴板（别的程序可能刚复制了文件），
 	// 视图只读这份缓存，不再逐帧读剪贴板（ops.go）。
-	win.OnFocus(func() {
-		app.refreshSystemClipboard()
-		win.Invalidate()
-	})
+	win.OnFocus(app.refreshSystemClipboardAsync)
 	// The caption close and the system's close both hide the window in the
 	// tray. The process keeps running; 退出晴谷 is what actually quits.
 	win.OnClose(func(e *mygo.CloseEvent) {

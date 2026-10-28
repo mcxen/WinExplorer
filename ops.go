@@ -105,7 +105,12 @@ var readSystemClipboardFiles = func() ([]string, error) {
 	if !mygo.App.IsReady() {
 		return nil, nil
 	}
-	return mygo.Clipboard.ReadFiles()
+	// Only the file list: no text, no image bytes from the owner.
+	d, err := mygo.Clipboard.Read(transfer.FileList)
+	if err != nil {
+		return nil, err
+	}
+	return d.Files()
 }
 
 // systemClipboardFiles 返回上次刷新时系统剪贴板上的文件路径，只读缓存。
@@ -113,6 +118,22 @@ var readSystemClipboardFiles = func() ([]string, error) {
 // 同步读一次整个剪贴板，在 X11 上把主循环卡住数秒：窗口不重绘、输入被吞、
 // CPU 跑满。刷新改由 refreshSystemClipboard 在窗口获得焦点时做。
 func (a *App) systemClipboardFiles() []string { return a.sysClip }
+
+// refreshSystemClipboardAsync 在 goroutine 里发起读取，结果回到主线程写入缓存并
+// 重绘；窗口获得焦点时用它，焦点回调本身立即返回。同一时刻只有一次在途。
+func (a *App) refreshSystemClipboardAsync() {
+	if !a.sysClipBusy.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer a.sysClipBusy.Store(false)
+		paths, err := readSystemClipboardFiles()
+		if err != nil {
+			paths = nil
+		}
+		a.postAssist(func() { a.sysClip = paths })
+	}()
+}
 
 // refreshSystemClipboard 重新读取系统剪贴板，在窗口获得焦点（用户可能刚在
 // 别的程序里复制了文件）和真正粘贴时调用。

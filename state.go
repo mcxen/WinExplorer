@@ -161,7 +161,8 @@ type App struct {
 	// sysClip caches the file paths on the system clipboard, refreshed on
 	// window focus and on paste only (refreshSystemClipboard): views read
 	// it every frame and must never touch the native clipboard.
-	sysClip []string
+	sysClip     []string
+	sysClipBusy atomic.Bool
 
 	navWidth    float32
 	previewOpen bool    // Windows preview pane toggle

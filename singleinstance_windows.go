@@ -46,17 +46,19 @@ func osInstanceLock() (bool, func()) {
 }
 
 // raiseRunningInstance finds the first instance's window by its title and
-// brings it forward, for when the socket handoff did not happen.
-func raiseRunningInstance() {
+// brings it forward (a hidden one too: SW_RESTORE shows it), for when
+// the socket handoff did not happen. False when there is none.
+func raiseRunningInstance() bool {
 	title, err := syscall.UTF16PtrFromString("晴谷")
 	if err != nil {
-		return
+		return false
 	}
 	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
 	if hwnd == 0 {
-		return
+		return false
 	}
 	const swRestore = 9
 	procShowWindow.Call(hwnd, swRestore)
 	procSetForegroundWindow.Call(hwnd)
+	return true
 }

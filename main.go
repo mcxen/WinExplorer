@@ -220,8 +220,13 @@ func newAppWindow(app *App) *mygo.Window {
 	taskManager()
 	// Minimizing parks the window in the tray (tray.go) instead of the
 	// taskbar, so the process — and its background size statistics — keeps
-	// running out of sight.
-	win.OnMinimize(func() { minimizeToTray(win) })
+	// running out of sight. Without a tray (Linux with no appindicator)
+	// hiding would leave nothing to click: it stays an ordinary minimize.
+	win.OnMinimize(func() {
+		if tray != nil {
+			minimizeToTray(win)
+		}
+	})
 	// 回到窗口时刷新一次系统剪贴板（别的程序可能刚复制了文件），
 	// 视图只读这份缓存，不再逐帧读剪贴板（ops.go）。
 	win.OnFocus(app.refreshSystemClipboardAsync)

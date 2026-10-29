@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -44,6 +45,9 @@ func (a *App) statusBar(c *ui.Context) {
 // statusLeft is "N 个项目", plus the selection when any, plus a short
 // status message when one is set. Counts stay even then.
 func (a *App) statusLeft() string {
+	if a.tasksFlipped {
+		return taskStatusText(taskViewLists())
+	}
 	visible := a.visibleEntries()
 	selected := a.selectedEntries()
 	if a.cur().path == pathGallery {
@@ -86,7 +90,9 @@ func (a *App) statusLeft() string {
 			text += " " + formatBytes(bytes)
 		}
 	}
-	if a.statusMsg != "" {
+	// A message already shown as a toast (a delete's 已移到回收站…) is not
+	// repeated in the bar.
+	if a.statusMsg != "" && a.statusMsg != a.statusToasted {
 		text = a.statusMsg + "  " + text
 	}
 	return text
@@ -151,4 +157,14 @@ func (a *App) iconLabel(name string) string {
 		return name
 	}
 	return fmt.Sprintf("%s（%d 像素）", name, int(a.iconBoxSize(a.mode)+0.5))
+}
+
+// taskStatusText is the bar's line while the task view is turned over:
+// each tab's count.
+func taskStatusText(lists [4][]archiveTaskSnap) string {
+	parts := make([]string, 0, 4)
+	for i, t := range taskTabs {
+		parts = append(parts, fmt.Sprintf("%s %d", t, len(lists[i])))
+	}
+	return "任务：" + strings.Join(parts, " · ")
 }

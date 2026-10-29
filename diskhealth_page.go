@@ -260,7 +260,7 @@ func (a *App) disksSummary(c *ui.Context, r diskhealth.Report) {
 		tone  ui.Color
 	}{
 		{lucide.HardDrive(), "磁盘", fmt.Sprintf("%d 块", len(r.Disks)), colorText()},
-		{lucide.CircleCheck(), "健康", summaryHealth(good, warn, fail, unknown), summaryTone(c, warn, fail)},
+		{lucide.CircleCheck(), "健康", summaryHealth(good, warn, fail, unknown), summaryTone(c, good, warn, fail)},
 		{lucide.Thermometer(), "最高温度", tempSummary(hottest), tempTone(c, hottest)},
 		{lucide.Database(), "总容量", capacitySummary(total, free), colorText()},
 	}
@@ -291,8 +291,10 @@ func summaryHealth(good, warn, fail, unknown int) string {
 	return strings.Join(parts, " · ")
 }
 
-func summaryTone(c *ui.Context, warn, fail int) ui.Color {
+func summaryTone(c *ui.Context, good, warn, fail int) ui.Color {
 	switch {
+	case good == 0 && warn == 0 && fail == 0:
+		return colorMuted() // all 未知: nothing to call healthy
 	case fail > 0:
 		return toneDanger(c)
 	case warn > 0:

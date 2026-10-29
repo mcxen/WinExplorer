@@ -68,7 +68,7 @@ func taskSourceLabel(src string) string {
 	case tasks.SourceRemote:
 		return "远程"
 	}
-	return "我"
+	return "" // the user's own: no badge
 }
 
 func taskStateLabel(s archiveTaskSnap) (string, ui.Color) {
@@ -116,11 +116,7 @@ func (a *App) tasksView(c *ui.Context) {
 	ui.Column(c).Grow(1).FillHeight().MinWidth(0).MinHeight(0).Background(colorContent()).Label("任务").Children(func() {
 		ui.Row(c.Key("head")).FillWidth().Height(44).Padding(0, 14).Gap(10).AlignItems(ui.Center).
 			BorderWidth(0, 0, 1, 0).BorderColor(colorDivider()).Children(func() {
-			labels := make([]string, 4)
-			for i, t := range taskTabs {
-				labels[i] = t + " " + itoa(len(lists[i]))
-			}
-			ui.Segmented(c, &a.tasksTab, labels...).Shrink(0)
+			a.taskTabBar(c, lists)
 			ui.Box(c).Grow(1)
 			var speed float64
 			paused := 0
@@ -155,6 +151,10 @@ func (a *App) tasksView(c *ui.Context) {
 		ui.Scroll(c.Key("list")).FillWidth().Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c.Key("cards")).FillWidth().Padding(12, 14).Gap(10).Children(func() {
 				list := lists[a.tasksTab]
+				if len(list) == 0 {
+					ui.Text(c.Key("empty"), taskEmptyText[a.tasksTab]).FontSize(12.5).
+						TextColor(colorMuted()).Padding(4, 2)
+				}
 				if a.tasksOpen["all"] && a.flip == nil {
 					limit = len(list)
 				}
@@ -178,6 +178,43 @@ func (a *App) tasksView(c *ui.Context) {
 	if len(lists[0]) > 0 {
 		c.After(archiveRepaint)
 	}
+}
+
+// taskEmptyText is each tab's one-line empty state.
+var taskEmptyText = [4]string{"没有进行中的任务", "没有排队的任务", "没有失败的任务", "没有历史记录"}
+
+// taskTabBar is the view's tabs: the chosen one on an accent-tinted face
+// with accent text and a 2 DIP underline, so it reads at a glance.
+func (a *App) taskTabBar(c *ui.Context, lists [4][]archiveTaskSnap) {
+	ui.Row(c.Key("tabs")).Gap(2).Shrink(0).Role(ui.RoleTabList).Children(func() {
+		for i, t := range taskTabs {
+			label := t + " " + itoa(len(lists[i]))
+			on := a.tasksTab == i
+			tab := ui.ButtonBase(c.Key("tab"+itoa(i))).Height(30).Padding(0, 12).Radius(4).
+				AlignItems(ui.Center).Label(label).Selected(on).Role(ui.RoleTab)
+			switch {
+			case on:
+				tab.Background(colorAccent().Alpha(0.12))
+			case tab.Hovered():
+				tab.Background(colorHover())
+			}
+			tab.Children(func() {
+				txt := ui.Text(c, label).FontSize(12.5).SingleLine()
+				if on {
+					txt.TextColor(colorAccent()).FontWeight(600)
+				} else {
+					txt.TextColor(colorText())
+				}
+				if on {
+					ui.Box(c.Key("ul")).Absolute().Left(10).Right(10).Bottom(0).Height(2).Radius(1).
+						Background(colorAccent())
+				}
+			})
+			if tab.Clicked() {
+				a.tasksTab = i
+			}
+		}
+	})
 }
 
 func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
@@ -205,7 +242,8 @@ func (a *App) taskCard(c *ui.Context, s archiveTaskSnap, gauge bool) {
 		}
 		ui.Column(c.Key("body")).Grow(1).MinWidth(0).Gap(6).Children(func() {
 			a.taskCardHead(c, s, icon, tone)
-			if !gauge {
+			if !gauge && s.State != tasks.Done {
+				// A finished task says 完成 in its head; a full bar adds nothing.
 				frac := s.Frac()
 				if s.State == tasks.Queued {
 					frac = 0 // waiting, not working: no sweep
@@ -252,8 +290,10 @@ func (a *App) taskCardHead(c *ui.Context, s archiveTaskSnap, icon *ui.SVG, tone 
 		}
 		t := ui.Text(c.Key("t"), title).FontSize(14).FontWeight(600).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0).Grow(1)
 		components.Tooltip(c, t, s.Path)
-		ui.Text(c.Key("src"), taskSourceLabel(s.Origin)).FontSize(11).TextColor(colorMuted()).
-			Padding(1, 6).Radius(4).Background(colorAddress()).Shrink(0)
+		if src := taskSourceLabel(s.Origin); src != "" {
+			ui.Text(c.Key("src"), src).FontSize(11).TextColor(colorMuted()).
+				Padding(1, 6).Radius(4).Background(colorAddress()).Shrink(0)
+		}
 		label, col := taskStateLabel(s)
 		ui.Text(c.Key("st"), label).FontSize(11.5).FontWeight(600).TextColor(col).Shrink(0)
 		m := taskManager()

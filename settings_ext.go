@@ -26,7 +26,7 @@ func (a *App) settingsExtensionGroups() []components.SettingsGroup {
 	}
 	if len(a.shellExts) == 0 && len(a.shellExtErrs) == 0 {
 		items = append(items, components.SettingsItem{
-			ID: "empty", Title: "还没有扩展", Description: "点下方按钮添加一条右键命令",
+			ID: "empty", Title: "还没有扩展",
 		})
 	}
 	for i := range a.shellExts {
@@ -60,7 +60,7 @@ func (a *App) settingsExtensionGroups() []components.SettingsGroup {
 			},
 		})
 	}
-	items = append(items, settingsActionItem("add", "添加扩展", "登记一条右键命令", "添加", func() {
+	items = append(items, settingsActionItem("add", "添加扩展", "", "添加", func() {
 		a.extEditBegin(-1)
 	}))
 	return []components.SettingsGroup{{ID: "commands", Title: "扩展命令", Items: items}}

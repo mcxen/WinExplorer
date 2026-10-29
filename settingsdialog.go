@@ -71,8 +71,24 @@ func (a *App) settingsModal(c *ui.Context) {
 		a.hotkeyCapture = false
 		return
 	}
-	floatDialog(c, &a.settingsOpen, "设置", 760, false, func() {
-		ui.Box(c).FillWidth().Height(500).Children(func() {
+	// A light scrim under the dialog sets it off the window behind.
+	ui.Overlay(c, func() {
+		ui.Box(c.Key("settings-scrim")).Absolute().Left(0).Top(0).Right(0).Bottom(0).
+			Background(ui.RGBA(0, 0, 0, 0.12))
+	})
+	// The dialog takes a reasonable share of the window: up to 960 × 640.
+	w, h := c.Size()
+	dw := clampF(w-120, 640, 960)
+	dh := clampF(h-180, 420, 640)
+	floatDialog(c, &a.settingsOpen, "设置", dw, false, func() {
+		// A tighter spacing scale for the dialog: the category list and the
+		// pages read denser, as Explorer's own settings pages do.
+		th := c.Theme()
+		dense := *th
+		dense.Spacing = th.Space(1) * 0.85
+		c.SetTheme(&dense)
+		defer c.SetTheme(th)
+		ui.Box(c).FillWidth().Height(dh).Children(func() {
 			components.Settings(c, &a.settingsUI, a.settingsCategories(), components.SettingsOptions{
 				Title:             "设置",
 				SearchLabel:       "搜索设置",
@@ -187,9 +203,9 @@ func appearanceIndex(setting string) int {
 func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 	v := appearanceIndex(a.store.settings().Appearance)
 	return []components.SettingsGroup{{
-		ID: "theme", Title: "主题",
+		ID: "theme",
 		Items: []components.SettingsItem{{
-			ID: "mode", Title: "外观模式", Description: "选择应用的外观",
+			ID: "mode", Title: "外观模式",
 			Build: func(c *ui.Context) {
 				seg := ui.Segmented(c, &v, "跟随系统", "浅色", "深色").Shrink(0)
 				if seg.Changed() {
@@ -200,7 +216,7 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
-			ID: "visual", Title: "视觉风格", Description: "v2（默认）：柔和底色、浮起内容卡片；经典为 Windows 11 扁平",
+			ID: "visual", Title: "视觉风格",
 			Build: func(c *ui.Context) {
 				sv := 0
 				if a.store.settings().VisualStyle == "v2" {
@@ -211,7 +227,7 @@ func (a *App) settingsAppearanceGroups() []components.SettingsGroup {
 				}
 			},
 		}, {
-			ID: "progress", Title: "进度样式", Description: "助手任务卡",
+			ID: "progress", Title: "助手任务进度样式",
 			Build: func(c *ui.Context) {
 				pv := 0
 				if a.assistProgressStyle() == progressStyleGauge {
@@ -232,24 +248,24 @@ func (a *App) settingsViewGroups() []components.SettingsGroup {
 	cur := viewModeLabel(ViewMode(s.Mode))
 	return []components.SettingsGroup{
 		{ID: "display", Title: "显示", Items: []components.SettingsItem{
-			settingsSwitchItem("ext", "文件扩展名", "显示已知文件类型的扩展名",
+			settingsSwitchItem("ext", "文件扩展名", "",
 				func() bool { return a.store.settings().ShowExt },
 				func(v bool) { a.applySettings(func(x *appSettings) { x.ShowExt = v }) }),
-			settingsSwitchItem("hidden", "隐藏的项目", "显示隐藏的文件与文件夹",
+			settingsSwitchItem("hidden", "隐藏的项目", "",
 				func() bool { return a.store.settings().ShowHidden },
 				func(v bool) { a.applySettings(func(x *appSettings) { x.ShowHidden = v }) }),
 			settingsSwitchItem("treeexpand", "展开到打开的文件夹", "导航时侧栏树自动展开到当前文件夹",
 				func() bool { return a.store.settings().treeExpand() },
 				func(v bool) { a.applySettings(func(x *appSettings) { x.TreeExpand, x.TreeNoExpand = &v, false }) }),
-			settingsSwitchItem("checks", "项目复选框", "选择项目时显示复选框",
+			settingsSwitchItem("checks", "项目复选框", "",
 				func() bool { return a.store.settings().ItemCheckboxes },
 				func(v bool) { a.applySettings(func(x *appSettings) { x.ItemCheckboxes = v }) }),
 		}},
 		{ID: "window", Title: "窗口", Items: []components.SettingsItem{
-			settingsSwitchItem("compact", "紧凑视图", "减小列表与详细信息的行距",
+			settingsSwitchItem("compact", "紧凑视图", "",
 				func() bool { return a.store.settings().Compact },
 				func(v bool) { a.applySettings(func(x *appSettings) { x.Compact = v }) }),
-			settingsSwitchItem("preview", "预览窗格", "打开窗口时在右侧显示预览窗格",
+			settingsSwitchItem("preview", "预览窗格", "",
 				func() bool { return a.store.settings().PreviewOpen },
 				func(v bool) { a.applySettings(func(x *appSettings) { x.PreviewOpen = v }) }),
 			settingsSwitchItem("warmup", "网络位置缩略图预热", "先解码网络文件夹的前几张图片",
@@ -257,7 +273,7 @@ func (a *App) settingsViewGroups() []components.SettingsGroup {
 				func(v bool) {
 					a.applySettings(func(x *appSettings) { x.NoNetworkWarmup = !v })
 				}),
-			settingsSelectItem("mode", "默认视图", "新窗口使用的视图", cur, viewModeLabels(), func(label string) {
+			settingsSelectItem("mode", "默认视图", "", cur, viewModeLabels(), func(label string) {
 				if mode, ok := viewModeNamed(label); ok {
 					a.applySettings(func(x *appSettings) { x.Mode = int(mode) })
 				}
@@ -324,13 +340,13 @@ func (a *App) settingsTrayGroups() []components.SettingsGroup {
 	}
 	return []components.SettingsGroup{
 		{ID: "disks", Title: "磁盘信息", Items: []components.SettingsItem{
-			settingsSwitchItem("cap", "显示磁盘容量", "托盘菜单中列出每块磁盘的可用空间",
+			settingsSwitchItem("cap", "显示磁盘容量", "",
 				func() bool { return trayDiskShown(a.store.settings()).capOn },
 				func(v bool) {
 					a.applySettings(func(x *appSettings) { x.NoTrayDiskCap = !v })
 					trayRefresh()
 				}),
-			settingsSwitchItem("speed", "显示读写速度", "托盘菜单中显示磁盘的实时读写速度",
+			settingsSwitchItem("speed", "显示读写速度", "",
 				func() bool { return trayDiskShown(a.store.settings()).speedOn },
 				func(v bool) {
 					a.applySettings(func(x *appSettings) { x.NoTrayDiskSpeed = !v })
@@ -459,12 +475,12 @@ func (a *App) settingsUpdateGroups() []components.SettingsGroup {
 		return []components.SettingsGroup{{ID: "app", Items: items}}
 	}
 	items = append(items,
-		settingsSwitchItem("checks", "自动检查更新", "定期在后台检查新版本",
+		settingsSwitchItem("checks", "自动检查更新", "",
 			updater.AutomaticChecks, updater.SetAutomaticChecks),
 		settingsSwitchItem("downloads", "自动下载并安装", "后台下载并安装更新，下次启动时生效",
 			updater.AutomaticDownloads, updater.SetAutomaticDownloads),
 		components.SettingsItem{
-			ID: "check", Title: "检查更新", Description: "立即检查新版本",
+			ID: "check", Title: "检查更新",
 			Build: func(c *ui.Context) {
 				if components.Button(c, "检查更新", components.ButtonPrimary).Clicked() {
 					updater.CheckForUpdates()
@@ -481,4 +497,8 @@ func (a *App) settingsUpdateGroups() []components.SettingsGroup {
 	items = append(items, components.SettingsItem{ID: "mirrors", Title: "下载线路",
 		Description: strings.Join(updateMirrorList(), " → ")})
 	return []components.SettingsGroup{{ID: "app", Items: items}}
+}
+
+func clampF(v, lo, hi float32) float32 {
+	return min(max(v, lo), hi)
 }

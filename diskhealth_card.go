@@ -172,8 +172,12 @@ type gauge struct {
 // wear. Each maps a physical range onto 0–1, so the bars compare against
 // what the drive can actually do rather than against each other.
 func (a *App) diskGauges(c *ui.Context, d diskhealth.Disk) []gauge {
+	used := "未知" // no mounted volume reports its space
+	if d.Total > 0 && d.Free >= 0 {
+		used = fmt.Sprintf("已用 %.0f%%", d.UsedRatio()*100)
+	}
 	out := []gauge{{
-		label: "容量", value: fmt.Sprintf("已用 %.0f%%", d.UsedRatio()*100),
+		label: "容量", value: used,
 		frac: d.UsedRatio(), tone: capacityTone(c, d), note: capacityNote(d),
 	}}
 	if d.HasTemperature() {

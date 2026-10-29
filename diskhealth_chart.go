@@ -26,10 +26,7 @@ func (a *App) diskChart(c *ui.Context, d diskhealth.Disk, r diskhealth.Report) {
 		})
 		if len(samples) < 2 {
 			ui.Box(c).FillWidth().Height(96).Shrink(0).Radius(innerRadius()).
-				Background(colorContent()).Children(func() {
-				ui.Text(c, "采样中，约 3 秒后出现曲线").
-					FontSize(11).TextColor(colorMuted()).Padding(10, 10)
-			})
+				Background(colorContent())
 			return
 		}
 		data := diskChartData(samples)
@@ -122,7 +119,7 @@ func liveRateLabel(d diskhealth.Disk) string {
 	case d.ReadBytes < 0 && d.WriteBytes < 0:
 		return "该盘不提供累计读写计数"
 	case !d.RateKnown:
-		return "采样中…"
+		return ""
 	case d.ReadBps <= 0 && d.WriteBps <= 0:
 		return "空闲"
 	}

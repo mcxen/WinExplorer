@@ -676,8 +676,12 @@ func (a *App) attachRowMenu(c *ui.Context, el ui.Element, e Entry) {
 	})
 }
 
+// paneMessage is the pane's one-line notice (此文件夹为空), at the top,
+// centered across the pane as Explorer's.
 func (a *App) paneMessage(c *ui.Context, text string) {
-	ui.Text(c, text).FontSize(13).TextColor(colorMuted()).Padding(24, 16)
+	ui.Row(c).FillWidth().Padding(24, 16).Justify(ui.Center).Children(func() {
+		ui.Text(c, text).FontSize(13).TextColor(colorMuted())
+	})
 }
 
 func formatModTime(t time.Time) string {

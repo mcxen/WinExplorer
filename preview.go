@@ -42,6 +42,11 @@ type previewState struct {
 
 	// media holds audio player / video poster metadata.
 	media mediaInfo
+
+	// members is an archive's listing (previewList); membersCut says the
+	// listing stopped at previewListCap.
+	members    []previewEntry
+	membersCut bool
 }
 
 type previewKind int
@@ -55,6 +60,7 @@ const (
 	previewDoc  // PDF/other document, poster only
 	previewMeta // any file we only have properties for
 	previewHex  // an unknown binary, shown as a hex dump
+	previewList // an archive: its members, listed in the background
 )
 
 type propRow struct {
@@ -162,8 +168,26 @@ func (a *App) buildPreview(path string) *previewState {
 		return &previewState{kind: previewMeta, path: path, err: "无法读取文件"}
 	}
 	kind := kindByExt(info.IsDir(), strings.ToLower(strings.TrimPrefix(filepath.Ext(path), ".")))
+	if !info.IsDir() && isArchive(filepath.Base(path)) {
+		kind = previewList
+	}
 	st := &previewState{kind: kind, path: path}
 	st.meta = a.fileProps(path, info, kind)
+	if kind == previewList {
+		// The members are read here, off the UI thread, with the same
+		// lister the remote preview uses; a lone compressed file (.gz)
+		// shows its text, never a hex dump.
+		p := previewArchive(path)
+		switch p.Kind {
+		case "text":
+			st.kind, st.text = previewText, p.Text
+		case "archive":
+			st.members, st.membersCut, st.err = p.Entries, p.Truncated, p.Note
+		default:
+			st.err = "无法列出压缩包内容"
+		}
+		return st
+	}
 
 	switch kind {
 	case previewImage:

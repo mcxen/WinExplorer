@@ -99,6 +99,8 @@ func (a *App) previewBody(c *ui.Context, st *previewState) {
 		} else {
 			a.previewNote(c, st.err)
 		}
+	case previewList:
+		a.previewMembers(c, st)
 	case previewHex:
 		if st.text != "" {
 			a.previewNote(c, "十六进制预览（前 4 KB）")
@@ -350,4 +352,44 @@ func (a *App) previewDrawW() float32 {
 		return a.lay.prevW
 	}
 	return a.previewW
+}
+
+// previewShownMembers is how many archive members the pane lists before
+// it gives the count of the rest.
+const previewShownMembers = 40
+
+// previewMembers lists an archive's members: a type icon, the path inside
+// the archive, the size; long archives stop with the total.
+func (a *App) previewMembers(c *ui.Context, st *previewState) {
+	if len(st.members) == 0 {
+		a.previewNote(c, st.err)
+		return
+	}
+	total := itoa(len(st.members))
+	if st.membersCut {
+		total += "+"
+	}
+	a.previewNote(c, "共 "+total+" 项")
+	ui.Column(c.Key("members")).FillWidth().Gap(0).Children(func() {
+		for i, m := range st.members {
+			if i >= previewShownMembers {
+				break
+			}
+			ui.Row(c.Key("m" + itoa(i))).FillWidth().Height(24).Gap(6).AlignItems(ui.Center).Children(func() {
+				a.fileIcon(c, Entry{Name: m.Name, IsDir: m.Dir, Ext: lowerExt(m.Name)}, 16)
+				ui.Text(c, m.Name).FontSize(12).TextColor(colorText()).SingleLine().
+					Ellipsis("…").Grow(1).MinWidth(0)
+				if !m.Dir {
+					ui.Text(c, formatBytes(m.Size)).FontSize(11.5).TextColor(colorMuted()).Shrink(0)
+				}
+			})
+		}
+	})
+	if n := len(st.members) - previewShownMembers; n > 0 {
+		more := "还有 " + itoa(n) + " 项"
+		if st.membersCut {
+			more = "还有更多项"
+		}
+		a.previewNote(c, more)
+	}
 }

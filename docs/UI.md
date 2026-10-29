@@ -320,3 +320,11 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 收缩下限 | 预览 200、侧栏 140，按可让出宽度比例收缩 | `layout.go:fitPanes` |
 | 日期列 | ≥112 日期+时间；84–112 仅日期；更窄隐藏 | `files_details.go` |
 | 大小列右内边距 | 16 | `files_details.go:colEndPad` |
+
+## 预览窗格：压缩包（UI5）
+
+| 项 | 规则 |
+|---|---|
+| 内容 | 包内条目：类型图标、包内路径（单行省略）、大小（目录不显示） |
+| 数量 | 顶部「共 N 项」，最多列 40 条，其余以「还有 N 项」结尾；超过 200 条显示「200+」 |
+| 读取 | 后台 buildPreview，不显示 hex |

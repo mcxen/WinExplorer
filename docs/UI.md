@@ -310,3 +310,13 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 设置 → 日志：日志级别（error / warn / info / debug）下拉；“打开日志文件夹”；“导出日志 (zip)”，导出到下载文件夹并选中，结果显示在该行说明里。
 - 助手面板出错行下方有“查看日志”链接，打开当前日志文件（失败则打开文件夹）。
 - 详见 `docs/specs/12-logging.md`。
+
+## 窄窗口（UI5）
+
+| 项 | 数值 | 位置 |
+| --- | --- | --- |
+| 文件列表最小宽 | 360 | `layout.go:fileMinW` |
+| 自动收起预览窗格 | 窗口 <900（仅显示） | `layout.go:previewAutoW` |
+| 收缩下限 | 预览 200、侧栏 140，按可让出宽度比例收缩 | `layout.go:fitPanes` |
+| 日期列 | ≥112 日期+时间；84–112 仅日期；更窄隐藏 | `files_details.go` |
+| 大小列右内边距 | 16 | `files_details.go:colEndPad` |

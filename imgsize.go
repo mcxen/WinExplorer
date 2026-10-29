@@ -103,3 +103,17 @@ func isStdlibImage(path string) bool {
 	ext := strings.ToLower(strings.TrimPrefix(path[strings.LastIndexByte(path, '.')+1:], "."))
 	return stdlibImageExts[ext]
 }
+
+// imageDims reads an image's pixel size from its header (no decode).
+func imageDims(path string) (w, h int, ok bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil || cfg.Width <= 0 {
+		return 0, 0, false
+	}
+	return cfg.Width, cfg.Height, true
+}

@@ -19,4 +19,8 @@ type Entry struct {
 	// VolFree/VolTotal carry a drive's capacity for the 此电脑 page's
 	// usage bars; zero otherwise.
 	VolFree, VolTotal int64
+	// Link marks a symbolic link (drawn with the shortcut badge); NoSize a
+	// file whose length is not its content — a device, a pipe, a /proc or
+	// /sys pseudo-file — whose 大小 cell stays blank.
+	Link, NoSize bool
 }

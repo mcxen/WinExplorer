@@ -54,9 +54,10 @@ func TestSizeColumnText(t *testing.T) {
 	}{
 		{"file", Entry{Path: "/sizes-ui/a.txt", Size: 2048}, "2.0 KB"},
 		{"empty file", Entry{Path: "/sizes-ui/b.txt"}, "0 B"},
-		{"cached folder", Entry{Path: cached, IsDir: true}, "1.2 KB"},
+		{"cached folder", Entry{Path: cached, IsDir: true}, ""},
 		{"cached empty folder", Entry{Path: empty, IsDir: true}, ""},
-		{"folder being walked", Entry{Path: busy, IsDir: true}, "…"},
+		{"folder being walked", Entry{Path: busy, IsDir: true}, ""},
+		{"proc file", Entry{Path: "/proc/kcore", Size: 1 << 47, NoSize: true}, ""},
 		{"folder not yet walked", Entry{Path: "/sizes-ui/unknown", IsDir: true}, ""},
 	}
 	for _, tc := range cases {

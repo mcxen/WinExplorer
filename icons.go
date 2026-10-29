@@ -29,6 +29,20 @@ func (a *App) fileIcon(c *ui.Context, e Entry, px float32) {
 		default:
 			drawFileSheet(p, r, fileTint(e.Ext), colorText())
 		}
+	}).Children(func() {
+		if e.Link {
+			linkBadge(c, px)
+		}
+	})
+}
+
+// linkBadge is the shortcut overlay on a symbolic link's icon: a small
+// white box with an arrow at the bottom-left corner, as Explorer's.
+func linkBadge(c *ui.Context, px float32) {
+	s := max(8, px*0.45)
+	ui.Box(c.Key("link")).Absolute().Left(0).Bottom(0).Size(s, s).Radius(2).
+		Background(ui.Hex("#FFFFFF")).Border(1, ui.RGBA(0, 0, 0, 0.25)).Center().Children(func() {
+		components.Icon(c, lucide.ArrowUpRight).Size(s-2, s-2).TextColor(ui.Hex("#1A5FB4"))
 	})
 }
 

@@ -55,6 +55,8 @@ func (l localLister) List(dir string) ([]Entry, error) {
 			return
 		}
 		e.ModTime = info.ModTime()
+		e.Link = info.Mode()&os.ModeSymlink != 0
+		e.NoSize = !e.Link && !info.Mode().IsRegular() || virtualFSPath(e.Path)
 		if !e.IsDir && info.Mode()&os.ModeSymlink != 0 {
 			if st, err := os.Stat(e.Path); err == nil && st.IsDir() {
 				e.IsDir = true
@@ -84,4 +86,15 @@ func (l localLister) List(dir string) ([]Entry, error) {
 // mount, the serial one on a local disk.
 func entryLister(dir string) lister {
 	return localLister{parallel: netfs.IsNetworkPath(dir)}
+}
+
+// virtualFSPath reports a path under Linux's pseudo filesystems, whose files
+// report sizes that are not their content (/proc/kcore reads 128 TB).
+func virtualFSPath(p string) bool {
+	for _, root := range []string{"/proc", "/sys"} {
+		if p == root || strings.HasPrefix(p, root+"/") {
+			return true
+		}
+	}
+	return false
 }

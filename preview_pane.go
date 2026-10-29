@@ -20,12 +20,16 @@ import (
 // empty-pane hint.
 func (a *App) previewPane(c *ui.Context) {
 	st := a.preview.Load()
-	pane := ui.Column(c).Width(a.previewW-previewGapR).FillHeight().Shrink(0).
+	pane := ui.Column(c).Width(a.previewDrawW()-previewGapR).FillHeight().Shrink(0).
 		Margin(0, previewGapR, 0, 0).
 		Background(colorContent()).Clip()
 	pane.Children(func() {
 		a.previewResizeHandle(c)
 		ui.Scroll(c).Grow(1).FillWidth().Padding(12, 12, 12, 12).Gap(10).Children(func() {
+			if n := len(a.cur().selected); n > 1 && a.quickLookFile == "" {
+				a.previewMulti(c)
+				return
+			}
 			if st == nil || st.kind == previewNone {
 				a.previewEmpty(c)
 				return
@@ -34,6 +38,29 @@ func (a *App) previewPane(c *ui.Context) {
 			a.previewBody(c, st)
 			a.previewProps(c, st)
 		})
+	})
+}
+
+// previewMulti is the pane for a multiple selection: the count and the
+// total size of what is known (files, and folders with a cached tally).
+func (a *App) previewMulti(c *ui.Context) {
+	sel := a.selectedEntries()
+	var total int64
+	for _, e := range sel {
+		switch {
+		case !e.IsDir && !e.NoSize:
+			total += e.Size
+		case e.IsDir:
+			if st, ok := lookupDirStat(e.Path); ok {
+				total += st.Size
+			}
+		}
+	}
+	col := ui.Column(c).FillWidth().Gap(4).AlignItems(ui.Center).Padding(40, 0, 0, 0)
+	col.Children(func() {
+		components.Icon(c, lucide.Files).Size(44, 44).TextColor(colorMuted().Alpha(0.6))
+		ui.Text(c, "已选 "+itoa(len(sel))+" 项").FontSize(14).FontWeight(600).TextColor(colorText())
+		ui.Text(c, "共 "+formatBytes(total)).FontSize(12).TextColor(colorMuted())
 	})
 }
 
@@ -314,4 +341,13 @@ func baseName(path string) string {
 		return ""
 	}
 	return filepath.Base(path)
+}
+
+// previewDrawW is the preview's drawn width: the user's, unless a narrow
+// window squeezes it (layout.go).
+func (a *App) previewDrawW() float32 {
+	if a.lay.prevW > 0 {
+		return a.lay.prevW
+	}
+	return a.previewW
 }

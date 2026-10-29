@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
@@ -31,7 +32,9 @@ func (a *App) detailsView(c *ui.Context, entries []Entry) {
 	searching := strings.TrimSpace(a.cur().query) != ""
 	head.Children(func() {
 		a.headerCell(c, "名称", SortName, a.nameColW(), a.colWidths.name <= 0, &a.colWidths.name)
-		a.headerCell(c, "修改日期", SortDate, a.dateColW(), false, &a.colWidths.date)
+		if a.dateColW() > 0 {
+			a.headerCell(c, "修改日期", SortDate, a.dateColW(), false, &a.colWidths.date)
+		}
 		if searching {
 			a.headerCell(c, "位置", SortType, a.locColW(), false, &a.colWidths.loc)
 		} else {
@@ -98,9 +101,22 @@ func (a *App) typColW() float32  { _, _, t := a.fittedCols(); return t }
 // "2026/10/20 19:48" and for a short type name.
 const (
 	colNameFitMin float32 = 120
-	colDateFitMin float32 = 112
+	colDateFitMin float32 = 84 // "2026/10/20": the short form
+	colDateFullW  float32 = 112
 	colTypeFitMin float32 = 80
+	// colEndPad keeps the right-aligned 大小 off the row's edge and the
+	// scrollbar.
+	colEndPad float32 = 16
 )
+
+// formatModTimeFit is the 修改日期 cell for a column w wide: date and time,
+// or the date alone once the column is squeezed under colDateFullW.
+func formatModTimeFit(t time.Time, w float32) string {
+	if t.IsZero() || w >= colDateFullW {
+		return formatModTime(t)
+	}
+	return t.Format("2006/1/2")
+}
 
 // fittedCols is the 名称, 修改日期 and 类型 widths for the pane the details
 // view laid out in last frame. When the pane is narrower than the row (the
@@ -126,6 +142,11 @@ func (a *App) fittedCols() (name, date, typ float32) {
 		over -= cut
 	}
 	date, typ = squeezeCols(over, date, typ, a.colWidths.date <= 0, a.colWidths.typ <= 0)
+	if a.colWidths.date <= 0 && over > (colDateW-date)+(colW(a.colWidths.typ, colTypeW)-typ) {
+		// Still no room at the floors: the date column goes, as Explorer
+		// drops columns rather than cut 大小 off.
+		date = 0
+	}
 	return name, date, typ
 }
 
@@ -185,13 +206,13 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 		AlignItems(ui.Center).Radius(4).Label(title)
 	// A button centers its content; the labels sit where their cells'
 	// text starts, as Explorer's do: 大小 at the end, the rest at the start.
-	cell.Justify(ui.Start)
+	cell.Justify(ui.Start).Clip()
 	if flex {
 		cell.Grow(1).Shrink(1).MinWidth(colNameMin)
 	} else {
 		cell.Width(width).Shrink(0)
 		if key == SortSize {
-			cell.Justify(ui.End)
+			cell.Justify(ui.End).Padding(0, colEndPad, 0, 8)
 		}
 	}
 	if cell.Hovered() {
@@ -199,7 +220,7 @@ func (a *App) headerCell(c *ui.Context, title string, key SortKey, width float32
 	}
 	cell.Children(func() {
 		label := ui.Text(c, title).FontSize(12).TextColor(colorMuted()).
-			SingleLine().FontWeight(600)
+			SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).FontWeight(600)
 		if key == SortSize {
 			label.TextAlign(ui.End)
 		}
@@ -290,7 +311,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 		name.Children(func() {
 			a.nameCell(c, e, 16, 12)
 		})
-		a.detailText(c, formatModTime(e.ModTime), a.dateColW(), false)
+		a.detailText(c, formatModTimeFit(e.ModTime, a.dateColW()), a.dateColW(), false)
 		if searching {
 			a.detailText(c, searchLocationText(e, a.cur().path, homeForSearch()), a.locColW(), false)
 		} else {
@@ -306,26 +327,14 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 	a.attachRowMenu(c, row, e)
 }
 
-// sizeColumnText is the 大小 column's cell: a file's own bytes, and a
-// folder's tally from the background engine (sizes.go) — 0 B for a cached
-// empty folder, "…" while its walk is queued or running, and blank until
-// one is known.
+// sizeColumnText is the 大小 column's cell: a file's own bytes. A folder's
+// cell stays blank, as Explorer's does (its tally shows in the status bar
+// and the preview), and so does a pseudo-file's (/proc, devices).
 func sizeColumnText(e Entry) string {
-	if !e.IsDir {
-		return formatBytes(e.Size)
+	if e.IsDir || e.NoSize {
+		return ""
 	}
-	if st, ok := lookupDirStat(e.Path); ok {
-		// An empty folder's 0 B reads like a file that lost its data;
-		// Explorer leaves the cell blank.
-		if st.Size == 0 {
-			return ""
-		}
-		return formatBytes(st.Size)
-	}
-	if dirStatInProgress(e.Path) {
-		return "…"
-	}
-	return ""
+	return formatBytes(e.Size)
 }
 
 // driveCapCell is the 此电脑 page's drive usage cell: a slim capacity bar
@@ -380,13 +389,18 @@ func drawCapacityBar(p *ui.Painter, r ui.Rect, free, total int64) {
 }
 
 func (a *App) detailText(c *ui.Context, text string, width float32, end bool) {
+	if width <= 0 {
+		return // a column the pane has no room for
+	}
 	cell := ui.Row(c).Width(width).Shrink(0).Height(a.detailsRowH()).
-		Padding(0, 8).AlignItems(ui.Center)
+		Padding(0, 8).AlignItems(ui.Center).Clip()
 	if end {
-		cell.Justify(ui.End)
+		cell.Justify(ui.End).Padding(0, colEndPad, 0, 8)
 	}
 	cell.Children(func() {
-		label := ui.Text(c, text).FontSize(12).TextColor(colorText()).SingleLine()
+		// Cut text ends in an ellipsis, never mid-glyph.
+		label := ui.Text(c, text).FontSize(12).TextColor(colorText()).SingleLine().
+			Ellipsis("…").Shrink(1).MinWidth(0)
 		if end {
 			label.TextAlign(ui.End)
 		}

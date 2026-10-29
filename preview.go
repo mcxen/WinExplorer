@@ -167,6 +167,11 @@ func (a *App) buildPreview(path string) *previewState {
 
 	switch kind {
 	case previewImage:
+		// The resolution comes from the header, read here off the UI
+		// thread with the rest of the load.
+		if w, h, ok := imageDims(path); ok {
+			st.meta = append(st.meta, propRow{Key: "分辨率", Val: fmt.Sprintf("%d × %d", w, h)})
+		}
 		if b, e := decodeImage(path); e == nil {
 			st.bitmap = b
 		} else {

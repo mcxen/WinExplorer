@@ -30,7 +30,7 @@ func TestSqueezeCols(t *testing.T) {
 	}{
 		{-10, colDateW, colTypeW, true, colDateW, colTypeW},
 		{30, colDateW, colTypeW, true, colDateW - 30, colTypeW},
-		{80, colDateW, colTypeW, true, colDateFitMin, colTypeW - (80 - (colDateW - colDateFitMin))},
+		{100, colDateW, colTypeW, true, colDateFitMin, colTypeW - (100 - (colDateW - colDateFitMin))},
 		{1000, colDateW, colTypeW, true, colDateFitMin, colTypeFitMin},
 		{100, 150, 140, false, 150, 140}, // dragged widths are the user's
 	}

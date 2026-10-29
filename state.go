@@ -110,8 +110,8 @@ type marqueeState struct {
 // fields are reached through cur() so the rest of the code reads a.path as
 // before.
 type App struct {
-	fly flyState // the command bar's open flyout (menuflyout.go)
-	ctx ctxMenuState // the open right-click flyout (menuctx.go)
+	fly     flyState     // the command bar's open flyout (menuflyout.go)
+	ctx     ctxMenuState // the open right-click flyout (menuctx.go)
 	flyRoot []*menuEntry // the open flyout's rows, as last drawn
 	flyPick []string     // a row to run in the next frame, by label path (tests)
 
@@ -168,8 +168,9 @@ type App struct {
 	sysClipBusy atomic.Bool
 
 	navWidth    float32
-	previewOpen bool    // Windows preview pane toggle
-	previewW    float32 // pane width, 220–460
+	lay         paneLayout // this frame's drawn pane widths (layout.go)
+	previewOpen bool       // Windows preview pane toggle
+	previewW    float32    // pane width, 220–460
 	// assistantOpen is the right-hand AI pane (assistant.go).
 	assistantOpen bool
 	assist        assistantUI

@@ -404,12 +404,26 @@ func (a *App) bodyRow(c *ui.Context) {
 	// (navMaxWidth). The split spans the window, so its width is the window's,
 	// and the one DIP its divider takes comes off the room the panes share.
 	w, _ := c.Size()
+	assist := float32(0)
+	if a.assistantOpen && !a.assist.full {
+		assist = a.assist.width
+	}
+	a.lay = fitPanes(w, a.navWidth, a.previewW, assist, a.previewOpen)
 	secondMin := max(float32(navContentMin), w-1-navMaxWidth)
-	split := components.Split(c, &a.navWidth,
+	firstMin := navMinWidth
+	if a.lay.navW < navMinWidth {
+		// A squeezed sidebar: the window, not the user, narrowed it.
+		firstMin, secondMin = a.lay.navW, min(secondMin, fileMinW)
+	}
+	drawn := a.lay.navW
+	split := components.Split(c, &drawn,
 		func() { a.sidebar(c) },
 		func() { a.contentPanes(c) },
-		components.SplitOptions{FirstMin: navMinWidth, SecondMin: secondMin})
-	a.navWidth = clampNavWidth(a.navWidth)
+		components.SplitOptions{FirstMin: firstMin, SecondMin: secondMin})
+	if drawn != a.lay.navW {
+		// The divider moved: that is the user's width.
+		a.navWidth = clampNavWidth(drawn)
+	}
 	split.Grow(1).FillWidth()
 }
 
@@ -438,7 +452,7 @@ func (a *App) contentPanes(c *ui.Context) {
 func (a *App) contentRow(c *ui.Context, row ui.Element) {
 	row.Children(func() {
 		a.flipPane(c)
-		if a.previewOpen {
+		if a.lay.prevShown {
 			a.previewPane(c)
 		}
 		if a.assistantOpen {

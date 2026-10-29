@@ -52,9 +52,22 @@ func registerRemotePlugin() {
 		OnDisable: func(a *App) { a.remoteStop() },
 		Settings: func(a *App) []PluginSetting {
 			conf := a.remoteConf()
+			state := "已停止"
+			if conf.Enabled {
+				state = "正在启动"
+			}
+			if remoteServerRunning() {
+				state = "运行中"
+			}
 			return []PluginSetting{
+				{Kind: PluginSettingInfo, Name: "状态", Value: state},
 				{Kind: PluginSettingInfo, Name: "账号", Value: conf.Username},
 				{Kind: PluginSettingInfo, Name: "端口", Value: strconv.Itoa(conf.Port)},
+				{
+					Kind: PluginSettingAction, Name: "远程服务",
+					Action: map[bool]string{true: "停止", false: "连接"}[conf.Enabled],
+					Run:    a.remoteToggle,
+				},
 				{
 					Kind:   PluginSettingAction,
 					Name:   "复制远程地址",

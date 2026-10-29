@@ -75,7 +75,7 @@ func (a *App) assistantModelPicker(c *ui.Context) {
 	p, ok := a.assist.activeProvider()
 	label := "选择模型"
 	if ok && p.Model != "" {
-		label = p.Model
+		label = shortModelName(p.Model, a.assistComposerNarrow())
 	}
 	if !ok {
 		if chat.Chip(c, label, chat.ChipOptions{Icon: lucide.Bot, Caret: true}).Clicked() {
@@ -192,4 +192,22 @@ func (a *App) ensureProviderModels(p aiProvider) {
 
 func fetchProviderModels(ctx context.Context, p aiProvider) ([]string, error) {
 	return assistant.FetchProviderModels(ctx, p)
+}
+
+// shortModelName is the composer chip's model label: the name after any
+// vendor prefix ("org/model"), cut with an ellipsis so the chip never
+// pushes the toolbar's other controls over each other.
+func shortModelName(model string, narrow bool) string {
+	if i := strings.LastIndex(model, "/"); i >= 0 && i < len(model)-1 {
+		model = model[i+1:]
+	}
+	limit := 22
+	if narrow {
+		limit = 12
+	}
+	r := []rune(model)
+	if len(r) <= limit {
+		return model
+	}
+	return string(r[:limit-1]) + "…"
 }

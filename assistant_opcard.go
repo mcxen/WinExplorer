@@ -410,14 +410,15 @@ func (a *App) assistContextBar(c *ui.Context) {
 		return
 	}
 	name := filepath.Base(tab.path)
-	if name == "" || name == "." || name == string(filepath.Separator) {
-		name = tab.path
+	if name == "" || name == "." || name == string(filepath.Separator) || filepath.Dir(tab.path) == tab.path {
+		// A root has no name of its own: show its path (/, C:\).
+		name = pathDisplay(tab.path)
 	}
 	row := ui.Row(c.Key("assist-ctx")).FillWidth().MinWidth(0).Padding(0, 6).Height(22).Gap(6).AlignItems(ui.Center)
 	row.Children(func() {
 		components.Icon(c, lucide.Folder).Size(13, 13).TextColor(colorFolder()).Shrink(0)
 		ui.Text(c, "当前目录").FontSize(11).TextColor(colorMuted()).Shrink(0)
-		ui.Text(c, name).FontSize(11.5).FontWeight(600).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(0).Shrink(1)
+		ui.Text(c, name).FontSize(11.5).FontWeight(600).TextColor(colorText()).SingleLine().Ellipsis("…").MinWidth(min(float32(len(name))*7, 48)).Shrink(1)
 		meta := itoa(len(a.visibleEntries())) + " 个项目"
 		if n := len(a.selectedEntries()); n > 0 {
 			meta += " · 已选择 " + itoa(n) + " 个"
@@ -507,44 +508,28 @@ func (u *assistantUI) gateDemo(id string, rest []demoBeat) {
 	u.demoAfter[id] = rest
 }
 
-// assistantEmpty is the blank conversation: who the assistant is, what it
-// can do to files, and one example per kind of file work. An example fills
-// the box rather than sending, so the request is still read before 发送.
+// assistantEmpty is the blank conversation: the header already names it,
+// so it shows only a few compact examples. An example fills the box rather
+// than sending, so the request is still read before 发送.
 func (a *App) assistantEmpty(c *ui.Context) {
-	ui.Column(c).FillWidth().Padding(28, 4, 12, 4).Gap(6).Children(func() {
-		ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(32, 32).Radius(16).Shrink(0).Center().Background(colorAccent().Alpha(0.14)).Children(func() {
-				components.Icon(c, lucide.Bot).Size(18, 18).TextColor(colorAccent())
-			})
-			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-				ui.Text(c, "晴谷助手").FontSize(18).FontWeight(600).TextColor(colorText())
-				hint := "新建、修改、重命名、归类、删除文件，也能读内容做总结。"
-				if assistDemoOn() {
-					hint = "演示模式：离线运行，操作在临时文件夹里进行。"
-				}
-				ui.Text(c, hint).FontSize(12).TextColor(colorMuted()).Wrap()
-			})
-		})
-		ui.Text(c, "试试这样问").FontSize(11).FontWeight(600).TextColor(colorMuted()).Padding(14, 0, 2, 0)
+	ui.Column(c).FillWidth().Padding(16, 4, 12, 4).Gap(2).Children(func() {
+		if assistDemoOn() {
+			ui.Text(c, "演示模式：离线运行，操作在临时文件夹里进行。").FontSize(12).
+				TextColor(colorMuted()).Wrap().Padding(0, 6, 6, 6)
+		}
 		for _, s := range assistStarters {
-			card := ui.ButtonBase(c.Key("starter-"+s.title)).FillWidth().Radius(8).
-				Padding(8, 10).Gap(10).AlignItems(ui.Center).Label(s.title)
-			card.Border(1, colorDivider()).Background(colorAddress())
-			if card.Hovered() {
-				card.Background(colorHover())
+			row := ui.ButtonBase(c.Key("starter-"+s.title)).FillWidth().Height(30).Radius(innerRadius()).
+				Padding(0, 6).Gap(8).AlignItems(ui.Center).Label(s.title)
+			if row.Hovered() {
+				row.Background(colorHover())
 			}
-			card.Children(func() {
-				ui.Box(c).Size(26, 26).Radius(innerRadius()).Shrink(0).Center().Background(colorAccent().Alpha(0.1)).Children(func() {
-					components.Icon(c, s.icon).Size(14, 14).TextColor(colorAccent())
-				})
-				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-					ui.Text(c, s.title).FontSize(12.5).FontWeight(600).TextColor(colorText()).SingleLine()
-					ui.Text(c, "“"+s.fill+"”").FontSize(11).TextColor(colorMuted()).SingleLine().Ellipsis("…")
-				})
-				components.Icon(c, lucide.CornerDownLeft).Size(14, 14).TextColor(colorMuted()).Shrink(0)
+			row.Children(func() {
+				components.Icon(c, s.icon).Size(14, 14).TextColor(colorAccent()).Shrink(0)
+				ui.Text(c, s.fill).FontSize(12).TextColor(colorText()).SingleLine().Ellipsis("…").
+					Grow(1).MinWidth(0)
 			})
-			components.Tooltip(c, card, s.hint)
-			if card.Clicked() {
+			components.Tooltip(c, row, s.hint)
+			if row.Clicked() {
 				a.assist.draft = s.fill
 			}
 		}

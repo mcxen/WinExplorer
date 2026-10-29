@@ -194,7 +194,22 @@ func (a *App) requestComposerFocus() {
 
 // assistHistAutoW is the narrowest pane the history column opens in by
 // itself: below it the column would leave the composer a sliver.
-const assistHistAutoW = 560
+const assistHistAutoW = 520
+
+// assistComposerNarrowW is the pane width under which the composer's
+// secondary controls fold into an overflow menu.
+const assistComposerNarrowW = 460
+
+// assistComposerNarrow reports a pane too narrow for the full toolbar.
+func (a *App) assistComposerNarrow() bool {
+	return !a.assist.full && a.assist.width < assistComposerNarrowW
+}
+
+// assistHistShown is whether the history column draws: the user's choice,
+// except that a pane under assistHistAutoW folds it away (display only).
+func (a *App) assistHistShown() bool {
+	return a.assist.showHist && (a.assist.full || a.assist.width >= assistHistAutoW)
+}
 
 func (a *App) assistantPane(c *ui.Context) {
 	a.assist.ensure()
@@ -225,7 +240,7 @@ func (a *App) assistantPane(c *ui.Context) {
 			// pushes the composer away.
 			below := ui.Row(c).Grow(1).FillWidth().MinHeight(0).MinWidth(0)
 			below.Children(func() {
-				if a.assist.showHist {
+				if a.assistHistShown() {
 					// Full screen gives the column its full width; a narrow pane
 					// keeps the conversation's room and shrinks the list instead.
 					histW := a.assist.histWidth()
@@ -303,6 +318,24 @@ func (a *App) assistantComposer(c *ui.Context) {
 			Trailing:     a.assistantComposerTrailing,
 			Accessory: func(c *ui.Context) {
 				a.assistantModelPicker(c)
+				if a.assistComposerNarrow() {
+					// A narrow pane folds the secondary controls into one
+					// overflow so nothing in the toolbar overlaps.
+					more := chat.IconAction(c, "更多选项", lucide.Ellipsis)
+					a.menuButton(c, more, false, func(m *xMenu) {
+						if m.Item("全托管").Checked(a.assist.autopilot).Chosen() {
+							a.assist.autopilot = !a.assist.autopilot
+						}
+						m.Separator()
+						if m.Item("指定文件").Icon(lucide.Paperclip).Chosen() {
+							a.assistantPickFiles()
+						}
+						if m.Item("带上选中").Icon(lucide.ListChecks).Chosen() {
+							a.assistantAttachSelection()
+						}
+					})
+					return
+				}
 				chat.SwitchChip(c, &a.assist.autopilot, "全托管")
 				if chat.IconAction(c, "指定文件", lucide.Paperclip).Clicked() {
 					a.assistantPickFiles()
@@ -463,8 +496,8 @@ func (a *App) clampAssistWidth(c *ui.Context, w float32) float32 {
 		return w
 	}
 	room := winW - a.navWidth - 16
-	if a.previewOpen {
-		room -= a.previewW
+	if a.lay.prevShown {
+		room -= a.previewDrawW()
 	}
 	maxW := room - 160
 	if maxW < assistantMinW {

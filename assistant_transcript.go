@@ -25,10 +25,7 @@ type assistStarter struct {
 
 var assistStarters = []assistStarter{
 	{lucide.FilePlus, "新建文件", "新建一个周报草稿", "写好标题和小节，先预览再落盘"},
-	{lucide.FilePen, "修改文件内容", "把会议纪要里的时间修改为周五下午三点", "改动以对比形式列出，可撤销"},
 	{lucide.FolderInput, "重命名并归类", "把 IMG_0001.jpg 按拍摄日期重命名并归类到图片文件夹", "多步计划逐项执行"},
-	{lucide.Trash, "删除临时文件", "删除所有临时文件", "删除前先确认，移到回收站后仍可撤销"},
-	{lucide.Layers, "批量操作", "批量给所有 txt 笔记加上日期前缀", "显示进度，整批一次撤销"},
 	{lucide.FileText, "读内容做总结", "总结一下这个文件夹里的文档", "读取文档后给出要点"},
 }
 
@@ -291,6 +288,12 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 					ui.Column(c.Key("md")).FillWidth().MinWidth(0).Children(func() {
 						a.assistMarkdown(c, paint, final, replies, streaming)
 					})
+					if !streaming {
+						// 复制 sits right under the reply it copies.
+						ui.Row(c.Key("md-copy")).Margin(-2, 0, 0, -4).Children(func() {
+							a.assistCopyButton(c, "copy-a-"+itoa(key), final)
+						})
+					}
 				}
 				if ownWorking != "" {
 					ui.Row(c.Key("own-working")).Height(22).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -299,9 +302,6 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 					})
 				}
 			})
-		}
-		if final != "" && !streaming {
-			actions = func(c *ui.Context) { a.assistCopyButton(c, "copy-a-"+itoa(key), final) }
 		}
 	}
 	summary := assistSummary(len(tools))

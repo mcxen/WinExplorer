@@ -109,7 +109,7 @@ func TestDragOntoAssistantAttaches(t *testing.T) {
 	if len(a.assist.files) != 0 {
 		t.Fatalf("header took the drop: %+v", a.assist.files)
 	}
-	dragTo("晴谷助手")
+	dragTo(assistStarters[1].fill)
 	if len(a.assist.files) != 1 || a.assist.files[0].Path != note {
 		t.Fatalf("transcript drop: %+v", a.assist.files)
 	}

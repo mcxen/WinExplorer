@@ -40,6 +40,7 @@
 
 | ID | 标题 | 优先级 | 状态 | 规格 | 依赖 | 分支 |
 | --- | --- | --- | --- | --- | --- | --- |
+| ARCH-FOLDER | 压缩包按文件夹浏览：双击进入只读文件夹、面包屑/前进后退、预览、复制即解压、「解压到…」 | 高 | 已完成 | [20](docs/specs/20-archive-folder.md) | — | `feat/pi-r1-archive-folder` |
 | F8 | 关闭后再次启动不弹出窗口（单实例转发需确认、残留锁接管、macOS 重新激活） | 高 | 已完成 | [19](docs/specs/19-single-instance.md) | — | `fix/reopen-window` |
 | F6 | gofmt gifplay.go | 高 | 已完成 | 本文 | — | `chore/gofmt-gifplay` |
 | F7 | 修复 CI 圈选测试偶发失败（全局 AI 动效隔离） | 高 | 已完成 | 本文 | — | `fix/marquee-flake` |

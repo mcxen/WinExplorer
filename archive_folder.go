@@ -412,7 +412,15 @@ func extractArchiveEntry(arc, inner, destDir string) (string, error) {
 		if copyErr != nil {
 			return copyErr
 		}
-		return closeErr
+		if closeErr != nil {
+			return closeErr
+		}
+		// Keep the member's own date: copies and the preview's 修改日期
+		// should show the archive's time, not the moment of extraction.
+		if mt := info.ModTime(); !mt.IsZero() {
+			_ = os.Chtimes(target, mt, mt)
+		}
+		return nil
 	})
 	if err != nil {
 		return "", err
@@ -447,18 +455,12 @@ var (
 // The answer is cached per path: the command bar asks every frame, and an
 // archiveSplit there would stat the path's prefixes each time.
 func (a *App) inArchive() bool {
+	// Called while the view is built: only the cache reload filled in is
+	// read here, never the disk (viewguard.go).
 	p := filepath.Clean(a.cur().path)
 	archiveInMu.Lock()
-	if v, ok := archiveInSeen[p]; ok {
-		archiveInMu.Unlock()
-		return v
-	}
-	archiveInMu.Unlock()
-	_, _, ok := archiveSplit(p)
-	archiveInMu.Lock()
-	archiveInSeen[p] = ok
-	archiveInMu.Unlock()
-	return ok
+	defer archiveInMu.Unlock()
+	return archiveInSeen[p]
 }
 
 // pathInArchive is the path form used for destination checks.

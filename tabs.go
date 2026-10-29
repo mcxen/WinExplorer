@@ -172,6 +172,7 @@ func (a *App) reload() {
 		diskhealth.Refresh()
 		return
 	}
+	pathInArchive(t.path) // fills the cache inArchive reads during view
 	entries, err := entryLister(t.path).List(t.path)
 	if err != nil {
 		t.entries = nil

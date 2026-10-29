@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/oneo-me/onevra/source/components/chat"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -98,41 +100,74 @@ func (a *App) settingsAssistantMCPGroup() components.SettingsGroup {
 	tools := sunvaleBuiltinToolNames()
 	toolDesc := fmt.Sprintf("共 %d 个工具：%s", len(tools), strings.Join(tools, "、"))
 	items := []components.SettingsItem{{
-		ID: "mcp-local", Title: "进程内 MCP",
-		Description: "名称 sunvale。助手与 A2A 共用这一份工具注册表。",
-		Keywords:    []string{"MCP", "sunvale", "工具"},
-		Stacked:     true,
+		ID: "mcp-local", Title: "进程内 MCP", Description: "运行中",
+		Keywords: []string{"MCP", "sunvale", "工具"}, Stacked: true,
 		Build: func(c *ui.Context) {
 			ui.Text(c, toolDesc).FontSize(11).TextColor(colorMuted()).Wrap()
 		},
 	}}
-	if a.pluginEnabled(remotePluginID) {
-		url := strings.TrimSuffix(a.remoteLANURL(), "/") + "/mcp"
-		hint := "远程访问插件已启用时，外部客户端可使用 Streamable HTTP MCP（需管理员令牌）。"
-		if !a.remoteConf().Enabled {
-			hint += " 服务未开启时请先在命令栏打开远程访问。"
-		}
-		items = append(items, components.SettingsItem{
-			ID: "mcp-remote", Title: "远程 MCP", Description: hint,
-			Keywords: []string{"MCP", "远程", "HTTP"},
-			Stacked:  true,
-			Build: func(c *ui.Context) {
-				ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, url).FontSize(12).TextColor(colorText()).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-					if components.Button(c, "复制", components.ButtonSecondary).Clicked() {
-						mygo.Clipboard.WriteText(url)
-						a.statusMsg = "已复制远程 MCP 地址"
-					}
-				})
-			},
-		})
-	} else {
-		items = append(items, components.SettingsItem{
-			ID: "mcp-remote-off", Title: "远程 MCP",
-			Description: "启用「远程访问」插件并开启服务后，这里会显示 MCP 地址。",
-		})
+	pluginOn := a.pluginEnabled(remotePluginID)
+	running := pluginOn && a.remoteConf().Enabled && remoteServerRunning()
+	state := "未启用"
+	if pluginOn && a.remoteConf().Enabled {
+		state = "正在启动"
 	}
+	if running {
+		state = "运行中"
+	}
+	items = append(items, components.SettingsItem{
+		ID: "mcp-remote", Title: "远程 MCP", Description: state,
+		Keywords: []string{"MCP", "远程", "HTTP"}, Stacked: true,
+		Build: func(c *ui.Context) {
+			url := strings.TrimSuffix(a.remoteLANURL(), "/") + "/mcp"
+			ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, url).FontSize(12).TextColor(colorText()).SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Selectable()
+				if components.Button(c, "复制", components.ButtonSecondary).Clicked() {
+					mygo.Clipboard.WriteText(url)
+					a.statusMsg = "已复制远程 MCP 地址"
+				}
+				label := "测试"
+				if a.settingsAssist.mcpTesting {
+					label = "测试中"
+				}
+				if components.Button(c, label, components.ButtonSecondary).Disabled(!running || a.settingsAssist.mcpTesting).Clicked() {
+					a.testRemoteMCP(url)
+				}
+			})
+			if a.settingsAssist.mcpStatus != "" {
+				ui.Text(c, a.settingsAssist.mcpStatus).FontSize(11).TextColor(c.Theme().Success).Selectable()
+			}
+			if a.settingsAssist.mcpError != "" {
+				ui.Text(c, a.settingsAssist.mcpError).FontSize(11).TextColor(c.Theme().Danger).Wrap().Selectable()
+			}
+		},
+	})
 	return components.SettingsGroup{ID: "mcp", Title: "MCP", Items: items}
+}
+
+func remoteServerRunning() bool {
+	remoteSrvMu.Lock()
+	defer remoteSrvMu.Unlock()
+	return remoteSrv != nil
+}
+
+func (a *App) testRemoteMCP(url string) {
+	a.settingsAssist.mcpTesting = true
+	a.settingsAssist.mcpStatus, a.settingsAssist.mcpError = "", ""
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		count, err := probeRemoteMCP(ctx, url, a.remoteConf().Token)
+		mygo.RunOnMain(func() {
+			a.settingsAssist.mcpTesting = false
+			if err != nil {
+				a.settingsAssist.mcpError = err.Error()
+			} else {
+				a.settingsAssist.mcpStatus = fmt.Sprintf("连接正常，%d 个工具", count)
+			}
+			repaint()
+		})
+	}()
 }
 
 func (a *App) settingsAssistantBehaviorGroup() components.SettingsGroup {

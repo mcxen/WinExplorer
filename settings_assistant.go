@@ -30,6 +30,9 @@ type settingsAssistForm struct {
 	// web search drafts; webLoaded mirrors extraLoaded for the new group.
 	webProvider, webKey, webURL string
 	webLoaded                   bool
+	mcpTesting                  bool
+	mcpStatus                   string
+	mcpError                    string
 }
 
 // openAssistantSettings focuses the Settings dialog on the 助手 category.

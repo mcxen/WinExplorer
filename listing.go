@@ -82,9 +82,13 @@ func (l localLister) List(dir string) ([]Entry, error) {
 	return out, nil
 }
 
-// entryLister is the lister for a folder: the parallel reader on a network
-// mount, the serial one on a local disk.
+// entryLister is the lister for a folder: an archive-backed reader when
+// the path points inside a supported archive, the parallel reader on a
+// network mount, and the serial one on a local disk.
 func entryLister(dir string) lister {
+	if _, _, ok := archiveSplit(dir); ok {
+		return archiveLister{}
+	}
 	return localLister{parallel: netfs.IsNetworkPath(dir)}
 }
 

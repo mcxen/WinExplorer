@@ -161,18 +161,43 @@ func repaint() {
 }
 
 // buildPreview does the actual decoding/inspection. It must not touch the
-// UI; it returns a self-contained previewState.
-func (a *App) buildPreview(path string) *previewState {
+// UI; it returns a self-contained previewState. A member inside an archive
+// is extracted to the cache first (under 64 MB), while the state keeps the
+// archive path the pane and properties show.
+func (a *App) buildPreview(displayPath string) *previewState {
+	path := displayPath
+	if arc, inner, ok := archiveSplit(displayPath); ok && inner != "" {
+		name, clean := cleanArchiveInner(inner)
+		if !clean {
+			return &previewState{kind: previewMeta, path: displayPath, err: "无法读取文件"}
+		}
+		idx, err := archiveIndexFor(arc)
+		if err != nil || idx.nodes[name] == nil || idx.nodes[name].IsDir {
+			return &previewState{kind: previewMeta, path: displayPath, err: "无法读取文件"}
+		}
+		node := idx.nodes[name]
+		const archivePreviewMax = int64(64 << 20)
+		if node.Size > archivePreviewMax {
+			return &previewState{kind: previewMeta, path: displayPath, meta: archiveMemberProps(displayPath, node)}
+		}
+		dir, err := archiveOpenCacheDir(arc)
+		if err == nil {
+			path, err = extractArchiveEntry(arc, name, dir)
+		}
+		if err != nil {
+			return &previewState{kind: previewMeta, path: displayPath, err: "无法读取压缩包内容"}
+		}
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
-		return &previewState{kind: previewMeta, path: path, err: "无法读取文件"}
+		return &previewState{kind: previewMeta, path: displayPath, err: "无法读取文件"}
 	}
-	kind := kindByExt(info.IsDir(), strings.ToLower(strings.TrimPrefix(filepath.Ext(path), ".")))
-	if !info.IsDir() && isArchive(filepath.Base(path)) {
+	kind := kindByExt(info.IsDir(), strings.ToLower(strings.TrimPrefix(filepath.Ext(displayPath), ".")))
+	if !info.IsDir() && isArchive(filepath.Base(displayPath)) {
 		kind = previewList
 	}
-	st := &previewState{kind: kind, path: path}
-	st.meta = a.fileProps(path, info, kind)
+	st := &previewState{kind: kind, path: displayPath}
+	st.meta = a.fileProps(displayPath, info, kind)
 	if kind == previewList {
 		// The members are read here, off the UI thread, with the same
 		// lister the remote preview uses; a lone compressed file (.gz)
@@ -246,6 +271,19 @@ func (a *App) buildPreview(path string) *previewState {
 		}
 	}
 	return st
+}
+
+// archiveMemberProps is the metadata-only pane for a member too large to
+// extract for preview.
+func archiveMemberProps(path string, n *archiveNode) []propRow {
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(n.Name), "."))
+	return []propRow{
+		{Key: "名称", Val: n.Name},
+		{Key: "类型", Val: typeLabel(Entry{Ext: ext})},
+		{Key: "大小", Val: formatBytes(n.Size)},
+		{Key: "修改日期", Val: formatFullTime(n.ModTime)},
+		{Key: "位置", Val: filepath.Dir(path)},
+	}
 }
 
 // fileProps builds the property list Explorer's details pane shows.

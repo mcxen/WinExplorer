@@ -85,7 +85,7 @@ func dragSourceData(paths []string) transfer.Data {
 func (a *App) bindDragSource(el ui.Element, path string) {
 	el.Drag(a.dragValueFor(path))
 	el.DragDataFrom(func() transfer.Data {
-		return dragSourceData(a.dragValueFor(path).paths)
+		return a.dragSourceDataFor(a.dragValueFor(path).paths)
 	}, transfer.DragOptions{
 		Operations: transfer.Copy | transfer.Move,
 		Done: func(r transfer.Result) {
@@ -221,6 +221,10 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 	if dstDir == "" || len(paths) == 0 {
 		return
 	}
+	if pathInArchive(dstDir) {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	// A URI that is no local file — a page, a mail attachment URL — has no
 	// path to move or copy where it lands.
 	var foreign []string
@@ -237,6 +241,23 @@ func (a *App) doDropInto(mods ui.Modifiers, dstDir string, paths []string) {
 		return
 	}
 	paths = local
+	// Rows dragged out of an archive are copies, however the drop would
+	// move real files: the archive stays untouched.
+	var archiveSrcs, direct []string
+	for _, p := range paths {
+		if _, inner, ok := archiveSplit(p); ok && inner != "" {
+			archiveSrcs = append(archiveSrcs, p)
+			continue
+		}
+		direct = append(direct, p)
+	}
+	if len(archiveSrcs) > 0 {
+		a.copyOutArchives(archiveSrcs, dstDir, "复制")
+	}
+	paths = direct
+	if len(paths) == 0 {
+		return
+	}
 	copyMode := mods&(ui.Cmd|ui.Ctrl) != 0
 	var skipped, srcs []string
 	for _, src := range paths {

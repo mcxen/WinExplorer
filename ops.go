@@ -24,6 +24,20 @@ func (a *App) doOpen() {
 		a.openDirEntry(sel[0])
 		return
 	}
+	if len(sel) == 1 {
+		e := sel[0]
+		// An archive is a folder here: Enter walks into it. A file that
+		// lives inside one has no real path to hand the OS, so it is
+		// extracted to the cache first.
+		if arc, inner, ok := archiveSplit(e.Path); ok && inner != "" {
+			a.openArchiveFile(arc, inner)
+			return
+		}
+		if entryIsArchive(e) {
+			a.navigate(e.Path)
+			return
+		}
+	}
 	var failed []string
 	for _, e := range sel {
 		if e.IsDir {
@@ -66,6 +80,10 @@ func (a *App) doCopy() {
 }
 
 func (a *App) doCut() {
+	if a.inArchive() {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	a.storeClip(true)
 }
 
@@ -166,6 +184,10 @@ func (a *App) doPaste() {
 		a.statusMsg = "无法粘贴到此页面"
 		return
 	}
+	if a.inArchive() {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	srcPaths, cut := a.clipPaths, a.clipCut
 	if len(srcPaths) == 0 {
 		// Nothing of our own: paste files another application copied,
@@ -195,6 +217,23 @@ func (a *App) doPaste() {
 	}
 	if len(srcs) == 0 {
 		return
+	}
+	// Copying out of an archive reads members through the extractor; the
+	// source archive itself is never modified, so these are always copies.
+	var archiveSrcs, plainSrcs []string
+	for _, src := range srcs {
+		if _, inner, ok := archiveSplit(src); ok && inner != "" {
+			archiveSrcs = append(archiveSrcs, src)
+			continue
+		}
+		plainSrcs = append(plainSrcs, src)
+	}
+	if len(archiveSrcs) > 0 {
+		a.copyOutArchives(archiveSrcs, dstDir, "复制")
+		srcs = plainSrcs
+		if len(srcs) == 0 {
+			return
+		}
 	}
 	kind := tasks.KindCopy
 	if cut {
@@ -237,6 +276,10 @@ func (a *App) finishFileJob(res fileJobResult, failPrefix string) {
 }
 
 func (a *App) doDelete() {
+	if a.inArchive() {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	sel := a.selectedEntries()
 	if len(sel) == 0 {
 		return
@@ -317,6 +360,9 @@ func (a *App) commitRenameIn(t *tabState) error {
 	if t.renaming == "" {
 		return nil
 	}
+	if pathInArchive(t.path) {
+		return fmt.Errorf("压缩包为只读")
+	}
 	oldName := t.renaming
 	newName := strings.TrimSpace(t.renameBuf)
 	t.renaming = ""
@@ -380,6 +426,10 @@ func (a *App) cancelRename() {
 }
 
 func (a *App) doNewFolder() {
+	if a.inArchive() {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	if specialPath(a.cur().path) {
 		a.statusMsg = "无法在此页面中新建文件夹"
 		return
@@ -475,6 +525,10 @@ func (a *App) doNewTextFile() { a.doNewFile(newFileKinds[0]) }
 // doNewFile creates k in the current folder, selects it and starts the
 // inline rename.
 func (a *App) doNewFile(k newFileKind) {
+	if a.inArchive() {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	if specialPath(a.cur().path) {
 		a.statusMsg = "无法在此页面中新建文件"
 		return

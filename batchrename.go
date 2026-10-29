@@ -48,6 +48,10 @@ type batchRenameState struct {
 // multiple selection opens the batch dialog over the items, in the view's
 // order.
 func (a *App) doRenameStart() {
+	if a.inArchive() {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	sel := a.selectedEntries()
 	if len(sel) == 0 {
 		return

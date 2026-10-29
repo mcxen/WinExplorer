@@ -134,6 +134,9 @@ func (a *App) canUp() bool {
 func (a *App) reload() {
 	aiFx.forgetLeft()
 	t := a.cur()
+	// Warm the read-only decision off the view path: the command bar asks
+	// every frame whether this folder lives inside an archive.
+	pathInArchive(t.path)
 	// The folder's listing is being read again: the tree's copy of it is stale.
 	a.navChildrenDrop(t.path)
 	a.statusMsg = ""
@@ -169,6 +172,7 @@ func (a *App) reload() {
 		diskhealth.Refresh()
 		return
 	}
+	pathInArchive(t.path) // fills the cache inArchive reads during view
 	entries, err := entryLister(t.path).List(t.path)
 	if err != nil {
 		t.entries = nil

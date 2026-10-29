@@ -120,6 +120,9 @@ func (a *App) assistantSubmit() {
 	a.assist.resetLive()
 	a.assist.liveEpoch++
 	a.assist.turns = append(a.assist.turns, aiTurn{Role: "user", Text: text, Files: files, At: time.Now()})
+	// Sending is a request to see the answer: the transcript follows the new
+	// turn even when it had been scrolled up or paused by opening a fold.
+	a.assist.scroll.JumpToLatest()
 	a.assist.persistSession(root)
 	a.assist.running = true
 	if a.assist.autopilot {

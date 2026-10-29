@@ -139,7 +139,7 @@ func (a *App) sidebar(c *ui.Context) {
 
 // recentPlacesLimit is how many 最近位置 the sidebar shows: enough to get
 // back somewhere from this session, few enough not to push 此电脑 down.
-const recentPlacesLimit = 8
+const recentPlacesLimit = 5
 
 // dirExistsTTL is how long a 最近位置 existence check is trusted. The pane
 // asks every frame, and an os.Stat on the UI thread per row per frame is a
@@ -271,14 +271,18 @@ func (a *App) navRows() []navRow {
 	for _, it := range a.pluginNavItems() {
 		rows = append(rows, navRow{kind: navRowPlugin, key: it.Key, label: it.Label, icon: it.Kind, path: it.Path, act: it.Run})
 	}
-	// The 快速访问 heading stays when collapsed — and when nothing is
-	// pinned — so a drop still has a target; its pins hide with it.
-	rows = append(rows, navRow{
-		kind: navRowSection, key: "nav-quick-access", label: "快速访问", pinDrop: true,
-		hasKids: true, open: a.navQuickExpanded,
-	})
+	// The 快速访问 heading stays when collapsed, so a drop still has a
+	// target; with nothing pinned the empty group hides (固定到快速访问
+	// in a folder's menu brings it back).
+	pins := a.pinnedPlaces()
+	if len(pins) > 0 {
+		rows = append(rows, navRow{
+			kind: navRowSection, key: "nav-quick-access", label: "快速访问", pinDrop: true,
+			hasKids: true, open: a.navQuickExpanded,
+		})
+	}
 	if a.navQuickExpanded {
-		for _, p := range a.pinnedPlaces() {
+		for _, p := range pins {
 			rows = append(rows, navRow{
 				kind: navRowPlace, key: "nav-" + p.Path, label: p.Name, icon: p.Kind, path: p.Path,
 				file: p.Kind == "file",
@@ -404,10 +408,13 @@ func (a *App) navSetSectionOpen(r navRow, open bool) {
 // files dropped on the row move there, as anywhere else in the app.
 func (a *App) navPlaceRow(c *ui.Context, r navRow) {
 	row := ui.ButtonBase(c.Key(r.key)).FillWidth().Height(navRowH).Margin(navRowGap, navRowPad).
-		Radius(4).Padding(0, 4, 0, r.indent).Gap(8).AlignItems(ui.Center).
+		Radius(4).Padding(0, 2).Gap(4).AlignItems(ui.Center).
 		Label(r.label).Selected(r.sel)
 	a.paintNavRow(row, r)
 	row.Children(func() {
+		if gutter := r.indent - navIndent(0); gutter > 0 {
+			ui.Box(c).Width(gutter).Height(navRowH).Shrink(0)
+		}
 		a.navRowGlyph(c, r)
 		ui.Text(c, r.label).FontSize(12).TextColor(colorText()).
 			SingleLine().Grow(1).MinWidth(0)
@@ -555,8 +562,13 @@ func navTwistSlot(c *ui.Context) {
 }
 
 // navRowGlyph is a row's 16px icon: a place or volume glyph by kind, and the
-// folder glyph for a folder of the tree.
+// folder glyph for a folder of the tree. A row with no twist of its own (a
+// place, 磁盘健康, 回收站) keeps the twist's room first, so every icon of a
+// level lines up whether its row expands or not.
 func (a *App) navRowGlyph(c *ui.Context, r navRow) {
+	if r.kind != navRowFolder && r.kind != navRowThisPC {
+		navTwistSlot(c)
+	}
 	glyph := ui.Box(c).Size(16, 16).Shrink(0).Center()
 	glyph.Children(func() {
 		if r.file {

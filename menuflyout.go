@@ -207,7 +207,7 @@ func (a *App) flyPanel(c *ui.Context, es []*menuEntry, openSub func(e *menuEntry
 			return
 		}
 		// Long menus (a folder's subfolders) scroll past flyMaxRows rows.
-		ui.Scroll(c.Key("scroll")).FillWidth().MaxHeight(flyMaxRows*flyRowH).MinHeight(0).Children(rows)
+		ui.Scroll(c.Key("scroll")).FillWidth().MaxHeight(flyMaxRows * flyRowH).MinHeight(0).Children(rows)
 	})
 	return panel
 }

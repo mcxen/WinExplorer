@@ -418,6 +418,12 @@ func extractArchiveEntry(arc, inner, destDir string) (string, error) {
 		// Keep the member's own date: copies and the preview's 修改日期
 		// should show the archive's time, not the moment of extraction.
 		if mt := info.ModTime(); !mt.IsZero() {
+			// A zip without the extended timestamp stores wall-clock time
+			// that Go reports as UTC; the list shows those fields as they
+			// are, so the file must get the same wall clock locally.
+			if mt.Location() == time.UTC {
+				mt = time.Date(mt.Year(), mt.Month(), mt.Day(), mt.Hour(), mt.Minute(), mt.Second(), mt.Nanosecond(), time.Local)
+			}
 			_ = os.Chtimes(target, mt, mt)
 		}
 		return nil

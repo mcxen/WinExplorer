@@ -307,6 +307,7 @@ func searchPanelView(c *ui.Context) {
 func (a *App) searchBoxCancel() {
 	b := &a.searchBox
 	b.gen++
+	b.stopWalk()
 	b.query = ""
 	b.querySelected = false
 	b.copyPath = ""

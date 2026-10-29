@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -112,6 +113,9 @@ type searchBoxState struct {
 	// gen is the walk's generation. Closing the box or typing again bumps it,
 	// and the batches of an older walk are dropped.
 	gen uint64
+	// cancel stops the walk of generation gen; a new query or closing the
+	// box calls it, so the old walkers exit instead of running to the deadline.
+	cancel context.CancelFunc
 	// queue is where the search running off the frame thread hands its results
 	// over (frameQueue).
 	queue frameQueue

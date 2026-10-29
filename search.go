@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 	"sync"
@@ -48,6 +49,17 @@ type searchState struct {
 	// queue is where the walk running off the frame thread hands its batches
 	// over (frameQueue).
 	queue frameQueue
+	// cancel stops the walk in flight; a new query, an empty box or a closed
+	// tab calls it so an abandoned walk does not run on to its deadline.
+	cancel context.CancelFunc
+}
+
+// stop cancels the walk in flight, if any.
+func (s *searchState) stop() {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
 }
 
 // frameQueue is how a background search reaches the state it fills in: the
@@ -94,6 +106,7 @@ func (a *App) updateSearch() {
 	if q == t.search.query && t.queryScope == t.search.scope {
 		return
 	}
+	t.search.stop()
 	t.search.query = q
 	t.search.scope = t.queryScope
 	t.search.results = nil
@@ -114,9 +127,12 @@ func (a *App) updateSearch() {
 	hidden := a.showHidden
 	query := searchquery.Parse(q)
 	deadline := time.Now().Add(searchDeadline(t.queryScope))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.search.cancel = cancel
 	go func() {
+		defer cancel()
 		search.Stream(roots, query, search.Options{
-			Hidden: hidden, Deadline: deadline, Max: searchMaxResults,
+			Hidden: hidden, Deadline: deadline, Max: searchMaxResults, Ctx: ctx,
 		}, func(batch []Entry, more bool) {
 			apply := func() {
 				if !a.ownsTab(tab) || strings.TrimSpace(tab.query) != q || tab.search.scope != scope || tab.search.query != q {

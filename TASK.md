@@ -497,3 +497,9 @@
 - **E AI 面板瘦身**：已完成。
 - **G 设置页 / 任务 / 磁盘健康 / 空文件夹 / 删除提示 / zip 预览**：已完成。
 - **状态**：已完成，已合并到 main。
+
+### SEARCH-MEM — 搜索缓存内存占用
+- **规格**：[21](docs/specs/21-search-memory.md)。分支 `fix/search-cache-mem` → `main`。
+- **修复**：旧搜索遍历随新查询 / 关闭取消；索引的 `Note` 改为有界 LRU；索引条目更紧凑；流式批次不再复用切片。
+- **验收**：`internal/search/mem_test.go`：10 万文件下残留 goroutine 105→0、堆 58 MB→0.3 MB；索引 100000 条/24 MB→20000 条/3.7 MB。
+- **状态**：已完成，合入 `main`。

@@ -395,6 +395,7 @@ func (a *App) closeTab(i int) {
 		return
 	}
 	leaveErr := a.leaveTab(a.tabs[i])
+	a.tabs[i].search.stop()
 	a.rememberClosed(i)
 	wasActive := i == a.activeTab
 	a.tabs = slices.Delete(a.tabs, i, i+1)

@@ -4,6 +4,7 @@ package main
 // sorting, cursor movement, and open/reveal. Split from searchbox.go (LAY2).
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"sunvale/internal/search"
@@ -71,6 +72,7 @@ func (a *App) searchBoxFrame() {
 	b.src = sourceNone
 	b.gen++
 	gen := b.gen
+	b.stopWalk()
 	if rawQuery == "" {
 		b.busy = false
 		return
@@ -86,6 +88,8 @@ func (a *App) searchBoxFrame() {
 	hidden := a.showHidden
 	query := b.walkQuery
 	deadline := time.Now().Add(searchDeadline(b.scope))
+	ctx, cancel := context.WithCancel(context.Background())
+	b.cancel = cancel
 	// land hands a closure to the frame: the main thread while the app runs,
 	// and the next frame's own thread in a headless test (frameQueue).
 	land := func(f func()) {
@@ -101,6 +105,7 @@ func (a *App) searchBoxFrame() {
 		return a.searchBox.open && a.searchBox.gen == gen
 	}
 	go func() {
+		defer cancel()
 		// The index answers on the keystroke when it covers the scope. It
 		// cannot when it is off or still empty, or when the scope is a folder
 		// no walk ever reached — then the disks are walked, as before.
@@ -126,7 +131,7 @@ func (a *App) searchBoxFrame() {
 			}
 		}
 		search.Stream(roots, query, search.Options{
-			Hidden: hidden, Deadline: deadline, Max: searchMaxResults,
+			Hidden: hidden, Deadline: deadline, Max: searchMaxResults, Ctx: ctx,
 		}, func(batch []Entry, more bool) {
 			land(func() {
 				if !live() {
@@ -143,6 +148,14 @@ func (a *App) searchBoxFrame() {
 			})
 		})
 	}()
+}
+
+// stopWalk cancels the box's walk in flight, if any.
+func (b *searchBoxState) stopWalk() {
+	if b.cancel != nil {
+		b.cancel()
+		b.cancel = nil
+	}
 }
 
 // hit is the entry under the cursor, if the list has one.

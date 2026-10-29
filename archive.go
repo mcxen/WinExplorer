@@ -63,6 +63,10 @@ func (a *App) doCompress() {
 	if len(sel) == 0 || specialPath(a.cur().path) {
 		return
 	}
+	if a.inArchive() {
+		a.statusMsg = "压缩包为只读"
+		return
+	}
 	stem := "压缩文件"
 	if len(sel) == 1 {
 		stem = strings.TrimSuffix(sel[0].Name, filepath.Ext(sel[0].Name))

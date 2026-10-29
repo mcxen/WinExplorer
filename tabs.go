@@ -134,6 +134,9 @@ func (a *App) canUp() bool {
 func (a *App) reload() {
 	aiFx.forgetLeft()
 	t := a.cur()
+	// Warm the read-only decision off the view path: the command bar asks
+	// every frame whether this folder lives inside an archive.
+	pathInArchive(t.path)
 	// The folder's listing is being read again: the tree's copy of it is stale.
 	a.navChildrenDrop(t.path)
 	a.statusMsg = ""

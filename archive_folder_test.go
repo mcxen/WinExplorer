@@ -177,3 +177,49 @@ func TestArchiveFolderExtract(t *testing.T) {
 		})
 	}
 }
+
+func TestArchiveFolderAppNavigation(t *testing.T) {
+	root := t.TempDir()
+	arc := filepath.Join(root, "示例.zip")
+	writeArchiveFolderFixture(t, arc)
+
+	a := newStoreApp(t, root)
+	a.navigate(arc)
+	if !a.inArchive() || a.cur().path != arc {
+		t.Fatalf("navigating into the archive left path %q (inArchive=%v)", a.cur().path, a.inArchive())
+	}
+	sub := filepath.Join(arc, "子目录")
+	a.navigate(sub)
+	if a.cur().path != sub {
+		t.Fatalf("inside path = %q", a.cur().path)
+	}
+	if target, msg := resolvePathInput(sub, root); msg != "" || target.dir != sub {
+		t.Fatalf("address input for %q = %+v, %q", sub, target, msg)
+	}
+	if crumbs := a.breadcrumbs(); crumbs[len(crumbs)-1].Path != sub {
+		t.Fatalf("breadcrumbs end at %q, want %q", crumbs[len(crumbs)-1].Path, sub)
+	}
+
+	file := filepath.Join(sub, "a.txt")
+	if target, msg := resolvePathInput(file, root); msg != "" || target.dir != sub || target.file != file {
+		t.Fatalf("address input for %q = %+v, %q", file, target, msg)
+	}
+	a.selectOnly(file)
+	a.doDelete()
+	if a.statusMsg != "压缩包为只读" {
+		t.Fatalf("delete inside archive: status %q", a.statusMsg)
+	}
+	a.reload()
+	if len(a.cur().entries) != 1 || a.cur().entries[0].Name != "a.txt" {
+		t.Fatalf("delete changed the archive listing: %v", a.cur().entries)
+	}
+
+	a.up()
+	if a.cur().path != arc {
+		t.Fatalf("first 上一级 = %q, want the archive root %q", a.cur().path, arc)
+	}
+	a.up()
+	if a.cur().path != root {
+		t.Fatalf("second 上一级 = %q, want the containing folder %q", a.cur().path, root)
+	}
+}

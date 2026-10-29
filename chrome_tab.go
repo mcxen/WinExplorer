@@ -403,6 +403,7 @@ func tabTitle(path string) string {
 func (a *App) commandBar(c *ui.Context) {
 	hasSel := len(a.cur().selected) > 0
 	canPaste := a.canPaste()
+	readOnly := a.inArchive()
 
 	windowBG(c, ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).
 		Padding(0, 6).Gap(2)).
@@ -411,12 +412,12 @@ func (a *App) commandBar(c *ui.Context) {
 
 		a.commandSep(c)
 
-		a.commandIconButton(c, lucide.Scissors, "剪切", hasSel, a.doCut)
+		a.commandIconButton(c, lucide.Scissors, "剪切", hasSel && !readOnly, a.doCut)
 		a.commandIconButton(c, lucide.Copy, "复制", hasSel, a.doCopy)
-		a.commandIconButton(c, lucide.ClipboardPaste, "粘贴", canPaste, a.doPaste)
-		a.commandIconButton(c, lucide.Pencil, "重命名", hasSel, a.doRenameStart)
+		a.commandIconButton(c, lucide.ClipboardPaste, "粘贴", canPaste && !readOnly, a.doPaste)
+		a.commandIconButton(c, lucide.Pencil, "重命名", hasSel && !readOnly, a.doRenameStart)
 		a.commandIconButton(c, lucide.Share2, "分享", hasSel, a.shareDialogOpen)
-		a.commandIconButton(c, lucide.Trash, "删除", hasSel, a.doDelete)
+		a.commandIconButton(c, lucide.Trash, "删除", hasSel && !readOnly, a.doDelete)
 
 		a.commandSep(c)
 
@@ -471,7 +472,7 @@ func (a *App) moreButton(c *ui.Context) {
 
 func (a *App) newMenu() []*menuEntry {
 	var l menuList
-	off := specialPath(a.cur().path)
+	off := specialPath(a.cur().path) || a.inArchive()
 	l.item("文件夹", lucide.FolderPlus, a.doNewFolder).shortcut(ui.Cmd|ui.Shift, ui.KeyN).off(off)
 	l.sep()
 	for _, k := range newFileKinds {
@@ -493,6 +494,10 @@ func (a *App) moreMenu() []*menuEntry {
 	l.item("全选", lucide.CheckCheck, a.selectAll).shortcut(ui.Cmd, ui.KeyA)
 	l.item("全部取消", lucide.SquareDashed, a.clearSelection).off(len(a.cur().selected) == 0)
 	l.item("反向选择", lucide.ArrowLeftRight, a.invertSelection)
+	if a.canExtractTo() {
+		l.sep()
+		l.item("解压到…", lucide.PackageOpen, a.doExtractTo)
+	}
 	if items := a.pluginMoreItems(); len(items) > 0 {
 		l.sep()
 		// Plugin overflow items nest under 插件 so a few plugins cannot

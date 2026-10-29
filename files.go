@@ -511,23 +511,28 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 			return
 		}
 		special := specialPath(a.cur().path)
+		readOnly := a.inArchive()
+		off := special || readOnly
 		m.Submenu("新建", func(n *xMenu) {
-			if n.Item("文件夹").Icon(lucide.FolderPlus).Shortcut(ui.Cmd|ui.Shift, ui.KeyN).Disabled(special).Chosen() {
+			if n.Item("文件夹").Icon(lucide.FolderPlus).Shortcut(ui.Cmd|ui.Shift, ui.KeyN).Disabled(off).Chosen() {
 				a.doNewFolder()
 			}
 			n.Separator()
 			for _, k := range newFileKinds {
-				if n.Item(k.label).Icon(newKindIcon(k)).Disabled(special).Chosen() {
+				if n.Item(k.label).Icon(newKindIcon(k)).Disabled(off).Chosen() {
 					a.doNewFile(k)
 				}
 			}
 		}).Icon(lucide.Plus)
-		if m.Item("粘贴").Icon(lucide.ClipboardPaste).Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || special).Chosen() {
+		if m.Item("粘贴").Icon(lucide.ClipboardPaste).Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || off).Chosen() {
 			a.doPaste()
+		}
+		if a.inArchive() && m.Item("解压到…").Icon(lucide.PackageOpen).Chosen() {
+			a.doExtractTo()
 		}
 		m.Separator()
 		// Items that cannot run here do not show (no greyed-out puzzles).
-		if !special && sysHasTerminal() && m.Item("在终端中打开").Icon(lucide.SquareTerminal).Chosen() {
+		if !off && sysHasTerminal() && m.Item("在终端中打开").Icon(lucide.SquareTerminal).Chosen() {
 			a.openInTerminal(a.cur().path)
 		}
 		// The plugins' pane-background items — dups' scan, usage's treemap.
@@ -542,7 +547,7 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 		}
 		// 刷新统计 drops the folder's cached sizes and walks its subtree
 		// again: only the size column moves — no reload, no new thumbnails.
-		if !special && m.Item("刷新统计").Chosen() {
+		if !off && m.Item("刷新统计").Chosen() {
 			refreshDirStats(a.cur().path)
 		}
 		if m.Item("显示隐藏的项目").Checked(a.showHidden).Chosen() {
@@ -576,6 +581,7 @@ func (a *App) itemMenu(m *xMenu, e Entry) {
 	}
 	oneDir := one && sel[0].IsDir
 	onSpecial := specialPath(a.cur().path)
+	readOnly := a.inArchive()
 
 	if m.Item("打开").Icon(lucide.ExternalLink).Shortcut(0, ui.KeyEnter).Disabled(!anySel).Chosen() {
 		a.doOpen()
@@ -605,33 +611,36 @@ func (a *App) itemMenu(m *xMenu, e Entry) {
 		}
 	}
 	m.Separator()
-	if m.Item("剪切").Icon(lucide.Scissors).Shortcut(ui.Cmd, ui.KeyX).Disabled(!anySel).Chosen() {
+	if m.Item("剪切").Icon(lucide.Scissors).Shortcut(ui.Cmd, ui.KeyX).Disabled(!anySel || readOnly).Chosen() {
 		a.doCut()
 	}
 	if m.Item("复制").Icon(lucide.Copy).Shortcut(ui.Cmd, ui.KeyC).Disabled(!anySel).Chosen() {
 		a.doCopy()
 	}
-	if m.Item("粘贴").Icon(lucide.ClipboardPaste).Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || onSpecial).Chosen() {
+	if m.Item("粘贴").Icon(lucide.ClipboardPaste).Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || onSpecial || readOnly).Chosen() {
 		a.doPaste()
 	}
 	if m.Item("复制为路径").Icon(lucide.Link).Shortcut(ui.Cmd|ui.Shift, ui.KeyC).Disabled(!anySel || onSpecial).Chosen() {
 		a.doCopyAsPath()
 	}
 	// 单选内联重命名；多选为批量重命名对话框——菜单项都叫“重命名”。
-	if m.Item("重命名").Icon(lucide.PenLine).Shortcut(0, ui.KeyF2).Disabled(!anySel || onSpecial).Chosen() {
+	if m.Item("重命名").Icon(lucide.PenLine).Shortcut(0, ui.KeyF2).Disabled(!anySel || onSpecial || readOnly).Chosen() {
 		a.doRenameStart()
 	}
 	// 删除 sits with the edit verbs, as Explorer's and Files' menus keep
 	// it, not after the plugins' items (docs/specs/16).
-	if m.Item("删除").Icon(lucide.Trash).Shortcut(0, ui.KeyDelete).Disabled(!anySel).Chosen() {
+	if m.Item("删除").Icon(lucide.Trash).Shortcut(0, ui.KeyDelete).Disabled(!anySel || readOnly).Chosen() {
 		a.doDelete()
 	}
 	m.Separator()
-	if m.Item("压缩为 ZIP 文件").Icon(lucide.FileArchive).Disabled(!anySel || onSpecial).Chosen() {
+	if m.Item("压缩为 ZIP 文件").Icon(lucide.FileArchive).Disabled(!anySel || onSpecial || readOnly).Chosen() {
 		a.doCompress()
 	}
-	if m.Item("全部解压").Icon(lucide.PackageOpen).Disabled(!allArchives || onSpecial).Chosen() {
+	if m.Item("全部解压").Icon(lucide.PackageOpen).Disabled(!allArchives || onSpecial || readOnly).Chosen() {
 		a.doExtract()
+	}
+	if m.Item("解压到…").Icon(lucide.PackageOpen).Disabled(!a.canExtractTo() || onSpecial).Chosen() {
+		a.doExtractTo()
 	}
 	m.Separator()
 	// 在终端中打开: the selected folder, or a single file's folder. Shown
@@ -643,12 +652,15 @@ func (a *App) itemMenu(m *xMenu, e Entry) {
 	case one && !onSpecial:
 		termDir = filepath.Dir(sel[0].Path)
 	}
+	if readOnly {
+		termDir = "" // the terminal has no real folder to start in
+	}
 	if termDir != "" && sysHasTerminal() && m.Item("在终端中打开").Icon(lucide.SquareTerminal).Chosen() {
 		a.openInTerminal(termDir)
 	}
 	// 刷新统计 rewalks the one selected folder's subtree for the size
 	// column, as the pane menu's item does for the current folder.
-	if oneDir && !onSpecial && m.Item("刷新统计").Chosen() {
+	if oneDir && !onSpecial && !readOnly && m.Item("刷新统计").Chosen() {
 		refreshDirStats(sel[0].Path)
 	}
 	// The plugins' row-menu items — usage's treemap of the selected folder.

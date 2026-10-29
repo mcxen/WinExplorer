@@ -128,6 +128,25 @@ func resolvePathInput(text, base string) (pathTarget, string) {
 		return pathTarget{dir: p}, ""
 	}
 	p := filepath.Clean(absPathInput(s, base))
+	// A path may name an archive or a member inside it: stat cannot see
+	// through the archive, so the index answers instead.
+	if arc, inner, ok := archiveSplit(p); ok {
+		name, clean := cleanArchiveInner(inner)
+		if !clean {
+			return pathTarget{}, "找不到“" + s + "”。请检查拼写后重试。"
+		}
+		if name == "" {
+			return pathTarget{dir: p}, ""
+		}
+		idx, err := archiveIndexFor(arc)
+		if err != nil || idx.nodes[name] == nil {
+			return pathTarget{}, "找不到“" + s + "”。请检查拼写后重试。"
+		}
+		if idx.nodes[name].IsDir {
+			return pathTarget{dir: p}, ""
+		}
+		return pathTarget{dir: filepath.Dir(p), file: p}, ""
+	}
 	info, err := os.Stat(p)
 	switch {
 	case err != nil:

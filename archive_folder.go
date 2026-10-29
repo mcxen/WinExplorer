@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -416,4 +418,61 @@ func extractArchiveEntry(arc, inner, destDir string) (string, error) {
 		return "", err
 	}
 	return out, nil
+}
+
+// archiveOpenCacheDir is where extracted members live when the app needs a
+// real file: opening an archive entry or previewing it. Keying on the
+// archive's identity means one extraction per version of the archive, not
+// one per click.
+func archiveOpenCacheDir(arc string) (string, error) {
+	info, err := os.Stat(arc)
+	if err != nil {
+		return "", err
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	key := fmt.Sprintf("%s\x00%d\x00%d", filepath.Clean(arc), info.Size(), info.ModTime().UnixNano())
+	sum := sha256.Sum256([]byte(key))
+	return filepath.Join(base, "sunvale", "archive-open", hex.EncodeToString(sum[:16])), nil
+}
+
+var (
+	archiveInMu   sync.Mutex
+	archiveInSeen = map[string]bool{}
+)
+
+// inArchive reports whether the active tab shows an archive's contents.
+// The answer is cached per path: the command bar asks every frame, and an
+// archiveSplit there would stat the path's prefixes each time.
+func (a *App) inArchive() bool {
+	p := filepath.Clean(a.cur().path)
+	archiveInMu.Lock()
+	if v, ok := archiveInSeen[p]; ok {
+		archiveInMu.Unlock()
+		return v
+	}
+	archiveInMu.Unlock()
+	_, _, ok := archiveSplit(p)
+	archiveInMu.Lock()
+	archiveInSeen[p] = ok
+	archiveInMu.Unlock()
+	return ok
+}
+
+// pathInArchive is the path form used for destination checks.
+func pathInArchive(p string) bool {
+	p = filepath.Clean(p)
+	archiveInMu.Lock()
+	if v, ok := archiveInSeen[p]; ok {
+		archiveInMu.Unlock()
+		return v
+	}
+	archiveInMu.Unlock()
+	_, _, ok := archiveSplit(p)
+	archiveInMu.Lock()
+	archiveInSeen[p] = ok
+	archiveInMu.Unlock()
+	return ok
 }

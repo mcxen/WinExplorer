@@ -107,6 +107,7 @@
 | CLASSIC-FLUENT | 经典外观对齐 Fluent 2 + 命令入口梳理（快速预览标题栏、更多菜单、快捷键标注、自绘菜单键盘导航） | 高 | 完成 | [16](docs/specs/16-commands-layout.md) | — | `feat/classic-fluent` |
 | ASSIST-FOCUS | 助手对话键盘：打开即聚焦输入框、Enter 发送、Esc 交还文件列表 | 高 | 完成 | [UI 键盘](docs/UI.md) | — | `fix/assistant-focus-enter` |
 | — | 地址栏修复 | — | 已完成 | — | — | `fix/addressbar` |
+| ICONS2 / AI-E2E | 扩展名图标补全对齐、应用自身图标；助手真机测试与修复 | 高 | 已完成 | [18](docs/specs/18-icons-ai-test.md) | — | `feat/ai-test-icons` |
 
 
 建议顺序：F6 → F1–F4 → R1 → S1 → S3 → TB3 → 其余并行；R5 必须在 S1–S8 全部完成后。
@@ -114,6 +115,11 @@
 ---
 
 ## 任务详情
+### ICONS2 / AI-E2E — 文件类型图标与助手真机测试
+- **规格**：[18](docs/specs/18-icons-ai-test.md)。分支 `feat/ai-test-icons` → `main`。
+- 扩展名分类图标（含复合扩展名）、`.app`/`.desktop`/Windows exe·lnk 自身图标（后台解码、缓存）；助手回合折叠、发送跟底、窄面板会话列表三处修复。
+- **状态**：已完成。Windows 取图标未在真机验证。
+
 
 通用交付要求（每个任务都适用，下文不再重复）：代码 + 测试、通过工作方式第 6 条、UI 任务附截图到 `docs/assets/shots/<ID>/`、更新本表状态、必要时更新 `README.md` 与 `docs/UI.md`。
 

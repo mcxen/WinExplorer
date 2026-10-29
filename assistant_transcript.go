@@ -82,6 +82,10 @@ func assistantExchanges(turns []aiTurn) []assistExchange {
 type assistPaint struct {
 	turn  chat.TurnState
 	group chat.GroupState
+	// settled is set once a finished turn's tool group has been opened under
+	// the turn's own fold line, so the fold is not followed by a second,
+	// identical 「调用了…」 header that needs another click.
+	settled bool
 	acts  map[int]*chat.ActivityState
 	md    *assistMD
 }
@@ -210,6 +214,7 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		}
 	}
 	var steps []chat.Step
+	foldTitle := ""
 	if len(tools) > 0 || (last && a.assist.running && a.assist.pending != "") {
 		activities := make([]chat.Activity, 0, len(tools)+1)
 		names := make([]string, 0, len(tools))
@@ -255,6 +260,16 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		title := assistSummary(len(tools))
 		if label := assistCallSummary(names, last && a.assist.running); label != "" {
 			title = label
+		}
+		foldTitle = title
+		if status == chat.Completed && !(last && a.assist.running) && (final != "" || len(cards) > 0) {
+			// The turn folds under its own 「调用了…」 line: inside it the
+			// group shows open with a count, not the same summary again.
+			if !paint.settled {
+				paint.settled = true
+				paint.group.SetExpanded(true)
+			}
+			title = itoa(len(tools)) + " 次调用"
 		}
 		steps = []chat.Step{{
 			ID: "tools", Title: title, Activities: activities, Group: &paint.group,
@@ -305,8 +320,8 @@ func (a *App) assistantExchange(c *ui.Context, ex assistExchange) {
 		}
 	}
 	summary := assistSummary(len(tools))
-	if len(steps) == 1 && steps[0].Title != "" {
-		summary = steps[0].Title
+	if foldTitle != "" {
+		summary = foldTitle
 	}
 	if stopped && status == chat.Cancelled {
 		summary = "已停止"

@@ -86,8 +86,8 @@ type assistPaint struct {
 	// the turn's own fold line, so the fold is not followed by a second,
 	// identical 「调用了…」 header that needs another click.
 	settled bool
-	acts  map[int]*chat.ActivityState
-	md    *assistMD
+	acts    map[int]*chat.ActivityState
+	md      *assistMD
 }
 
 func (u *assistantUI) paintFor(i int) *assistPaint {

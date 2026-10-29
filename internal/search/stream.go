@@ -28,6 +28,9 @@ type Options struct {
 	Hidden   bool
 	Deadline time.Time
 	Max      int
+	// Ctx cancels the walk early: a newer query or a closed view stops the
+	// old walkers at once instead of letting them run to the deadline.
+	Ctx context.Context
 }
 
 // Stream walks all roots concurrently and emits matching entries in batches.
@@ -38,7 +41,11 @@ func Stream(roots []string, query searchquery.Query, opts Options, emit func(bat
 	if max <= 0 {
 		max = DefaultMaxResults
 	}
-	ctx, cancel := context.WithDeadline(context.Background(), opts.Deadline)
+	parent := opts.Ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithDeadline(parent, opts.Deadline)
 	defer cancel()
 
 	found := make(chan fsentry.Entry, 256)
@@ -74,8 +81,10 @@ func Stream(roots []string, query searchquery.Query, opts Options, emit func(bat
 			batch = append(batch, e)
 		case <-ticker.C:
 			if len(batch) > 0 {
+				// A fresh slice per batch: the receiver may keep it or hand
+				// it to another goroutine, so it must not be overwritten.
 				emit(batch, true)
-				batch = batch[:0]
+				batch = nil
 			}
 		}
 	}

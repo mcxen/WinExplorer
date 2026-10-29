@@ -57,7 +57,12 @@ type Index struct {
 
 	progress atomic.Int64
 
-	dirs map[string][]indexEntry
+	// dirs holds the rows each noted listing added, so a fresher listing of
+	// the same folder replaces them. It is an LRU bounded by maxNotedDirs
+	// folders and maxNotedRows rows (dirOrder: oldest first).
+	dirs      map[string][]indexEntry
+	dirOrder  []string
+	notedRows int
 
 	pendingMu sync.Mutex
 	pending   map[string]indexEntry
@@ -88,10 +93,17 @@ func NewIndex(config IndexConfig) *Index {
 	return ix
 }
 
+// Note bounds: how many browsed folders, and how many of their rows, the index
+// tracks on top of its walk snapshot.
+const maxNotedDirs = 256
+
+func (ix *Index) maxNotedRows() int { return max(ix.maxEntries/4, 1) }
+
 // indexEntry is one indexed path with the stat the build already paid for.
+// It stays compact: name, folder and extension are all slices of path,
+// derived on demand rather than stored per row.
 type indexEntry struct {
 	path   string
-	ext    string
 	size   int64
 	mod    int64
 	isDir  bool
@@ -110,15 +122,25 @@ func (e indexEntry) entry() fsentry.Entry {
 		out.ModTime = time.Unix(e.mod, 0)
 	}
 	if !e.isDir {
-		out.Ext = e.ext
+		out.Ext = e.ext()
 	}
 	return out
+}
+
+func (e indexEntry) ext() string {
+	if e.isDir {
+		return ""
+	}
+	return extOf(filepath.Base(e.path))
+}
+
+func extOf(name string) string {
+	return strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
 }
 
 func indexEntryFrom(e fsentry.Entry) indexEntry {
 	out := indexEntry{
 		path:   e.Path,
-		ext:    strings.ToLower(strings.TrimPrefix(filepath.Ext(e.Name), ".")),
 		size:   e.Size,
 		isDir:  e.IsDir,
 		hidden: strings.HasPrefix(e.Name, "."),
@@ -292,9 +314,6 @@ func (ix *Index) walkRoot(ctx context.Context, root string, skip map[string]bool
 			}
 		}
 		e := indexEntry{path: path, isDir: isDir, hidden: strings.HasPrefix(name, ".")}
-		if !isDir {
-			e.ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
-		}
 		if info, err := d.Info(); err == nil {
 			e.size, e.mod = info.Size(), info.ModTime().Unix()
 		}
@@ -318,19 +337,49 @@ func (ix *Index) Note(dir string, entries []fsentry.Entry) {
 	if ix.dirs == nil {
 		ix.dirs = map[string][]indexEntry{}
 	}
-	for _, old := range ix.dirs[dir] {
-		delete(ix.items, old.path)
+	if old, ok := ix.dirs[dir]; ok {
+		for _, e := range old {
+			delete(ix.items, e.path)
+		}
+		ix.forgetDir(dir, false)
 	}
-	kept := make([]indexEntry, 0, len(entries))
+	limit := ix.maxNotedRows()
+	kept := make([]indexEntry, 0, min(len(entries), limit))
 	for _, e := range entries {
 		if e.Path == "" || e.Name == "" || e.Path == dir {
 			continue
+		}
+		if len(kept) >= limit {
+			break // one huge folder may not crowd out the walk snapshot
 		}
 		ie := indexEntryFrom(e)
 		ix.items[ie.path] = ie
 		kept = append(kept, ie)
 	}
 	ix.dirs[dir] = kept
+	ix.dirOrder = append(ix.dirOrder, dir)
+	ix.notedRows += len(kept)
+	for len(ix.dirOrder) > 1 && (len(ix.dirOrder) > maxNotedDirs || ix.notedRows > limit) {
+		// The oldest listing's rows stay as plain index rows while the
+		// snapshot is under its cap; past it they go with the listing.
+		ix.forgetDir(ix.dirOrder[0], len(ix.items) > ix.maxEntries)
+	}
+}
+
+// forgetDir drops one noted listing from the LRU, and its rows too when drop.
+// The caller holds ix.mu.
+func (ix *Index) forgetDir(dir string, drop bool) {
+	rows := ix.dirs[dir]
+	if drop {
+		for _, e := range rows {
+			delete(ix.items, e.path)
+		}
+	}
+	ix.notedRows -= len(rows)
+	delete(ix.dirs, dir)
+	if i := slices.Index(ix.dirOrder, dir); i >= 0 {
+		ix.dirOrder = slices.Delete(ix.dirOrder, i, i+1)
+	}
 }
 
 // Query answers from the snapshot when it covers every requested root. The
@@ -353,11 +402,15 @@ func (ix *Index) Query(roots []string, query searchquery.Query, hidden bool) ([]
 		if e.hidden && !hidden {
 			continue
 		}
-		info := searchquery.MatchInfo{IsDir: e.isDir, Ext: e.ext, Size: e.size}
+		name := filepath.Base(e.path)
+		info := searchquery.MatchInfo{IsDir: e.isDir, Size: e.size}
+		if !e.isDir {
+			info.Ext = extOf(name)
+		}
 		if e.mod > 0 {
 			info.ModTime = time.Unix(e.mod, 0)
 		}
-		if !query.Matches(filepath.Base(e.path), e.path, info) {
+		if !query.Matches(name, e.path, info) {
 			continue
 		}
 		hits = append(hits, e.entry())

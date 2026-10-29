@@ -46,11 +46,7 @@ func (ix *Index) load() {
 		if d.Path == "" {
 			continue
 		}
-		e := indexEntry{path: d.Path, size: d.Size, mod: d.Mod, isDir: d.Dir, hidden: d.Hidden}
-		if !e.isDir {
-			e.ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(filepath.Base(d.Path)), "."))
-		}
-		items[d.Path] = e
+		items[d.Path] = indexEntry{path: d.Path, size: d.Size, mod: d.Mod, isDir: d.Dir, hidden: d.Hidden}
 	}
 	built, err := time.Parse(time.RFC3339, f.Built)
 	if err != nil {

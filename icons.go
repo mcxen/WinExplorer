@@ -16,21 +16,24 @@ import (
 // *ui.Context parameter is the element context, not a painter.
 
 func (a *App) fileIcon(c *ui.Context, e Entry, px float32) {
-	ui.Box(c).Size(px, px).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
-		if e.IsDir {
-			drawFolder(p, r, colorFolder())
+	k := kindOf(e)
+	if k == kindApp || appIconExt(iconExt(e)) {
+		// The application's own icon, decoded in the background and cached;
+		// the drawn glyph shows until (or unless) there is one.
+		if bm := appIconThumb(e, px); bm != nil {
+			ui.Box(c).Size(px, px).Shrink(0).Children(func() {
+				ui.Image(c, bm).Fit(ui.Contain).Size(px, px)
+				if e.Link || k == kindShortcut {
+					linkBadge(c, px)
+				}
+			})
 			return
 		}
-		switch e.Ext {
-		case "pdf":
-			drawPDFSheet(p, r)
-		case "html", "htm":
-			drawHTMLSheet(p, r)
-		default:
-			drawFileSheet(p, r, fileTint(e.Ext), colorText())
-		}
+	}
+	ui.Box(c).Size(px, px).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+		drawKind(p, r, k)
 	}).Children(func() {
-		if e.Link {
+		if e.Link || k == kindShortcut {
 			linkBadge(c, px)
 		}
 	})
@@ -108,35 +111,9 @@ func chevronUpDown(ascending bool) func() *ui.SVG {
 	return lucide.ChevronDown
 }
 
+// fileTint is the sheet color of an extension's category.
 func fileTint(ext string) ui.Color {
-	switch ext {
-	case "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "tif", "tiff", "svg", "ico":
-		return ui.Hex("#3B82F6")
-	case "mp4", "mov", "mkv", "avi", "webm", "m4v":
-		return ui.Hex("#7C3AED")
-	case "mp3", "wav", "flac", "aac", "m4a", "ogg":
-		return ui.Hex("#DB2777")
-	case "zip", "rar", "7z", "tar", "gz", "bz2", "xz":
-		return ui.Hex("#B45309")
-	case "pdf":
-		// Adobe-red so a PDF reads apart from the grey default sheet.
-		return ui.Hex("#DC2626")
-	case "html", "htm":
-		// Browser orange — distinct from the teal code family html used to share.
-		return ui.Hex("#EA580C")
-	case "doc", "docx", "rtfd", "odt":
-		return ui.Hex("#2563EB")
-	case "xls", "xlsx", "ods", "csv":
-		return ui.Hex("#15803D")
-	case "ppt", "pptx", "odp", "key":
-		return ui.Hex("#C2410C")
-	case "go", "py", "js", "ts", "tsx", "jsx", "rs", "java", "c", "h", "cpp", "cc", "cs", "rb", "php", "swift", "kt", "json", "xml", "yml", "yaml", "css", "sh":
-		return ui.Hex("#0F766E")
-	case "txt", "md", "rtf", "log":
-		return ui.Hex("#4B5563")
-	default:
-		return ui.Hex("#6B7280")
-	}
+	return kindTint(kindOf(Entry{Name: "x." + ext, Ext: ext}))
 }
 
 func drawFolder(p *ui.Painter, r ui.Rect, fill ui.Color) {

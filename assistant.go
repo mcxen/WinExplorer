@@ -56,6 +56,10 @@ type assistantUI struct {
 	showProv bool
 	showBook bool
 	showHist bool
+	// histInline is 会话 clicked in a pane too narrow for the column: the
+	// list takes the conversation's place until a session is picked or the
+	// button is clicked again. It is not saved.
+	histInline bool
 	// sessionRenamed keeps a user title from auto titling; histW is the
 	// history column's width, histDragging/histDirty save it on release.
 	sessionRenamed bool
@@ -240,6 +244,11 @@ func (a *App) assistantPane(c *ui.Context) {
 			// pushes the composer away.
 			below := ui.Row(c).Grow(1).FillWidth().MinHeight(0).MinWidth(0)
 			below.Children(func() {
+				if a.assist.histInline && !a.assistHistShown() {
+					ui.Column(c.Key("hist-inline")).Grow(1).FillHeight().MinHeight(0).MinWidth(0).
+						Background(c.Theme().Surface).Children(func() { a.assistantRecords(c) })
+					return
+				}
 				if a.assistHistShown() {
 					// Full screen gives the column its full width; a narrow pane
 					// keeps the conversation's room and shrinks the list instead.
@@ -436,7 +445,7 @@ func (a *App) assistantHeader(c *ui.Context) {
 		components.Icon(c, lucide.Bot).Size(16, 16).TextColor(colorText()).Shrink(0)
 		ui.Text(c, a.assist.sessionLabel()).FontSize(13).FontWeight(600).TextColor(colorText()).
 			SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Margin(0, 0, 0, 6)
-		a.assistantHeaderIcon(c, lucide.MessagesSquare(), "会话", a.assist.showHist, func() { a.assist.togglePanel("hist") })
+		a.assistantHeaderIcon(c, lucide.MessagesSquare(), "会话", a.assistHistShown() || a.assist.histInline, func() { a.assist.togglePanel("hist") })
 		if components.IconButton(c, lucide.Settings2(), "助手设置", components.IconButtonPlain).Clicked() {
 			a.openAssistantSettings()
 		}
@@ -556,7 +565,12 @@ func (a *App) wireComposerFocus(input ui.Element) {
 
 func (u *assistantUI) togglePanel(which string) {
 	if which == "hist" {
+		if !u.full && u.width < assistHistAutoW {
+			u.histInline = !u.histInline
+			return
+		}
 		u.showHist = !u.showHist
+		u.histInline = false
 		return
 	}
 	u.showHist = false
@@ -600,12 +614,14 @@ func (a *App) assistantNewSession() {
 	a.assist.clearSession()
 	a.assist.resetPaint()
 	a.assist.scroll = chat.ConversationState{}
+	a.assist.histInline = false
 	a.statusMsg = "已新开会话"
 	a.requestComposerFocus()
 }
 
 func (a *App) assistantOpenSession(id string) {
 	if id == "" || id == a.assist.sessionID {
+		a.assist.histInline = false
 		return
 	}
 	if a.assistantBusy() {
@@ -617,6 +633,7 @@ func (a *App) assistantOpenSession(id string) {
 		return
 	}
 	a.assist.touchActive()
+	a.assist.histInline = false
 	a.assist.resetPaint()
 	a.assist.scroll = chat.ConversationState{}
 	a.requestComposerFocus()

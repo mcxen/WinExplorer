@@ -89,6 +89,7 @@ func (a *App) assistantRecords(c *ui.Context) {
 				Grow(1).MinWidth(0).Height(26).FontSize(11.5).Placeholder("搜索").Label("搜索会话")
 			if components.IconButton(c, lucide.PanelLeftClose(), "收起历史会话", components.IconButtonPlain).Width(26).Height(26).Clicked() {
 				a.assist.showHist = false
+				a.assist.histInline = false
 			}
 		})
 		metas := histSessions(a.assist.sessions, a.assist.histQuery)

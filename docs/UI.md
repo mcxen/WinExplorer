@@ -82,7 +82,8 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **导航栏**：后退/前进/上一级/地址栏/刷新/文件夹搜索。地址栏两种状态：面包屑（`breadcrumbBar`，溢出折叠为「…」菜单 `crumbOverflow`，分隔箭头弹出子文件夹菜单 `crumbSeparator`；右侧下拉「最近访问」列出 `visitList` 中的文件夹「标题 · 路径」，点选导航，见 ADDR-RECENT）与编辑（`pathEditor`，补全下拉 `pathDropdown`，行内错误提示；进入编辑：空白处单击 / Ctrl+L / F4 / Alt+D）。
 - **侧栏**（`sidebar.go:sidebar`）：主文件夹、画廊、快速访问（可拖放固定）、最近位置、此电脑（卷 → 目录树）、回收站；虚拟列表。
 - **文件窗格**：详细信息（`files_details.go`）、列表（`files_list.go`）、小/中/大/超大图标（`files_icon.go`）、画廊（`gallery.go`）。
-  - 文件类型图标（`icons.go:fileTint` / `drawPDFSheet` / `drawHTMLSheet`）：PDF 红标、HTML/HTM 浏览器橙标，常见 Office 扩展独立配色；详情/列表 16px 只用自绘。
+  - 文件类型图标（`fileicons.go:kindOf` / `drawKind`）：按类别（应用、安装包、磁盘映像、压缩包、图片、视频、音频、PDF、HTML、文档、表格、幻灯片、文本、代码、脚本、字体、种子、快捷方式）绘制，不分大小写、识别 `.tar.gz` 等复合扩展名；所有视图共用 `fileIcon`，同尺寸方框、垂直居中。
+  - 应用自身图标（`appicon.go`）：`.app` 读 Info.plist + icns，`.desktop` 读 Icon=，Windows exe/lnk 走 Shell；后台解码、按路径+修改时间缓存，未就绪时显示通用应用图形。见规格 18。
   - 中等及以上图标（`thumb.go:mediaThumb`，`box >= thumbMinBox`）：PDF 尽量显示首页（Quick Look / `pdftoppm`），HTML/HTM 尽量显示本地 favicon（`<link rel=icon>` 或同目录 `favicon.ico` / data URI）；失败回退自绘。
 
   ![大图标](assets/ui/large-icons.png) ![画廊](assets/ui/gallery.png)

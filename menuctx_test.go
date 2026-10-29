@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -31,4 +32,31 @@ func flyChoose(t *testing.T, tt *ui.Tester, a *App, path ...string) {
 func flyClose(tt *ui.Tester, a *App) {
 	a.fly = flyState{}
 	tt.Frame()
+}
+
+// TestNativePaneMenu: a right-click on the pane's empty space opens the
+// system menu (not the flyout), its 新建 submenu lists newFileKinds, and
+// choosing 文本文档 creates the file.
+func TestNativePaneMenu(t *testing.T) {
+	root := t.TempDir()
+	a := newStoreApp(t, root)
+	a.sortAsc, a.grouping, a.iconZoom = true, groupNone, 1
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	tt.RightClickAt(400, 500)
+	if a.fly.open != "" {
+		t.Fatalf("right-click opened the flyout %q", a.fly.open)
+	}
+	if m := tt.Menu(); len(m) == 0 || m[0] != "新建" {
+		t.Fatalf("pane menu = %v", m)
+	}
+	if err := tt.ChooseMenuItem("新建", newFileKinds[0].label); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	ents, _ := os.ReadDir(root)
+	if len(ents) != 1 {
+		t.Fatalf("after 新建 %s: %v", newFileKinds[0].label, ents)
+	}
 }

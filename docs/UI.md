@@ -66,7 +66,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 | 助手面板 | 默认宽 380，最小 320 | `assistant.go:assistantPaneW/assistantMinW` |
 | 快速搜索 | 960 宽（独立面板 960×560），列表高 120–384，结果行高 44：24px 图标、完整文件名与相对路径、150px 右对齐的“大小 · 类型 / 修改日期”；分组标题行高 24；右侧预览宽 270 | `searchbox.go:searchHitRowH`、`searchDisplayRowAt`、`searchHitMetaW`、`searchpreview.go` |
 | 地址建议下拉 | 与地址栏同宽，最高 360，行高 28 | `addressbar.go:pathDropdown` |
-| 菜单（Fluent MenuFlyout，命令栏与右键，两种外观） | 外框圆角 8、内边距 4、最小宽 200；项高 32、悬停圆角 4 内缩 4、文字左右 12；勾选/圆点列 16+8、图标列 16+12；快捷键 11 号次级色右对齐（与文字≥28）；分割线 1px 上下 4，色 `tokMenuSep`；子菜单细 chevron 10；超 12 行滚动；按钮下方 4 弹出，右键在点击处弹出、近边缘翻转 | `menuflyout.go`、`menuctx.go` |
+| 菜单（Fluent MenuFlyout，命令栏下拉，两种外观；右键菜单为系统原生菜单，无图标） | 外框圆角 8、内边距 4、最小宽 200；项高 32、悬停圆角 4 内缩 4、文字左右 12；勾选/圆点列 16+8、图标列 16+12；快捷键 11 号次级色右对齐（与文字≥28）；分割线 1px 上下 4，色 `tokMenuSep`；子菜单细 chevron 10；超 12 行滚动；按钮下方 4 弹出 | `menuflyout.go`、`menuctx.go` |
 | 助手斜杠菜单 | 与输入框同宽，最高 220，行高 28 | `assistant_slash.go:assistantSlashMenu` |
 | 快速预览标题栏 | 高 40：‹ › 32×32、「打开」分割按钮高 32（▾ 宽 28）、更多、关闭 | `quicklook_bar.go` |
 | 按钮最小宽 | 80 | `uikit.go:btnMinW` |
@@ -115,7 +115,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - 快速搜索（`searchbox.go:searchBoxKeys`）：↑↓、PageUp/PageDown、Enter 打开、Ctrl+Enter 定位、Esc 关闭。
 - 助手输入框（Onevra `chat.GlassComposer`，`assistant.go:assistantComposer` / `wireComposerFocus` / `assistant_slash.go`）：打开/切换会话/发送完成或停止/点对话区空白后自动聚焦输入框；Enter 发送、Shift+Enter 换行、IME 组字中 Enter 只上屏；空内容不发送；运行中 Enter 走排队。输入框获焦时文件窗格快捷键让路，`Esc` 把焦点还给文件列表。草稿为单行 `/…` 时上方弹出命令菜单（含 `/分类` `/立即执行`），`↑`/`↓` 选择、`Enter` 选用、`Esc` 关闭（关闭后同一草稿不再弹出，直到离开斜杠查询）。回答中且草稿非空时 Trailing 提供停止。
 - 侧栏方向键导航（`navkeys.go`）：点击侧栏后 `↑`/`↓`、`Home`/`End` 移动焦点，`→` 展开或进入子级，`←` 折叠或回到父级，`Enter`/空格导航，`Tab` 交还焦点；移动不改变当前标签（`docs/specs/02-tree-polish.md` C）。
-- 菜单 flyout（命令栏与右键，`menuflyout.go`/`menuctx.go`）：`↑`/`↓`/`Home`/`End` 移动（跳过分割线与禁用项），`→`/`←` 开关子菜单，`Enter`/`Space` 执行，`Esc` 逐层关闭；打开时文件窗格快捷键让路。
+- 菜单 flyout（命令栏下拉，`menuflyout.go`/`menuctx.go`；右键菜单是系统原生菜单，键盘行为由系统提供）：`↑`/`↓`/`Home`/`End` 移动（跳过分割线与禁用项），`→`/`←` 开关子菜单，`Enter`/`Space` 执行，`Esc` 逐层关闭；打开时文件窗格快捷键让路。
 - 空格快速预览（`quicklook.go`、图片见 `imageview.go`、视频见 `videoview.go`）：`空格` 打开/关闭；`Esc` 或点外部关闭。图片：滚轮缩放（1×–8×，适配为 1×）、拖拽平移、`←`/`→` 或标题栏 ‹ › 切换**同目录图片**；标题栏（`quicklook_bar.go`）右侧为「打开」分割按钮（▾ 打开方式）、「更多」（在文件夹中显示、复制路径、复制 ｜ 分享 ｜ 属性）、关闭；经典风格对话框为不透明面；坏图显示 `ImageOff` 占位。视频：关键帧 + 细进度条 scrub 抽帧（`ffmpeg`），按钮「用系统播放器打开」（无内嵌播放器）；点画面播放提示同样走系统播放器。非图片/非视频：`←`/`→` 步进可见项；音频打开时为快退/快进 5 秒。侧栏预览窗格（`preview_pane.go`）选中图片时只做 Contain 适配大图；选中视频时显示关键帧海报 +「用系统播放器打开」，不重复 scrub 控件。
 
 ## 4. 中文文案

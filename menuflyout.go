@@ -9,12 +9,13 @@ import (
 )
 
 // menuflyout.go draws the command bar's menus (新建, 排序, 查看, 查看更多)
-// in the window under 经典 as WinUI 3's MenuFlyout does in File Explorer:
+// in the window as WinUI 3's MenuFlyout does in File Explorer:
 // a rounded panel with a soft shadow, every row with a 16px glyph column,
 // marks in a column of their own, shortcuts right-aligned in the secondary
-// text color, submenus beside their row. v2 keeps the system menus
-// (ui.Menu). Both are built from one []*menuEntry, so the verbs, order and
-// shortcuts cannot drift apart (docs/specs/16-commands-layout.md).
+// text color, submenus beside their row, under both looks. Right-click
+// menus are the system's own (menuctx.go:contextMenu), built from the same
+// []*menuEntry, so the verbs, order and shortcuts cannot drift apart
+// (docs/specs/16-commands-layout.md).
 
 // Menu flyout metrics, in DIPs (docs/UI.md「菜单」).
 const (
@@ -129,13 +130,13 @@ func (a *App) attachCommandMenu(c *ui.Context, btn ui.Element, id string, alignE
 		if alignEnd {
 			at, self = ui.AnchorBottomEnd, ui.AnchorTopEnd
 		}
-		a.flyLevels(c, id, btn, at, self, flyAnchorGap, es)
+		a.flyLevels(c, id, btn, at, self, es)
 	})
 }
 
 // flyLevels draws the root panel attached to target and the open submenu
-// beside its row; AttachTo flips either where it would leave the window.
-func (a *App) flyLevels(c *ui.Context, id string, target ui.Element, at, self ui.Anchor, gap float32, es []*menuEntry) {
+// beside its row, below a command-bar button; AttachTo flips either where it would leave the window.
+func (a *App) flyLevels(c *ui.Context, id string, target ui.Element, at, self ui.Anchor, es []*menuEntry) {
 	a.flyRoot = es
 	if path := a.flyPick; path != nil {
 		a.flyPick = nil
@@ -149,7 +150,7 @@ func (a *App) flyLevels(c *ui.Context, id string, target ui.Element, at, self ui
 	var subEs []*menuEntry
 	panel := a.flyPanel(c.Key("fly:"+id), es, func(e *menuEntry, row ui.Element) {
 		subRow, subEs = row, e.sub
-	}).AttachTo(target, at, self).Margin(gap, 0, 0, 0).AutoFocus()
+	}).AttachTo(target, at, self).Margin(flyAnchorGap, 0, 0, 0).AutoFocus()
 	a.flyKeys(panel, es, false)
 	if subEs != nil && a.fly.sub != "" {
 		sub := a.flyPanel(c.Key("fly:"+id+">"+a.fly.sub), subEs, nil).

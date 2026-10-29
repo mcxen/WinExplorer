@@ -111,7 +111,6 @@ type marqueeState struct {
 // before.
 type App struct {
 	fly     flyState     // the command bar's open flyout (menuflyout.go)
-	ctx     ctxMenuState // the open right-click flyout (menuctx.go)
 	flyRoot []*menuEntry // the open flyout's rows, as last drawn
 	flyPick []string     // a row to run in the next frame, by label path (tests)
 

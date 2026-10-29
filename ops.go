@@ -453,24 +453,43 @@ func copyPathTextWith(path string, write func(string)) bool {
 	return true
 }
 
+// newFileKind is one 新建 row that creates a real file: an empty text or
+// Markdown document, an empty ZIP (a valid end-of-central-directory
+// record), a JSON object.
+type newFileKind struct {
+	label, name string
+	data        []byte
+}
+
+var newFileKinds = []newFileKind{
+	{"文本文档", "新建文本文档.txt", nil},
+	{"Markdown 文档", "新建 Markdown 文档.md", nil},
+	{"JSON 文件", "新建 JSON 文件.json", []byte("{}\n")},
+	{"压缩(zipped)文件夹", "新建压缩文件夹.zip", append([]byte("PK\x05\x06"), make([]byte, 18)...)},
+}
+
 // doNewTextFile 新建一个空的文本文档，选中并进入内联重命名，对应
 // 资源管理器“新建 > 文本文档”。
-func (a *App) doNewTextFile() {
+func (a *App) doNewTextFile() { a.doNewFile(newFileKinds[0]) }
+
+// doNewFile creates k in the current folder, selects it and starts the
+// inline rename.
+func (a *App) doNewFile(k newFileKind) {
 	if specialPath(a.cur().path) {
 		a.statusMsg = "无法在此页面中新建文件"
 		return
 	}
-	name, err := uniqueFreeName(a.cur().path, "新建文本文档.txt", false)
+	name, err := uniqueFreeName(a.cur().path, k.name, false)
 	if err != nil {
 		a.statusMsg = "新建文件失败：" + err.Error()
 		return
 	}
 	path := filepath.Join(a.cur().path, name)
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
+	if err := os.WriteFile(path, k.data, 0o644); err != nil {
 		a.statusMsg = "新建文件失败：" + err.Error()
 		return
 	}
-	a.pushUndo(undoOp{Desc: "新建文本文档", Created: []string{path}})
+	a.pushUndo(undoOp{Desc: "新建" + k.label, Created: []string{path}})
 	a.reload()
 	a.selectOnly(path)
 	a.cur().reveal = path

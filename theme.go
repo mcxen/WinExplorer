@@ -67,6 +67,7 @@ var (
 	tokMuted   ui.Color // secondary foreground
 	tokAccent  ui.Color // primary action
 	tokDivider ui.Color // hairlines, secondary borders
+	tokMenuSep ui.Color // menu flyout separators
 	tokFolder  ui.Color // folder badge
 	tokStatus  ui.Color // status bar background
 	tokAddress ui.Color // address bar, raised surfaces
@@ -113,6 +114,7 @@ func resolveTokens() {
 	tokMuted = pick("#5C5C5C", "#C5C5C5")
 	tokAccent = pick("#005FB8", "#60CDFF")
 	tokDivider = pick("#E5E5E5", "#383838")
+	tokMenuSep = pick("#E0E0E0", "#4A4A4A")
 	tokFolder = pick("#F0C14D", "#E8B84A")
 	tokStatus = tokWindow
 	tokAddress = pick("#FFFFFF", "#2D2D2D")

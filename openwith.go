@@ -10,8 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // openwith.go is Explorer's 打开方式 (Open with) submenu, built here in
@@ -49,7 +47,7 @@ func openWithApps(ext string) []string {
 // marks it), the registry's apps next, then 始终使用 ▸ to record one and
 // the platform's chooser entry. a.store may be nil — the bare test app —
 // in which case no override is shown or recorded.
-func openWithMenu(a *App, m *ui.Menu, e Entry) {
+func openWithMenu(a *App, m *xMenu, e Entry) {
 	ensureOpenWithScan()
 	shown := 0
 	var userDefault string
@@ -79,11 +77,11 @@ func openWithMenu(a *App, m *ui.Menu, e Entry) {
 		if shown > 0 {
 			m.Separator()
 		}
-		m.Submenu("始终使用…", func(n *ui.Menu) {
+		m.Submenu("始终使用…", func(n *xMenu) {
 			for _, app := range openWithApps(e.Ext) {
 				app := app
 				cur := a.store.openWithDefault(e.Ext) == app
-				if n.Item(app).Checked(cur).Chosen() {
+				if n.Item(app).Radio(cur).Chosen() {
 					a.store.setOpenWithDefault(e.Ext, app)
 					a.statusMsg = "以后 ." + e.Ext + " 文件将用 " + app + " 打开"
 				}

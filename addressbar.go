@@ -368,7 +368,7 @@ func (a *App) breadcrumbBar(c *ui.Context) {
 		a.beginPathEdit()
 	}
 	cur := a.cur().path
-	bar.ContextMenu(func(m *ui.Menu) {
+	a.contextMenu(c, bar, func(m *xMenu) {
 		if m.Item("复制地址").Chosen() {
 			c.WriteClipboard(pathDisplay(cur))
 		}
@@ -424,9 +424,9 @@ func (a *App) addressRecentButton(c *ui.Context) {
 	btn.Children(func() {
 		components.Icon(c, lucide.ChevronDown).Size(12, 12).TextColor(colorMuted())
 	})
-	btn.Menu(func(m *ui.Menu) {
+	a.menuButton(c, btn, false, func(m *xMenu) {
 		for _, it := range a.addressRecentItems() {
-			if m.Item(it.label).Chosen() {
+			if m.Item(it.label).Icon(lucide.Folder, colorFolder()).Chosen() {
 				a.navigate(it.path)
 			}
 		}
@@ -485,7 +485,7 @@ func (a *App) crumbButton(c *ui.Context, crumb Crumb, last bool) {
 	if b.Clicked() {
 		a.navigate(path)
 	}
-	b.ContextMenu(func(m *ui.Menu) {
+	a.contextMenu(c, b, func(m *xMenu) {
 		if m.Item("复制路径").Chosen() {
 			c.WriteClipboard(pathDisplay(path))
 		}
@@ -511,9 +511,9 @@ func (a *App) crumbSeparator(c *ui.Context, parent Crumb) {
 	sep.Children(func() {
 		chevronIcon(c, false, 12)
 	})
-	sep.Menu(func(m *ui.Menu) {
+	a.menuButton(c, sep, false, func(m *xMenu) {
 		for _, p := range a.childPlaces(parent.Path) {
-			if m.Item(p.Name).Chosen() {
+			if m.Item(p.Name).Icon(lucide.Folder, colorFolder()).Chosen() {
 				a.navigate(p.Path)
 			}
 		}
@@ -534,9 +534,9 @@ func (a *App) crumbOverflow(c *ui.Context, hidden []Crumb) {
 	more.Children(func() {
 		components.Icon(c, lucide.Ellipsis).Size(14, 14).TextColor(colorText())
 	})
-	more.Menu(func(m *ui.Menu) {
+	a.menuButton(c, more, false, func(m *xMenu) {
 		for i := len(hidden) - 1; i >= 0; i-- {
-			if m.Item(hidden[i].Name).Chosen() {
+			if m.Item(hidden[i].Name).Icon(lucide.Folder, colorFolder()).Chosen() {
 				a.navigate(hidden[i].Path)
 			}
 		}

@@ -163,7 +163,7 @@ func (a *App) homePin(c *ui.Context, pins []Entry, i int) {
 	if e.IsDir {
 		a.bindDropFolder(c, tile, e.Path)
 	}
-	tile.ContextMenu(func(m *ui.Menu) {
+	a.contextMenu(c, tile, func(m *xMenu) {
 		a.pinMenu(m, e)
 	})
 }
@@ -197,13 +197,13 @@ func (a *App) homeRecent(c *ui.Context, recents []Entry, i int) {
 		a.doOpen()
 	}
 	a.bindItemInput(c, row, e)
-	row.ContextMenu(func(m *ui.Menu) {
+	a.contextMenu(c, row, func(m *xMenu) {
 		a.itemMenu(m, e)
 	})
 }
 
 // pinMenu is the Home tile's menu: open, unpin, properties.
-func (a *App) pinMenu(m *ui.Menu, e Entry) {
+func (a *App) pinMenu(m *xMenu, e Entry) {
 	if m.Item("打开").Chosen() {
 		a.openPinned(e.Path, e.IsDir)
 	}

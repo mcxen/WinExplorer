@@ -64,8 +64,8 @@ func TestCommandMenuFlyout(t *testing.T) {
 	if err := tt.Click("查看更多"); err != nil {
 		t.Fatal(err)
 	}
-	if got := tt.Menu(); !slices.Equal(got, menuLabels(a.moreMenu())) {
-		t.Fatalf("v2 system menu = %v", got)
+	if got := flyLabels(tt, a); !slices.Equal(got, menuLabels(a.moreMenu())) {
+		t.Fatalf("v2 flyout = %v", got)
 	}
 }
 

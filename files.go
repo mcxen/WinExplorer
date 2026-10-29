@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oneo-me/onevra/source/icons/lucide"
+
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 
@@ -503,36 +505,39 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 	// A drag on the empty space the rows and tiles leave is a rubber band
 	// selecting what it crosses; the rows' own drags never reach here.
 	a.bindMarquee(c, el)
-	el.ContextMenu(func(m *ui.Menu) {
+	a.contextMenu(c, el, func(m *xMenu) {
 		if a.cur().path == pathTrash {
 			a.trashPaneMenu(m)
 			return
 		}
 		special := specialPath(a.cur().path)
-		m.Submenu("新建", func(n *ui.Menu) {
-			if n.Item("文件夹").Shortcut(ui.Cmd|ui.Shift, ui.KeyN).Disabled(special).Chosen() {
+		m.Submenu("新建", func(n *xMenu) {
+			if n.Item("文件夹").Icon(lucide.FolderPlus).Shortcut(ui.Cmd|ui.Shift, ui.KeyN).Disabled(special).Chosen() {
 				a.doNewFolder()
 			}
-			if n.Item("文本文档").Disabled(special).Chosen() {
-				a.doNewTextFile()
+			n.Separator()
+			for _, k := range newFileKinds {
+				if n.Item(k.label).Icon(newKindIcon(k)).Disabled(special).Chosen() {
+					a.doNewFile(k)
+				}
 			}
-		})
-		if m.Item("粘贴").Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || special).Chosen() {
+		}).Icon(lucide.Plus)
+		if m.Item("粘贴").Icon(lucide.ClipboardPaste).Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || special).Chosen() {
 			a.doPaste()
 		}
 		m.Separator()
 		// Items that cannot run here do not show (no greyed-out puzzles).
-		if !special && sysHasTerminal() && m.Item("在终端中打开").Chosen() {
+		if !special && sysHasTerminal() && m.Item("在终端中打开").Icon(lucide.SquareTerminal).Chosen() {
 			a.openInTerminal(a.cur().path)
 		}
 		// The plugins' pane-background items — dups' scan, usage's treemap.
 		for _, it := range a.pluginMenuItems(nil) {
-			if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+			if it.add(m).Chosen() {
 				it.Run()
 			}
 		}
 		m.Separator()
-		if m.Item("刷新").Shortcut(0, ui.KeyF5).Chosen() {
+		if m.Item("刷新").Icon(lucide.RefreshCw).Shortcut(0, ui.KeyF5).Chosen() {
 			a.doRefresh()
 		}
 		// 刷新统计 drops the folder's cached sizes and walks its subtree
@@ -544,7 +549,7 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 			a.toggleHidden()
 		}
 		m.Separator()
-		if m.Item("属性").Chosen() {
+		if m.Item("属性").Icon(lucide.Info).Shortcut(ui.Alt, ui.KeyEnter).Chosen() {
 			a.showProperties()
 		}
 	})
@@ -555,7 +560,7 @@ func (a *App) bindPaneMenu(c *ui.Context, el ui.Element) {
 // The items follow Windows 11's: Open, Cut/Copy/Paste, Copy as path,
 // Rename, Compress to ZIP, Extract all, Open in Terminal (folders),
 // Refresh stats (folders), Delete, Properties.
-func (a *App) itemMenu(m *ui.Menu, e Entry) {
+func (a *App) itemMenu(m *xMenu, e Entry) {
 	if e.Path != "" && !a.isSelected(e.Path) {
 		a.selectOnly(e.Path)
 	}
@@ -572,7 +577,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	oneDir := one && sel[0].IsDir
 	onSpecial := specialPath(a.cur().path)
 
-	if m.Item("打开").Shortcut(0, ui.KeyEnter).Disabled(!anySel).Chosen() {
+	if m.Item("打开").Icon(lucide.ExternalLink).Shortcut(0, ui.KeyEnter).Disabled(!anySel).Chosen() {
 		a.doOpen()
 	}
 	// Finder's 显示包内容: walk into a macOS package without launching it.
@@ -582,9 +587,9 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 		}
 	}
 	if one && !sel[0].IsDir && !onSpecial {
-		m.Submenu("打开方式", func(n *ui.Menu) {
+		m.Submenu("打开方式", func(n *xMenu) {
 			openWithMenu(a, n, sel[0])
-		})
+		}).Icon(lucide.AppWindow)
 	}
 	if one && !onSpecial {
 		if a.store.isPinned(sel[0].Path) {
@@ -600,32 +605,32 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 		}
 	}
 	m.Separator()
-	if m.Item("剪切").Shortcut(ui.Cmd, ui.KeyX).Disabled(!anySel).Chosen() {
+	if m.Item("剪切").Icon(lucide.Scissors).Shortcut(ui.Cmd, ui.KeyX).Disabled(!anySel).Chosen() {
 		a.doCut()
 	}
-	if m.Item("复制").Shortcut(ui.Cmd, ui.KeyC).Disabled(!anySel).Chosen() {
+	if m.Item("复制").Icon(lucide.Copy).Shortcut(ui.Cmd, ui.KeyC).Disabled(!anySel).Chosen() {
 		a.doCopy()
 	}
-	if m.Item("粘贴").Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || onSpecial).Chosen() {
+	if m.Item("粘贴").Icon(lucide.ClipboardPaste).Shortcut(ui.Cmd, ui.KeyV).Disabled(!a.canPaste() || onSpecial).Chosen() {
 		a.doPaste()
 	}
-	if m.Item("复制为路径").Shortcut(ui.Cmd|ui.Shift, ui.KeyC).Disabled(!anySel || onSpecial).Chosen() {
+	if m.Item("复制为路径").Icon(lucide.Link).Shortcut(ui.Cmd|ui.Shift, ui.KeyC).Disabled(!anySel || onSpecial).Chosen() {
 		a.doCopyAsPath()
 	}
 	// 单选内联重命名；多选为批量重命名对话框——菜单项都叫“重命名”。
-	if m.Item("重命名").Shortcut(0, ui.KeyF2).Disabled(!anySel || onSpecial).Chosen() {
+	if m.Item("重命名").Icon(lucide.PenLine).Shortcut(0, ui.KeyF2).Disabled(!anySel || onSpecial).Chosen() {
 		a.doRenameStart()
 	}
 	// 删除 sits with the edit verbs, as Explorer's and Files' menus keep
 	// it, not after the plugins' items (docs/specs/16).
-	if m.Item("删除").Shortcut(0, ui.KeyDelete).Disabled(!anySel).Chosen() {
+	if m.Item("删除").Icon(lucide.Trash).Shortcut(0, ui.KeyDelete).Disabled(!anySel).Chosen() {
 		a.doDelete()
 	}
 	m.Separator()
-	if m.Item("压缩为 ZIP 文件").Disabled(!anySel || onSpecial).Chosen() {
+	if m.Item("压缩为 ZIP 文件").Icon(lucide.FileArchive).Disabled(!anySel || onSpecial).Chosen() {
 		a.doCompress()
 	}
-	if m.Item("全部解压").Disabled(!allArchives || onSpecial).Chosen() {
+	if m.Item("全部解压").Icon(lucide.PackageOpen).Disabled(!allArchives || onSpecial).Chosen() {
 		a.doExtract()
 	}
 	m.Separator()
@@ -638,7 +643,7 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	case one && !onSpecial:
 		termDir = filepath.Dir(sel[0].Path)
 	}
-	if termDir != "" && sysHasTerminal() && m.Item("在终端中打开").Chosen() {
+	if termDir != "" && sysHasTerminal() && m.Item("在终端中打开").Icon(lucide.SquareTerminal).Chosen() {
 		a.openInTerminal(termDir)
 	}
 	// 刷新统计 rewalks the one selected folder's subtree for the size
@@ -648,21 +653,21 @@ func (a *App) itemMenu(m *ui.Menu, e Entry) {
 	}
 	// The plugins' row-menu items — usage's treemap of the selected folder.
 	for _, it := range a.pluginMenuItems(sel) {
-		if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+		if it.add(m).Chosen() {
 			it.Run()
 		}
 	}
 	a.extMenuItems(m)
 	m.Separator()
-	if m.Item("属性").Shortcut(ui.Alt, ui.KeyEnter).Disabled(!one).Chosen() {
+	if m.Item("属性").Icon(lucide.Info).Shortcut(ui.Alt, ui.KeyEnter).Disabled(!one).Chosen() {
 		a.showProperties()
 	}
 }
 
 // attachRowMenu gives a row the menu its page wants: the trash page's
 // 还原/永久删除, every other page's item menu.
-func (a *App) attachRowMenu(el ui.Element, e Entry) {
-	el.ContextMenu(func(m *ui.Menu) {
+func (a *App) attachRowMenu(c *ui.Context, el ui.Element, e Entry) {
+	a.contextMenu(c, el, func(m *xMenu) {
 		if a.cur().path == pathTrash {
 			a.trashMenu(m, e)
 			return

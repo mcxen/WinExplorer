@@ -123,16 +123,14 @@ func TestRefreshStatsMenus(t *testing.T) {
 	if err := tt.RightClick("proj"); err != nil {
 		t.Fatal(err)
 	}
-	menu := tt.Menu()
+	menu := flyLabels(tt, a)
 	i, j, k := menuIndexOf(menu, "刷新统计"), menuIndexOf(menu, "在终端中打开"),
 		menuIndexOf(menu, "可视化查看占用")
 	if i < 0 || j < 0 || k < 0 || !(j < i && i < k) {
 		t.Fatalf("row menu = %v: 刷新统计 must sit between 在终端中打开 and 可视化查看占用", menu)
 	}
 	writeTree(t, filepath.Join(proj, "b.txt"), 40)
-	if err := tt.ChooseMenuItem("刷新统计"); err != nil {
-		t.Fatal(err)
-	}
+	flyChoose(t, tt, a, "刷新统计")
 	if !waitDirStatsIdle(10 * time.Second) {
 		t.Fatal("dir stats did not go idle after the row-menu refresh")
 	}
@@ -147,10 +145,10 @@ func TestRefreshStatsMenus(t *testing.T) {
 	if err := tt.RightClick("proj"); err != nil {
 		t.Fatal(err)
 	}
-	if menuIndexOf(tt.Menu(), "刷新统计") >= 0 {
-		t.Fatalf("row menu = %v: 刷新统计 shown with no single folder", tt.Menu())
+	if menuIndexOf(flyLabels(tt, a), "刷新统计") >= 0 {
+		t.Fatalf("row menu = %v: 刷新统计 shown with no single folder", flyLabels(tt, a))
 	}
-	tt.CloseMenu()
+	flyClose(tt, a)
 
 	// The pane background's item sits between 刷新 and 显示隐藏的项目,
 	// and choosing it rewalks the current folder: root's own tally lands,
@@ -162,16 +160,14 @@ func TestRefreshStatsMenus(t *testing.T) {
 		t.Fatal("the proj row is not built")
 	}
 	tt.RightClickAt(r.X+20, r.Y+150)
-	menu = tt.Menu()
+	menu = flyLabels(tt, a)
 	i, j, k = menuIndexOf(menu, "刷新统计"), menuIndexOf(menu, "刷新"),
 		menuIndexOf(menu, "显示隐藏的项目")
 	if i < 0 || j < 0 || k < 0 || !(j < i && i < k) {
 		t.Fatalf("pane menu = %v: 刷新统计 must sit between 刷新 and 显示隐藏的项目", menu)
 	}
 	writeTree(t, filepath.Join(root, "c.txt"), 100)
-	if err := tt.ChooseMenuItem("刷新统计"); err != nil {
-		t.Fatal(err)
-	}
+	flyChoose(t, tt, a, "刷新统计")
 	if !waitDirStatsIdle(10 * time.Second) {
 		t.Fatal("dir stats did not go idle after the pane-menu refresh")
 	}
@@ -194,9 +190,9 @@ func TestRefreshStatsMenus(t *testing.T) {
 		t.Fatal("the 主文件夹 page's empty recents section is not built")
 	}
 	tt.RightClickAt(m.X+m.W/2, m.Y+m.H/2)
-	menu = tt.Menu()
+	menu = flyLabels(tt, a)
 	if menuIndexOf(menu, "刷新统计") >= 0 || menuIndexOf(menu, "在终端中打开") >= 0 {
 		t.Fatalf("pane menu = %v: folder-only items shown on the 主文件夹 page", menu)
 	}
-	tt.CloseMenu()
+	flyClose(tt, a)
 }

@@ -303,7 +303,7 @@ func (a *App) detailsRow(c *ui.Context, e Entry, searching bool) {
 		}
 	})
 	a.bindItemInput(c, row, e)
-	a.attachRowMenu(row, e)
+	a.attachRowMenu(c, row, e)
 }
 
 // sizeColumnText is the 大小 column's cell: a file's own bytes, and a

@@ -150,7 +150,7 @@ func (a *App) tabItem(c *ui.Context, t *tabState, w float32) {
 	a.tabDropHoverFrame(c, id, hovered, dropped)
 	// The tab's own menu, as Explorer's tab context menu. The items name
 	// the tab by id: the menu outlives the frame that built it.
-	tab.ContextMenu(func(m *ui.Menu) {
+	a.contextMenu(c, tab, func(m *xMenu) {
 		at := a.tabIndex(id)
 		if at < 0 {
 			return
@@ -471,7 +471,13 @@ func (a *App) moreButton(c *ui.Context) {
 
 func (a *App) newMenu() []*menuEntry {
 	var l menuList
-	l.item("文件夹", lucide.FolderPlus, a.doNewFolder).shortcut(ui.Cmd|ui.Shift, ui.KeyN)
+	off := specialPath(a.cur().path)
+	l.item("文件夹", lucide.FolderPlus, a.doNewFolder).shortcut(ui.Cmd|ui.Shift, ui.KeyN).off(off)
+	l.sep()
+	for _, k := range newFileKinds {
+		k := k
+		l.item(k.label, newKindIcon(k), func() { a.doNewFile(k) }).off(off)
+	}
 	return l.es
 }
 
@@ -495,8 +501,8 @@ func (a *App) moreMenu() []*menuEntry {
 		var sub menuList
 		for _, it := range items {
 			e := sub.item(it.Label, nil, it.Run).off(it.Disabled)
-			if it.Checked {
-				e.check(true)
+			if it.Toggle {
+				e.check(it.Checked)
 			}
 		}
 		l.submenu("插件", lucide.Puzzle, sub.es)
@@ -587,4 +593,17 @@ func (a *App) viewMenu() []*menuEntry {
 	}
 	l.submenu("分组依据", lucide.Group, group.es)
 	return l.es
+}
+
+// newKindIcon is the 新建 row's glyph for a file kind.
+func newKindIcon(k newFileKind) func() *ui.SVG {
+	switch filepath.Ext(k.name) {
+	case ".md":
+		return lucide.FileType
+	case ".json":
+		return lucide.FileBraces
+	case ".zip":
+		return lucide.FileArchive
+	}
+	return lucide.FileText
 }

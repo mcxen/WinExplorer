@@ -241,20 +241,16 @@ func TestBreadcrumbMenus(t *testing.T) {
 	if err := tt.Click(filepath.Base(root) + " 中的文件夹"); err != nil {
 		t.Fatal(err)
 	}
-	if got := tt.Menu(); !slices.Equal(got, []string{"a", "b", "c"}) {
+	if got := flyLabels(tt, a); !slices.Equal(got, []string{"a", "b", "c"}) {
 		t.Fatalf("separator menu: %v", got)
 	}
-	if err := tt.ChooseMenuItem("c"); err != nil {
-		t.Fatal(err)
-	}
+	flyChoose(t, tt, a, "c")
 	if a.cur().path != filepath.Join(root, "c") {
 		t.Fatalf("chose c: at %s", a.cur().path)
 	}
 	tt.Frame()
 	tt.RightClickAt(emptyBarPoint(t, tt))
-	if err := tt.ChooseMenuItem("复制地址"); err != nil {
-		t.Fatal(err)
-	}
+	flyChoose(t, tt, a, "复制地址")
 	if tt.Clipboard() != filepath.Join(root, "c") {
 		t.Fatalf("copied %q", tt.Clipboard())
 	}
@@ -270,7 +266,7 @@ func TestBreadcrumbMenus(t *testing.T) {
 		t.Fatal("the last crumb was folded away")
 	}
 	tt.Click("更多位置")
-	m := tt.Menu()
+	m := flyLabels(tt, a)
 	if len(m) == 0 || m[len(m)-1] != "此电脑" {
 		t.Fatalf("overflow menu: %v", m)
 	}

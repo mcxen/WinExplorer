@@ -71,6 +71,7 @@ func registerRemotePlugin() {
 			return []PluginMenuItem{
 				{
 					Label:   "远程访问",
+					Toggle:  true,
 					Checked: a.remoteConf().Enabled,
 					Run:     a.remoteToggle,
 				},

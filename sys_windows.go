@@ -14,10 +14,9 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/sys/windows/registry"
 	"sunvale/internal/fsops"
 
-	"github.com/egoist/mygo/ui"
+	"golang.org/x/sys/windows/registry"
 )
 
 // sys_windows.go is Windows: Explorer (start /select), the Open-With
@@ -505,7 +504,7 @@ func sysOpenWithScan() { scanOpenWithAppsWindows() }
 
 // sysOpenWithMenuTail is openWithMenu's Windows tail: the system's
 // Open-With dialog, which reaches every installed application.
-func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {
+func sysOpenWithMenuTail(a *App, m *xMenu, e Entry) {
 	if m.Item("选择其他应用…").Chosen() {
 		if err := sysOpenAs(e.Path); err != nil {
 			a.statusMsg = "无法打开选择器：" + err.Error()

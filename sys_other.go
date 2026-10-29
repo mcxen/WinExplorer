@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // sys_other.go keeps the package compiling on the remaining platforms —
@@ -79,7 +77,7 @@ func sysOpenWithScan() {}
 
 // sysOpenWithMenuTail: no system chooser and no registry here, so the
 // shared menu simply ends without a tail.
-func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {}
+func sysOpenWithMenuTail(a *App, m *xMenu, e Entry) {}
 
 // sysRootName is the root volume's name in the sidebar, the breadcrumb and
 // This PC: the generic Unix root.

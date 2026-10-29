@@ -39,10 +39,10 @@ func TestQuickLookBarLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"在文件夹中显示", "复制路径", "复制", "-", "分享", "-", "属性"}
-	if got := tt.Menu(); !slices.Equal(got, want) {
+	if got := flyLabels(tt, a); !slices.Equal(got, want) {
 		t.Fatalf("更多 = %v, want %v", got, want)
 	}
-	tt.CloseMenu()
+	flyClose(tt, a)
 	if err := tt.Click("关闭 (Esc)"); err != nil {
 		t.Fatal(err)
 	}

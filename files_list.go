@@ -42,5 +42,5 @@ func (a *App) listRow(c *ui.Context, e Entry) {
 		a.nameCell(c, e, 16, 12)
 	})
 	a.bindItemInput(c, row, e)
-	a.attachRowMenu(row, e)
+	a.attachRowMenu(c, row, e)
 }

@@ -101,7 +101,7 @@ func (a *App) quickLookOpenSplit(c *ui.Context, e Entry) {
 		drop.Children(func() {
 			components.Icon(c, lucide.ChevronDown).Size(14, 14).TextColor(colorBtnText())
 		})
-		drop.Menu(func(m *ui.Menu) { openWithMenu(a, m, e) })
+		a.menuButton(c, drop, false, func(m *xMenu) { openWithMenu(a, m, e) })
 	})
 }
 
@@ -111,10 +111,10 @@ func (a *App) quickLookOpenSplit(c *ui.Context, e Entry) {
 func (a *App) quickLookMore(c *ui.Context, path string) {
 	onSel := a.quickLookFile == ""
 	btn := components.IconButton(c, lucide.Ellipsis(), "更多", components.IconButtonPlain)
-	btn.Menu(func(m *ui.Menu) { a.quickLookMoreMenu(m, path, onSel) })
+	a.menuButton(c, btn, false, func(m *xMenu) { a.quickLookMoreMenu(m, path, onSel) })
 }
 
-func (a *App) quickLookMoreMenu(m *ui.Menu, path string, onSel bool) {
+func (a *App) quickLookMoreMenu(m *xMenu, path string, onSel bool) {
 	if m.Item("在文件夹中显示").Chosen() {
 		a.quickLook = false
 		if dir := filepath.Dir(path); dir != a.cur().path {

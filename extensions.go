@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // extensions.go is WinExplorer's shell extension protocol, Explorer's
@@ -266,7 +264,7 @@ func (a *App) runShellExt(x shellExt) {
 
 // extMenuItems fills the menu with the enabled extensions that match any
 // selected entry, Explorer's extension-verb block, in registration order.
-func (a *App) extMenuItems(m *ui.Menu) {
+func (a *App) extMenuItems(m *xMenu) {
 	sel := a.selectedEntries()
 	for _, x := range a.shellExts {
 		if x.Disabled {

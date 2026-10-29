@@ -45,6 +45,7 @@ func resolveV2() {
 	tokWarning = pick("#C27B0F", "#F0A33A")
 	tokSuccess = pick("#1F9D55", "#4FD17A")
 	tokBtnText = pick("#FFFFFF", "#0F1530")
+	tokMenuSep = pick("#E4E4EA", "#44444C")
 	if darkMode() {
 		tokDivider = ui.RGBA(255, 255, 255, 0.07)
 		tokHover = ui.RGBA(255, 255, 255, 0.05)

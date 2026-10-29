@@ -60,7 +60,7 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string, at time.Time) {
 			}
 		})
 		full := assistErrorReport(text, at, applog.Path())
-		row.ContextMenu(func(m *ui.Menu) {
+		a.contextMenu(c, row, func(m *xMenu) {
 			if m.Item("复制错误信息").Chosen() {
 				c.WriteClipboard(full)
 				a.assist.copiedKey, a.assist.copiedAt = key+"-copy", time.Now()

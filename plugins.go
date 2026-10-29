@@ -54,12 +54,23 @@ type Plugin struct {
 }
 
 // PluginMenuItem is one menu entry a plugin contributes. Disabled greys it
-// out, Checked shows the check mark, Run fires on the click.
+// out, Run fires on the click. Only a Toggle item (a switch) shows a check
+// mark, set by Checked; an action item shows none.
 type PluginMenuItem struct {
 	Label    string
 	Disabled bool
+	Toggle   bool
 	Checked  bool
 	Run      func()
+}
+
+// add puts the item in m, with a check mark only when it toggles.
+func (it PluginMenuItem) add(m *xMenu) *xItem {
+	row := m.Item(it.Label).Disabled(it.Disabled)
+	if it.Toggle {
+		row.Checked(it.Checked)
+	}
+	return row
 }
 
 // PluginNavItem is one sidebar place a plugin contributes. Kind is the

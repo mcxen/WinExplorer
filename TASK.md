@@ -479,3 +479,8 @@
 - **范围**：`assistant.go`→`assistant_transcript`/`assistant_attach`；`assistant_run.go`→`assistant_run_stream`；`assistant_http.go`→`assistant_a2a`；`assistant_tools.go`→`assistant_tools_more`；`assistant_openui_paint.go`→`assistant_openui_widgets`；`assistant_memory.go`→`assistant_memory_tools`；`searchbox.go`→`searchbox_view`/`searchbox_frame`；更新 [15](docs/specs/15-code-layout.md)。
 - **验收**：`gofmt`、`go build ./...`、`go vet ./...`、windows/js,wasm/darwin 交叉编译、`go test -count=1 -timeout 900s ./...`；无 force-push / 不装 post-commit hook。
 - **状态**：已完成（本分支）。
+
+### UI5 — 界面打磨第五轮
+- **规格**：[17](docs/specs/17-ui-polish-5.md)。分支 `feat/ui-polish-5` → `main`。
+- **A 菜单统一**：已完成。
+- **状态**：进行中。

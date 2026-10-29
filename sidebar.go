@@ -432,7 +432,7 @@ func (a *App) navPlaceRow(c *ui.Context, r navRow) {
 		a.bindDragSource(row, r.path)
 	}
 	if r.kind == navRowPlace {
-		a.navFolderMenu(row, r.label, r.path, r.file)
+		a.navFolderMenu(c, row, r.label, r.path, r.file)
 	}
 }
 
@@ -501,7 +501,7 @@ func (a *App) navFolderRow(c *ui.Context, r navRow) {
 	if navCanDrag(r) {
 		a.bindDragSource(row, r.path)
 	}
-	a.navFolderMenu(row, r.label, r.path, false)
+	a.navFolderMenu(c, row, r.label, r.path, false)
 }
 
 // navTwist is the chevron that opens and closes a folder, with the label the
@@ -618,8 +618,8 @@ const (
 // navFolderMenu is the context menu a folder row of the pane carries, pinned
 // places and tree folders alike: open, unpin, a terminal, the plugins' folder
 // actions, and the properties dialog.
-func (a *App) navFolderMenu(row ui.Element, name, path string, file bool) {
-	row.ContextMenu(func(m *ui.Menu) {
+func (a *App) navFolderMenu(c *ui.Context, row ui.Element, name, path string, file bool) {
+	a.contextMenu(c, row, func(m *xMenu) {
 		if m.Item("打开").Chosen() {
 			a.openPinned(path, !file)
 		}
@@ -639,7 +639,7 @@ func (a *App) navFolderMenu(row ui.Element, name, path string, file bool) {
 			}
 			sel := []Entry{{Name: name, Path: path, IsDir: true}}
 			for _, it := range a.pluginMenuItems(sel) {
-				if m.Item(it.Label).Disabled(it.Disabled).Checked(it.Checked).Chosen() {
+				if it.add(m).Chosen() {
 					it.Run()
 				}
 			}

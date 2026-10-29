@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"sunvale/internal/fsops"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // sys_linux.go is the desktop Linux platform: xdg-open, the common
@@ -318,7 +316,7 @@ func sysOpenWithScan() { scanOpenWithAppsLinux() }
 
 // sysOpenWithMenuTail is openWithMenu's Linux tail: a browse entry into
 // the applications folder, as macOS's points at /Applications.
-func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {
+func sysOpenWithMenuTail(a *App, m *xMenu, e Entry) {
 	if m.Item("在应用文件夹中查看…").Chosen() {
 		a.navigate("/usr/share/applications")
 	}

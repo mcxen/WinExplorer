@@ -238,7 +238,7 @@ func (a *App) iconTile(c *ui.Context, e Entry, box float32, i int) {
 		})
 	})
 	a.bindItemInput(c, tile, e)
-	a.attachRowMenu(tile, e)
+	a.attachRowMenu(c, tile, e)
 	// The grouped icon views lay every tile out inside one plain Scroll, so
 	// the tile the keyboard moved to is built even off screen and raises
 	// itself: the ungrouped grid scrolls to its row through GridState.

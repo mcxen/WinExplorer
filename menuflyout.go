@@ -32,9 +32,10 @@ const (
 	flySepMargin  = 4   // above and below the 1px separator
 	flyFont       = 12  // label
 	flyAccelFont  = 11  // shortcut
-	flyChevron    = 12  // submenu chevron
+	flyChevron    = 10  // submenu chevron, the thin small one
 	flyAnchorGap  = 4   // panel from its button
 	flySubOverlap = 4   // a submenu laps its parent by the panel padding
+	flyMaxRows    = 12  // rows a panel shows before it scrolls
 )
 
 // menuEntry is one row of a command menu: a verb, a separator (sep) or a
@@ -50,6 +51,8 @@ type menuEntry struct {
 	checked  bool
 	disabled bool
 	sep      bool
+	tinted   bool
+	tint     ui.Color
 	sub      []*menuEntry
 	run      func()
 }
@@ -91,30 +94,6 @@ func menuLabels(es []*menuEntry) []string {
 	return out
 }
 
-// nativeMenu puts es into a system menu (v2).
-func nativeMenu(m *ui.Menu, es []*menuEntry) {
-	for _, e := range es {
-		switch {
-		case e.sep:
-			m.Separator()
-		case e.sub != nil:
-			sub := e.sub
-			m.Submenu(e.label, func(n *ui.Menu) { nativeMenu(n, sub) }).Disabled(e.disabled)
-		default:
-			it := m.Item(e.label).Disabled(e.disabled)
-			if e.hasKey {
-				it.Shortcut(e.mods, e.key)
-			}
-			if e.toggle || e.radio {
-				it.Checked(e.checked)
-			}
-			if it.Chosen() && e.run != nil {
-				e.run()
-			}
-		}
-	}
-}
-
 // flyState is the open flyout: its button's id, the open submenu's label,
 // and the keyboard highlight in the active level (idx). parentIdx is the
 // root row that opened the submenu, so ← / Esc can put the highlight back.
@@ -123,14 +102,10 @@ type flyState struct {
 	idx, parentIdx int // -1 = clamp to the first enabled row on draw
 }
 
-// attachCommandMenu opens build's menu from btn: in the window under 经典,
-// the system's under v2. alignEnd lines the panel's right edge up with
-// the button's, for the bar's last button.
+// attachCommandMenu opens build's menu from btn as an in-window flyout,
+// under both styles. alignEnd lines the panel's right edge up with the
+// button's, for the bar's last button.
 func (a *App) attachCommandMenu(c *ui.Context, btn ui.Element, id string, alignEnd bool, build func() []*menuEntry) {
-	if visualV2 {
-		btn.Menu(func(m *ui.Menu) { nativeMenu(m, build()) })
-		return
-	}
 	if btn.Clicked() {
 		if a.fly.open == id {
 			a.fly = flyState{}
@@ -142,28 +117,63 @@ func (a *App) attachCommandMenu(c *ui.Context, btn ui.Element, id string, alignE
 		return
 	}
 	es := build()
+	if len(es) == 0 {
+		return
+	}
 	ui.Overlay(c, func() {
 		back := ui.Box(c.Key("fly-back:" + id)).Absolute().Left(0).Top(0).Right(0).Bottom(0)
-		if back.Clicked() {
+		if back.Clicked() || back.RightClicked() {
 			a.fly = flyState{}
 		}
 		at, self := ui.AnchorBottomStart, ui.AnchorTopStart
 		if alignEnd {
 			at, self = ui.AnchorBottomEnd, ui.AnchorTopEnd
 		}
-		var subRow ui.Element
-		var subEs []*menuEntry
-		panel := a.flyPanel(c.Key("fly:"+id), es, func(e *menuEntry, row ui.Element) {
-			subRow, subEs = row, e.sub
-		}).AttachTo(btn, at, self).Margin(flyAnchorGap, 0, 0, 0).AutoFocus()
-		a.flyKeys(panel, es, false)
-		if subEs != nil && a.fly.sub != "" {
-			sub := a.flyPanel(c.Key("fly:"+id+">"+a.fly.sub), subEs, nil).
-				AttachTo(subRow, ui.AnchorTopEnd, ui.AnchorTopStart).
-				Top(-flyPad).Left(flySubOverlap - flyPad)
-			a.flyKeys(sub, subEs, true)
-		}
+		a.flyLevels(c, id, btn, at, self, flyAnchorGap, es)
 	})
+}
+
+// flyLevels draws the root panel attached to target and the open submenu
+// beside its row; AttachTo flips either where it would leave the window.
+func (a *App) flyLevels(c *ui.Context, id string, target ui.Element, at, self ui.Anchor, gap float32, es []*menuEntry) {
+	a.flyRoot = es
+	if path := a.flyPick; path != nil {
+		a.flyPick = nil
+		if e := flyFind(es, path); e != nil && e.run != nil && !e.disabled {
+			a.fly = flyState{}
+			e.run()
+			return
+		}
+	}
+	var subRow ui.Element
+	var subEs []*menuEntry
+	panel := a.flyPanel(c.Key("fly:"+id), es, func(e *menuEntry, row ui.Element) {
+		subRow, subEs = row, e.sub
+	}).AttachTo(target, at, self).Margin(gap, 0, 0, 0).AutoFocus()
+	a.flyKeys(panel, es, false)
+	if subEs != nil && a.fly.sub != "" {
+		sub := a.flyPanel(c.Key("fly:"+id+">"+a.fly.sub), subEs, nil).
+			AttachTo(subRow, ui.AnchorTopEnd, ui.AnchorTopStart).
+			Top(-flyPad).Left(flySubOverlap - flyPad)
+		a.flyKeys(sub, subEs, true)
+	}
+}
+
+// flyFind returns the row at path, a submenu's label before its row's.
+func flyFind(es []*menuEntry, path []string) *menuEntry {
+	for i, l := range path {
+		var hit *menuEntry
+		for _, e := range es {
+			if !e.sep && e.label == l {
+				hit = e
+			}
+		}
+		if hit == nil || i == len(path)-1 {
+			return hit
+		}
+		es = hit.sub
+	}
+	return nil
 }
 
 // flyPanel draws one level of a flyout. openSub reports the row of the
@@ -181,15 +191,23 @@ func (a *App) flyPanel(c *ui.Context, es []*menuEntry, openSub func(e *menuEntry
 		Background(colorFlyout()).Border(1, colorFlyoutBorder()).
 		Shadow(0, 8, 16, 0, colorFlyoutShadow()).Shadow(0, 0, 2, 0, colorFlyoutShadow().Alpha(0.5)).
 		KeepFocus().Role(ui.RoleMenu)
-	panel.Children(func() {
+	rows := func() {
 		for i, e := range es {
 			if e.sep {
 				ui.Box(c.Key("sep"+itoa(i))).FillWidth().Height(1).Margin(flySepMargin, 0).
-					Background(colorFlyoutBorder()).Shrink(0)
+					Background(colorMenuSeparator()).Shrink(0)
 				continue
 			}
 			a.flyRow(c.Key("row"+itoa(i)+e.label), i, e, marks, icons, subs, openSub)
 		}
+	}
+	panel.Children(func() {
+		if len(es) <= flyMaxRows {
+			rows()
+			return
+		}
+		// Long menus (a folder's subfolders) scroll past flyMaxRows rows.
+		ui.Scroll(c.Key("scroll")).FillWidth().MaxHeight(flyMaxRows*flyRowH).MinHeight(0).Children(rows)
 	})
 	return panel
 }
@@ -202,6 +220,9 @@ func (a *App) flyRow(c *ui.Context, i int, e *menuEntry, marks, icons, subs bool
 	active := isRoot == (a.fly.sub == "")
 	isOpen := e.sub != nil && isRoot && a.fly.sub == e.label
 	kb := active && !e.disabled && i == a.fly.idx
+	if kb {
+		row.ScrollIntoView()
+	}
 	switch {
 	case e.disabled:
 	case row.Pressed():
@@ -231,7 +252,11 @@ func (a *App) flyRow(c *ui.Context, i int, e *menuEntry, marks, icons, subs bool
 		if icons {
 			ui.Row(c.Key("ico")).Width(flyIcon).Height(flyIcon).Shrink(0).Margin(0, flyIconGap, 0, 0).Children(func() {
 				if e.icon != nil {
-					components.Icon(c.Key("g"), e.icon).Size(flyIcon, flyIcon).TextColor(fg)
+					ic := fg
+					if e.tinted && !e.disabled {
+						ic = e.tint
+					}
+					components.Icon(c.Key("g"), e.icon).Size(flyIcon, flyIcon).TextColor(ic)
 				}
 			})
 		}
@@ -243,7 +268,7 @@ func (a *App) flyRow(c *ui.Context, i int, e *menuEntry, marks, icons, subs bool
 				SingleLine().Shrink(0).Margin(0, 0, 0, flyAccelGap)
 		case e.sub != nil:
 			ui.Box(c.Key("gap")).Width(flyAccelGap).Shrink(0)
-			components.Icon(c.Key("chev"), lucide.ChevronRight).Size(flyChevron, flyChevron).TextColor(colorMuted())
+			chevronIcon(c.Key("chev"), false, flyChevron)
 		case subs:
 			ui.Box(c.Key("gap")).Width(flyAccelGap + flyChevron).Shrink(0)
 		}
@@ -437,9 +462,17 @@ func keyLabel(k ui.Key) string {
 }
 
 // Flyout surfaces, after WinUI's AcrylicInAppFillColorDefault solid
-// fallback and its control fills.
-func colorFlyout() ui.Color { return pick("#F9F9F9", "#2C2C2C") }
+// fallback and its control fills; v2 takes its own surface tokens.
+func colorFlyout() ui.Color {
+	if visualV2 {
+		return pick("#FFFFFF", "#26262C")
+	}
+	return pick("#F9F9F9", "#2C2C2C")
+}
 func colorFlyoutBorder() ui.Color {
+	if visualV2 {
+		return tokFieldBorder
+	}
 	if darkMode() {
 		return ui.RGBA(255, 255, 255, 0.08)
 	}
@@ -451,5 +484,15 @@ func colorFlyoutShadow() ui.Color {
 	}
 	return ui.RGBA(0, 0, 0, 0.14)
 }
-func colorFlyoutHover() ui.Color   { return colorText().Alpha(0.06) }
+
+// colorMenuSeparator is the flyout's separator: WinUI's DividerStroke,
+// strong enough in the dark to read on the flyout surface.
+func colorMenuSeparator() ui.Color { return tokMenuSep }
+
+func colorFlyoutHover() ui.Color {
+	if visualV2 {
+		return tokHover
+	}
+	return colorText().Alpha(0.06)
+}
 func colorFlyoutPressed() ui.Color { return colorText().Alpha(0.04) }

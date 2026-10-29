@@ -345,7 +345,7 @@ func (a *App) galleryTile(c *ui.Context, p galleryPhoto) {
 		a.doOpen()
 	}
 	a.bindDragSource(tile, p.path)
-	tile.ContextMenu(func(m *ui.Menu) {
+	a.contextMenu(c, tile, func(m *xMenu) {
 		a.itemMenu(m, galleryEntry(p))
 	})
 	// The month grids are rows inside one plain Scroll, so every tile is

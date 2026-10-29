@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 )
 
 // trash.go is the 回收站 page: ~/.Trash listed like Explorer's recycle
@@ -19,7 +18,7 @@ func trashEntries() []Entry { return sysTrashList() }
 
 // trashMenu is the trash page's item menu: 还原 where the original path is
 // known, 永久删除, properties.
-func (a *App) trashMenu(m *ui.Menu, e Entry) {
+func (a *App) trashMenu(m *xMenu, e Entry) {
 	if !a.isSelected(e.Path) {
 		a.selectOnly(e.Path)
 	}
@@ -44,7 +43,7 @@ func (a *App) trashMenu(m *ui.Menu, e Entry) {
 }
 
 // trashPaneMenu is the trash page's background menu.
-func (a *App) trashPaneMenu(m *ui.Menu) {
+func (a *App) trashPaneMenu(m *xMenu) {
 	if m.Item("清空回收站").Chosen() {
 		a.doEmptyTrash()
 	}

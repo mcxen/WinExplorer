@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"sunvale/internal/fsops"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // sys_darwin.go is macOS: open / Quick Look (qlmanage) / mdls / afplay /
@@ -256,7 +254,7 @@ func sysOpenWithScan() { scanOpenWithAppsMac() }
 // sysOpenWithMenuTail is openWithMenu's macOS tail: a browse entry into
 // the Applications folder, for picking an app by hand when the registry
 // has not listed it.
-func sysOpenWithMenuTail(a *App, m *ui.Menu, e Entry) {
+func sysOpenWithMenuTail(a *App, m *xMenu, e Entry) {
 	if m.Item("在 /Applications 中查看…").Chosen() {
 		a.navigate("/Applications")
 	}

@@ -85,6 +85,7 @@
 | FIX035-CLI | 命令行打开目录/文件（相对、~、Windows 路径），已运行时转发到新标签页并前置；`--version`/`--help` 不起界面 | 高 | 已完成 | README「单实例」 | — | `fix/v035-usability` → `main` |
 | FIX035-TREE | 侧栏树默认不自动展开跟随（`treeExpand`，未设置=关）；开启时只保留当前目录祖先链 | 中 | 已完成 | `docs/UI.md` TREE-NOEXPAND | TREE-NOEXPAND | `fix/v035-usability` → `main` |
 | FIX035-ASSIST | 助手：回复结束聚焦输入框即刻生效；续聊保留旧消息回归测试；窄面板不自动开历史；名称列先让宽保大小列 | 中 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |
+| NATIVE-CTX | 右键菜单恢复为操作系统原生菜单（两种外观）；保留新建子菜单、分隔线、禁用、开关勾选、快捷键与隐藏不可用项，原生菜单不带图标 | 高 | 已完成 | [17](docs/specs/17-ui-polish-5.md) | UI5 | `fix/native-context-menu` → `main` |
 | FIX035-MENU | 右键菜单：Linux 探测更多终端；不可用的「在终端中打开」「刷新统计」隐藏而非灰显 | 中 | 已完成 | 本文 | — | `fix/v035-usability` → `main` |
 | FLIP-PERF | 任务视图翻转降卡顿：翻转期间冻结两面数据、预热任务视图、背面只建 8 张卡、边缘模糊、超 20ms 回退淡入淡出、落定 80ms 淡入；`TestFlipFrameTimes` 2000 文件 + 500 历史：p50 67.8→17.5ms、p95 149→27ms | 中 | 完成 | — | TASKSYS | — |
 | VISUAL2 | 视觉语言 v2：小圆角令牌、默认 v2、经典可切、纵向对齐 | 高 | 已完成 | [11](docs/specs/11-visual-language.md) | — | — |
@@ -488,7 +489,7 @@
 
 ### UI5 — 界面打磨第五轮
 - **规格**：[17](docs/specs/17-ui-polish-5.md)。分支 `feat/ui-polish-5` → `main`。
-- **A 菜单统一**：已完成。
+- **A 菜单统一**：已完成；右键菜单随后改回系统原生菜单（`fix/native-context-menu`，见规格 A 的更正），命令栏下拉仍为自绘 flyout。
 - **B 窄窗口和列布局**：已完成。
 - **D 侧栏整理**：已完成（「文件系统」箭头未能复现，见规格）。
 - **E AI 面板瘦身**：已完成。

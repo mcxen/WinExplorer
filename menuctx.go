@@ -6,15 +6,12 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// menuctx.go draws the right-click menus and the menu buttons that build
-// their items imperatively (Item(...).Chosen()) as the in-window flyout of
-// menuflyout.go, under both visual styles. xMenu mirrors ui.Menu's API:
+// menuctx.go builds the right-click menus, shown as the system's native
+// context menu, and the command-bar menu buttons, drawn as the in-window
+// flyout of menuflyout.go, from one imperative builder
+// (Item(...).Chosen()). xMenu mirrors ui.Menu's API:
 // the build function runs once to collect the rows, and again, with the
 // chosen row's place, where that row's Chosen reports true.
-//
-// A right-click still goes through ui.ContextMenu, so the list row under
-// the pointer is chosen and Shift+F10 / the menu key keep working; the
-// collecting run adds nothing to the system menu, which then never shows.
 
 type xRun struct {
 	collect bool
@@ -159,43 +156,42 @@ func tidyMenu(es []*menuEntry) []*menuEntry {
 	return out
 }
 
-// ctxMenuState is the open right-click flyout: the element it opened on
-// and where, in window DIPs.
-type ctxMenuState struct {
-	id   string
-	x, y float32
+// contextMenu gives el a right-click menu shown as the system's own
+// context menu (GTK, Win32, NSMenu), as ui.ContextMenu shows it: the list
+// row under the pointer is chosen first, and Shift+F10 / the menu key open
+// it. build's rows are collected as for the flyout (tidyMenu drops stray
+// separators, an empty submenu shows disabled) and handed to ui.Menu; the
+// run after a choice collects them again and runs the chosen row.
+// Native menus carry no icons: ui.Menu has none, so Icon is ignored here.
+func (a *App) contextMenu(c *ui.Context, el ui.Element, build func(m *xMenu)) {
+	el.ContextMenu(func(m *ui.Menu) {
+		nativeMenu(m, collectXMenu(build))
+	})
 }
 
-// contextMenu gives el a right-click menu drawn as a flyout at the
-// pointer (below el for the keyboard). Near the window's edges the flyout
-// flips to the other side of the point, as AttachTo places it.
-func (a *App) contextMenu(c *ui.Context, el ui.Element, build func(m *xMenu)) {
-	id := "ctx:" + strconv.FormatUint(el.ID(), 36)
-	el.ContextMenu(func(*ui.Menu) {
-		b := el.Bounds()
-		x, y := b.X, b.Y+b.H
-		if px, py, over := el.PointerPosition(); over {
-			x, y = b.X+px, b.Y+py
+// nativeMenu adds es to m; a radio row shows as a checked item, the only
+// mark ui.Menu has.
+func nativeMenu(m *ui.Menu, es []*menuEntry) {
+	for _, e := range es {
+		switch {
+		case e.sep:
+			m.Separator()
+		case e.sub != nil:
+			sub := e.sub
+			m.Submenu(e.label, func(n *ui.Menu) { nativeMenu(n, sub) }).Disabled(e.disabled)
+		default:
+			it := m.Item(e.label).Disabled(e.disabled)
+			if e.toggle || e.radio {
+				it.Checked(e.checked)
+			}
+			if e.hasKey {
+				it.Shortcut(e.mods, e.key)
+			}
+			if it.Chosen() && e.run != nil {
+				e.run()
+			}
 		}
-		a.ctx = ctxMenuState{id: id, x: x, y: y}
-		a.fly = flyState{open: id, idx: -1, parentIdx: -1}
-	})
-	if a.fly.open != id || a.ctx.id != id {
-		return
 	}
-	es := collectXMenu(build)
-	if len(es) == 0 {
-		a.fly = flyState{}
-		return
-	}
-	ui.Overlay(c, func() {
-		back := ui.Box(c.Key("fly-back:" + id)).Absolute().Left(0).Top(0).Right(0).Bottom(0)
-		if back.Clicked() || back.RightClicked() {
-			a.fly = flyState{}
-		}
-		pt := ui.Box(c.Key("fly-pt:" + id)).Absolute().Left(a.ctx.x).Top(a.ctx.y).Width(0).Height(0)
-		a.flyLevels(c, id, pt, ui.AnchorBottomStart, ui.AnchorTopStart, 0, es)
-	})
 }
 
 // menuButton opens build's rows as a flyout below btn on a click.

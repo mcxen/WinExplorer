@@ -250,7 +250,9 @@ func TestBreadcrumbMenus(t *testing.T) {
 	}
 	tt.Frame()
 	tt.RightClickAt(emptyBarPoint(t, tt))
-	flyChoose(t, tt, a, "复制地址")
+	if err := tt.ChooseMenuItem("复制地址"); err != nil {
+		t.Fatal(err)
+	}
 	if tt.Clipboard() != filepath.Join(root, "c") {
 		t.Fatalf("copied %q", tt.Clipboard())
 	}

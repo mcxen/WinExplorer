@@ -1,10 +1,8 @@
 package search
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -33,20 +31,17 @@ func writeFiles(t *testing.T, root string, files map[string]string) {
 func buildIndex(t *testing.T, ix *Index, roots ...string) {
 	t.Helper()
 	ix.Enable()
-	ix.progress.Store(0)
-	items := map[string]indexEntry{}
-	var mu sync.Mutex
-	ix.walkList(context.Background(), roots, nil, func(e indexEntry) {
-		mu.Lock()
-		items[e.path] = e
-		mu.Unlock()
-	})
-	ix.mu.Lock()
-	ix.items = items
-	ix.built = time.Now()
-	ix.complete = true
-	ix.estimate = len(items)
-	ix.mu.Unlock()
+	ix.Rebuild(roots)
+	waitBuilt(ix)
+}
+
+func waitBuilt(ix *Index) {
+	ix.mu.RLock()
+	done := ix.done
+	ix.mu.RUnlock()
+	if done != nil {
+		<-done
+	}
 }
 
 func queryNames(t *testing.T, ix *Index, root, raw string, hidden bool) ([]fsentry.Entry, bool) {
@@ -133,7 +128,6 @@ func TestIndexCacheRoundTrip(t *testing.T) {
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{"sub/kept.txt": "12345"})
 	buildIndex(t, ix, root)
-	ix.save()
 
 	loaded := NewIndex(IndexConfig{CacheFile: ix.cacheFile})
 	loaded.Enable()
@@ -149,7 +143,7 @@ func TestIndexCacheRoundTrip(t *testing.T) {
 		t.Fatalf("loaded status = %+v", st)
 	}
 
-	if err := os.WriteFile(ix.cacheFile, []byte(`{"version":99,"entries":[{"p":"/x"}]}`), 0o644); err != nil {
+	if err := os.WriteFile(ix.cacheFile, []byte("SVIX0001 an older format"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	foreign := NewIndex(IndexConfig{CacheFile: ix.cacheFile})
@@ -167,21 +161,9 @@ func TestIndexCapStopsTheWalk(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		writeFiles(t, root, map[string]string{"file-" + string(rune('a'+i)) + ".txt": ""})
 	}
-	ix.Enable()
-	ix.progress.Store(0)
-	ix.pendingMu.Lock()
-	ix.pending = map[string]indexEntry{}
-	ix.pendingMu.Unlock()
-	ix.walkList(context.Background(), []string{root}, nil, func(e indexEntry) {
-		ix.pendingMu.Lock()
-		ix.pending[e.path] = e
-		ix.pendingMu.Unlock()
-	})
-	ix.pendingMu.Lock()
-	collected := len(ix.pending)
-	ix.pendingMu.Unlock()
-	if collected != 3 {
-		t.Fatalf("walk collected %d entries, want the cap of 3", collected)
+	buildIndex(t, ix, root)
+	if st := ix.Status(); st.Total != 3 || st.Complete {
+		t.Fatalf("capped build status = %+v, want 3 partial rows", st)
 	}
 }
 
@@ -210,7 +192,6 @@ func TestIndexStartsFromCompleteCache(t *testing.T) {
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{"cached.txt": "hi"})
 	buildIndex(t, ix, root)
-	ix.save()
 
 	warm := NewIndex(IndexConfig{CacheFile: ix.cacheFile})
 	warm.Start([]string{root})
@@ -222,25 +203,61 @@ func TestIndexStartsFromCompleteCache(t *testing.T) {
 	}
 }
 
-func TestIndexFlushesBuildInFlight(t *testing.T) {
+func TestIndexRefreshReusesUnchangedFolders(t *testing.T) {
 	ix := testIndex(t)
 	root := t.TempDir()
-	half := filepath.Join(root, "half.txt")
-	ix.Enable()
-	ix.mu.Lock()
-	ix.building = true
-	ix.pending = map[string]indexEntry{half: {path: half, size: 3, mod: time.Now().Unix()}}
-	ix.mu.Unlock()
-	ix.Flush()
-	if st := ix.Status(); st.Total != 1 || st.Complete {
-		t.Fatalf("flushed status = %+v", st)
+	files := map[string]string{}
+	for i := 0; i < 20; i++ {
+		files["d"+string(rune('a'+i))+"/f.txt"] = ""
 	}
+	writeFiles(t, root, files)
+	buildIndex(t, ix, root)
+	if st := ix.Status(); st.Rescanned != 21 {
+		t.Fatalf("cold build read %d folders, want 21", st.Rescanned)
+	}
+	// One folder changes: a file appears, another goes.
+	writeFiles(t, root, map[string]string{"dc/new-one.md": ""})
+	if err := os.Remove(filepath.Join(root, "dd", "f.txt")); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(2 * time.Second)
+	for _, d := range []string{"dc", "dd"} {
+		_ = os.Chtimes(filepath.Join(root, d), future, future)
+	}
+	ix.Rebuild([]string{root})
+	waitBuilt(ix)
+	if st := ix.Status(); st.Rescanned != 2 {
+		t.Fatalf("refresh read %d folders, want the 2 changed", st.Rescanned)
+	}
+	if hits, _ := queryNames(t, ix, root, "new-one", false); len(hits) != 1 {
+		t.Fatalf("new file missing after refresh: %v", namesOf(hits))
+	}
+	if hits, _ := queryNames(t, ix, filepath.Join(root, "dd"), "f.txt", false); len(hits) != 0 {
+		t.Fatalf("deleted file survived refresh: %v", namesOf(hits))
+	}
+	if hits, _ := queryNames(t, ix, root, "f.txt", false); len(hits) != 19 {
+		t.Fatalf("reused rows = %d, want 19", len(hits))
+	}
+}
 
-	loaded := NewIndex(IndexConfig{CacheFile: ix.cacheFile})
-	loaded.Enable()
-	loaded.load()
-	if hits, ok := queryNames(t, loaded, root, "half", false); !ok || len(hits) != 1 {
-		t.Fatalf("flushed cache: %v hits, answered %v", len(hits), ok)
+func TestIndexSkipsExcludedAndMatchesShortAndWide(t *testing.T) {
+	ix := testIndex(t)
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"node_modules/pkg/index.js": "",
+		"src/index.go":              "",
+		"文档/季度报告.docx":              "",
+		"x.y":                       "",
+	})
+	buildIndex(t, ix, root)
+	for q, want := range map[string]int{"index": 1, "x.": 2, "季度报告": 1, "报告": 1, "INDEX.GO": 1, "zzz": 0} {
+		hits, ok := queryNames(t, ix, root, q, false)
+		if !ok || len(hits) != want {
+			t.Fatalf("%q = %v (answered %v), want %d", q, namesOf(hits), ok, want)
+		}
+	}
+	if _, ok := queryNames(t, ix, filepath.Join(root, "node_modules"), "index", false); ok {
+		t.Fatal("an excluded folder claimed coverage")
 	}
 }
 

@@ -708,3 +708,16 @@ func (q Query) highlight(text string, path bool) []Span {
 	flush(prev)
 	return out
 }
+
+// NameNeedles returns every name term, lowercased. A name that satisfies the
+// query contains each of them case-insensitively, so an index over lowercased
+// names can use them to narrow candidates before Matches verifies.
+func (q Query) NameNeedles() []string {
+	var out []string
+	for _, t := range q.terms {
+		if t.kind == termName && t.text != "" {
+			out = append(out, strings.ToLower(t.text))
+		}
+	}
+	return out
+}

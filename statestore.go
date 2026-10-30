@@ -116,6 +116,10 @@ type appSettings struct {
 	// Ctrl+K / ⌘K.
 	SearchHotkey string `json:"searchHotkey,omitempty"`
 
+	// NoSearchIndex switches the on-disk filename index off (设置 › 快速搜索);
+	// global search then walks the disks on every query.
+	NoSearchIndex bool `json:"noSearchIndex,omitempty"`
+
 	// UpdateMirrors are the download prefixes the updater tries in order
 	// (updatemirror.go): "https://tvv.tw/" style proxies and "direct" for
 	// github.com itself, separated by commas or newlines. Empty means

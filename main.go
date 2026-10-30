@@ -133,10 +133,10 @@ func main() {
 				ow.Focus()
 			}
 		}
-		// The search index (searchindex.go) warms in the background: the
-		// Ctrl+K palette answers from the last walk's cache at once, while the
-		// volumes are walked again behind it.
-		go startSearchIndex()
+		// The search index (searchindex.go) maps its file in the background:
+		// the Ctrl+K palette answers from it at once, while changed folders
+		// are refreshed behind it.
+		go startSearchIndex(store.settings().NoSearchIndex)
 		// 右键菜单要知道有没有终端：$PATH 查找放后台（viewguard.go）。
 		go warmTerminal()
 		// Timed jobs (schedule.go): minute ticker inside the process,

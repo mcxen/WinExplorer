@@ -76,7 +76,7 @@ func TestSearchBoxAnswersFromTheIndex(t *testing.T) {
 
 	tt.Key(ui.Ctrl, ui.KeyK)
 	tt.Frame()
-	if !tt.HasText("索引 4 项") {
+	if !tt.HasText("索引 3 项") {
 		t.Fatalf("the footer does not count the index: %v", tt.Texts())
 	}
 	a.searchBox.scope = scopeFolder

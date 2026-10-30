@@ -21,4 +21,5 @@
   - `dirExists` 视图内未命中时先乐观显示，再后台 stat；失败后下一帧移除，同步写状态文件也移到 goroutine。`dirExistsStat` 留作测试阻塞点。
   - 隐藏项切换清空树的子项缓存，用已缓存的全部名字按新设置重新过滤；设置页同步该字段时同样清空。
 - **测试**：`TestSidebarVolumesAreCached` 统计视图内卷列表读取次数为 0；`TestDirExistsDoesNotWaitInView` 用阻塞的 stat 证明视图不等待；`TestNavTreeHiddenToggleRefilters` 验证切换隐藏项后树子项立即变化。既有树展开/键盘/最近位置测试改为等待后台目录读取后通过。
+- **门禁回归**：`TestSearchBoxRebuildButtonWalksAgain` 在索引构建完成后补一帧再读页脚，避免构建落在第一帧之后时误报“未完整”缺失。
 - **界面巡检**：在 `DISPLAY=:10`、独立 HOME 下检查侧栏展开/收起、悬停引导线、栏宽拖动、原生右键菜单，并回归搜索、设置与任务页；截图位于 `/workspace/sunvale-pi-shots/b2/`。

@@ -16,6 +16,8 @@ func newTestApp(t *testing.T, dir string) *App {
 	// Every UI test gets its own lights: the AI fx store is shared with
 	// tool tests that leave rows glowing.
 	isolateAIFx(t)
+	// 此电脑's rows are read outside the test's view, as the real startup does.
+	warmVolumes()
 	a := &App{
 		tabs:        []*tabState{newTab(dir)},
 		activeTab:   0,

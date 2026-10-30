@@ -113,6 +113,9 @@ func TestSearchBoxRebuildButtonWalksAgain(t *testing.T) {
 	}
 	tt.Frame()
 	waitSearchIndexBuild(t)
+	// The build finishes on its own goroutine; its result reaches the footer
+	// on the next frame, which no event necessarily requests in a test.
+	tt.Frame()
 	st := searchIndexState()
 	if st.building || st.total != 1 || st.complete {
 		t.Fatalf("capped rebuild status = %+v", st)

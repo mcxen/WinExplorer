@@ -46,6 +46,8 @@ func TestNavTreeKeysMoveWithoutNavigating(t *testing.T) {
 	if err := tt.Click("展开 " + filepath.Base(dir)); err != nil {
 		t.Fatalf("could not open the current folder: %v", err)
 	}
+	folderNames.wait(dir)
+	tt.Frame()
 	clickNavRow(t, tt, a, "navtree-"+sub)
 	start := a.cur().path
 	if !a.navTree.focused {
@@ -97,6 +99,8 @@ func TestNavTreeKeysExpandCollapseAndActivate(t *testing.T) {
 	if !a.navTree.open[dir] {
 		t.Fatal("Right did not expand the focused folder")
 	}
+	folderNames.wait(dir)
+	tt.Frame()
 	tt.Key(0, ui.KeyRight)
 	if a.navTree.cursor != "navtree-"+sub {
 		t.Fatalf("Right cursor = %q, want first child %q", a.navTree.cursor, sub)

@@ -149,29 +149,76 @@ const dirExistsTTL = 30 * time.Second
 
 var (
 	dirExistsMu   sync.Mutex
-	dirExistsSeen = map[string]dirExistsEntry{}
+	dirExistsSeen = map[string]*dirExistsEntry{}
 )
 
 type dirExistsEntry struct {
 	ok bool
 	at time.Time
+	// checking marks a stat in flight: the next frames serve the old answer
+	// rather than queue another one.
+	checking bool
 }
 
 // dirExists reports whether dir is a folder, caching the answer for
-// dirExistsTTL.
+// dirExistsTTL. A miss during view construction answers optimistically and
+// stats on a goroutine, so the sidebar's rows never wait on a share whose
+// server went away; the row leaves on the frame after a failed check.
 func dirExists(dir string) bool {
 	dirExistsMu.Lock()
-	if e, ok := dirExistsSeen[dir]; ok && time.Since(e.at) < dirExistsTTL {
+	e, known := dirExistsSeen[dir]
+	if known && !e.checking && !e.at.IsZero() && time.Since(e.at) < dirExistsTTL {
+		ok := e.ok
 		dirExistsMu.Unlock()
-		return e.ok
+		return ok
 	}
+	if !known {
+		e = &dirExistsEntry{ok: true}
+		dirExistsSeen[dir] = e
+	} else if e.checking {
+		ok := e.ok
+		dirExistsMu.Unlock()
+		return ok
+	}
+	e.checking = true
+	result := e.ok
 	dirExistsMu.Unlock()
-	info, err := os.Stat(dir)
-	ok := err == nil && info.IsDir()
+	if inView.Load() > 0 {
+		go func() {
+			ok := dirExistsStat(dir)
+			dirExistsMu.Lock()
+			e.ok, e.at, e.checking = ok, time.Now(), false
+			dirExistsMu.Unlock()
+			repaint()
+		}()
+		return result
+	}
+	ok := dirExistsStat(dir)
 	dirExistsMu.Lock()
-	dirExistsSeen[dir] = dirExistsEntry{ok: ok, at: time.Now()}
+	e.ok, e.at, e.checking = ok, time.Now(), false
 	dirExistsMu.Unlock()
 	return ok
+}
+
+// dirExistsStat is the one stat behind dirExists. It runs outside view
+// construction: the async path above keeps it off the UI thread. A var so a
+// test can hold it and prove the view does not wait.
+var dirExistsStat = func(dir string) bool {
+	info, err := os.Stat(dir)
+	return err == nil && info.IsDir()
+}
+
+// forgetRecentVisit drops a missing folder from 最近位置 and the store. The
+// store save writes state.json, so inside a view it happens on a goroutine.
+func (a *App) forgetRecentVisit(dir string) {
+	if inView.Load() > 0 {
+		go func() {
+			a.store.forgetVisit(dir)
+			repaint()
+		}()
+		return
+	}
+	a.store.forgetVisit(dir)
 }
 
 // recentPlaceRows are the sidebar's 最近位置 rows. The list holds still
@@ -214,7 +261,7 @@ func (a *App) recentPlaceRows() []navRow {
 	kept := t.recent[:0]
 	for _, dir := range t.recent {
 		if !dirExists(dir) {
-			a.store.forgetVisit(dir)
+			a.forgetRecentVisit(dir)
 			delete(t.recentIn, dir)
 			continue
 		}

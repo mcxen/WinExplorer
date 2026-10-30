@@ -333,6 +333,12 @@ func (a *App) remoteMux() http.Handler {
 	mux.HandleFunc("/api/sunvale/reset-token", a.remoteHandleResetToken)
 	mux.HandleFunc("/api/sunvale/port", a.remoteHandlePort)
 	mux.HandleFunc("/api/sunvale/enabled", a.remoteHandleEnabled)
+	mux.HandleFunc("/api/sunvale/volsave", a.remoteHandleVolSave)
+	mux.HandleFunc("/api/sunvale/volsave/undo", a.remoteHandleVolSaveUndo)
+	mux.HandleFunc("/api/sunvale/volsave/target", a.remoteHandleVolSaveTarget)
+	mux.HandleFunc("/manifest.webmanifest", a.remoteHandleManifest)
+	mux.HandleFunc("/icon-192.png", a.remoteHandleIcon)
+	mux.HandleFunc("/icon-512.png", a.remoteHandleIcon)
 	// Agent Card discovery is public; execution and task access require the
 	// administrator token. Both protocol aliases share the same handlers.
 	mux.HandleFunc("/.well-known/agent-card.json", a.remoteHandleA2ACard)

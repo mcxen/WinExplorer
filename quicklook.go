@@ -87,6 +87,23 @@ func (a *App) quickLookKeys(c *ui.Context) {
 		a.quickLook = false
 		return
 	}
+	// ↑/↓ on a picture: 图片快存 (volsave.go) saves into the target folder
+	// or takes the last save back. The overlay had no Up/Down binding.
+	if st := a.preview.Load(); st != nil && st.kind == previewImage && a.quickLookFile == "" {
+		if c.Shortcut(0, ui.KeyUp) {
+			_, dup, err := volSaveCopy(a.singleSelected().Path, volSaveTarget())
+			a.volSaveToast(volSaveMsg(dup, err))
+			return
+		}
+		if c.Shortcut(0, ui.KeyDown) {
+			if _, err := volSaveUndo(); err != nil {
+				a.volSaveToast(err.Error())
+			} else {
+				a.volSaveToast("已取消")
+			}
+			return
+		}
+	}
 	left, right := c.Shortcut(0, ui.KeyLeft), c.Shortcut(0, ui.KeyRight)
 	if !left && !right {
 		return

@@ -260,6 +260,17 @@ func (fc *folderNameCache) load(dir string) {
 	}()
 }
 
+// fresh reads dir on the caller and replaces what the cache held: the tree
+// wants the listing as it is, not the completion cache's few-second-old copy.
+func (fc *folderNameCache) fresh(dir string) dirNames {
+	names, hidden, err := readFolderNames(dir)
+	d := dirNames{names: names, hidden: hidden, ready: true, err: err, at: time.Now()}
+	fc.mu.Lock()
+	fc.entries[dir] = &d
+	fc.mu.Unlock()
+	return d
+}
+
 // now returns dir's subfolders, reading them on the caller when the cache
 // has none yet: a menu that opens on a click shows them at once.
 func (fc *folderNameCache) now(dir string) dirNames {
@@ -268,6 +279,20 @@ func (fc *folderNameCache) now(dir string) dirNames {
 	}
 	names, hidden, err := readFolderNames(dir)
 	return dirNames{names: names, hidden: hidden, ready: true, err: err, at: time.Now()}
+}
+
+// forget drops what is known of dir: its listing changed.
+func (fc *folderNameCache) forget(dir string) {
+	fc.mu.Lock()
+	delete(fc.entries, dir)
+	fc.mu.Unlock()
+}
+
+// forgetAll drops every read: 刷新 asks for the world as it is now.
+func (fc *folderNameCache) forgetAll() {
+	fc.mu.Lock()
+	fc.entries = map[string]*dirNames{}
+	fc.mu.Unlock()
 }
 
 // wait blocks until dir's read is in, for tests.

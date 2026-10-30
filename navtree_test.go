@@ -33,6 +33,10 @@ func navTreeApp(t *testing.T) (*App, *ui.Tester, string) {
 	// box to click or paint.
 	a.navWidth = navMinWidth
 	a.reload()
+	// The tree's reads are off the view path now: open the chain and gather
+	// the rows once outside the view, as an app that has just started does.
+	a.navTreeFollow()
+	a.navRows()
 	// A few frames: the tree's rows need one to be laid out with a box, and the
 	// reveal that scrolls the current folder's row into the pane needs the next.
 	for i := 0; i < 3; i++ {
@@ -117,6 +121,8 @@ func TestNavTreeRowFollowsTheWindow(t *testing.T) {
 	a, tt, dir := navTreeApp(t)
 	sub := filepath.Join(dir, "a-sub")
 	a.navigate(sub)
+	a.navTreeFollow()
+	a.navRows()
 	// The rows for the new place take a frame to be laid out, and the reveal
 	// that scrolls the current folder's row into view the one after that.
 	for i := 0; i < 3; i++ {
@@ -194,6 +200,10 @@ func TestNavTreeChevronOpensWithoutNavigating(t *testing.T) {
 	if _, read := a.navTree.kids[sub]; read {
 		t.Fatal("the tree read a folder nobody opened")
 	}
+	// The open folder's children are read off the view path; the row shows
+	// on the next frame after that read.
+	folderNames.wait(dir)
+	tt.Frame()
 	start := a.cur().path
 	if err := tt.Click("展开 a-sub"); err != nil {
 		t.Fatalf("no chevron for the folder: %v", err)
@@ -204,6 +214,7 @@ func TestNavTreeChevronOpensWithoutNavigating(t *testing.T) {
 	if a.cur().path != start {
 		t.Fatalf("the chevron navigated to %q", a.cur().path)
 	}
+	folderNames.wait(sub)
 	tt.Frame()
 	if !tt.HasText("deeper") {
 		t.Fatalf("the opened folder shows no children: %v", tt.Texts())

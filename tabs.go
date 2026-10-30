@@ -276,7 +276,12 @@ func (a *App) zoomOut() {
 	}
 }
 
-func (a *App) toggleHidden() { a.showHidden = !a.showHidden }
+func (a *App) toggleHidden() {
+	a.showHidden = !a.showHidden
+	// The tree's children were filtered when they were read; filter them
+	// again so dot-folders appear or disappear with the listing.
+	a.navChildrenClear()
+}
 
 // maxClosedTabs is how many closed tabs 重新打开关闭的标签页 (Ctrl+Shift+T)
 // can bring back, newest first.

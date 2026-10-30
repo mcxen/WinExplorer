@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -94,34 +93,33 @@ func navIndent(depth int) float32 {
 // the pane's tree lists them, in name order, hidden ones per 显示 > 隐藏的项目,
 // symlinks to folders counted as folders. An unreadable folder has none, rather
 // than an error the pane would have to draw.
+//
+// The first read is a directory walk, so it never runs inside a view: the
+// pane's shared folder-name cache reads it on a goroutine (pathinput.go) and
+// the row appears on the following frame. The built children are kept for the
+// life of the tree, as before.
 func (a *App) navChildren(path string) []Entry {
 	if kids, ok := a.navTree.kids[path]; ok {
 		return kids
 	}
+	var d dirNames
+	if inView.Load() > 0 {
+		d = folderNames.get(path)
+		if !d.ready {
+			return nil // on its way; the next frame fills the row
+		}
+	} else {
+		d = folderNames.fresh(path)
+	}
 	if a.navTree.kids == nil {
 		a.navTree.kids = map[string][]Entry{}
 	}
-	var kids []Entry
-	if entries, err := os.ReadDir(path); err == nil {
-		for _, d := range entries {
-			name := d.Name()
-			if strings.HasPrefix(name, ".") && !a.showHidden {
-				continue
-			}
-			dir := d.IsDir()
-			if !dir && d.Type()&os.ModeSymlink != 0 {
-				if st, err := os.Stat(filepath.Join(path, name)); err == nil && st.IsDir() {
-					dir = true
-				}
-			}
-			if !dir {
-				continue
-			}
-			kids = append(kids, Entry{Name: name, Path: filepath.Join(path, name), IsDir: true})
+	kids := make([]Entry, 0, len(d.names))
+	for _, name := range d.names {
+		if !a.showHidden && d.hidden[name] {
+			continue
 		}
-		sort.SliceStable(kids, func(i, j int) bool {
-			return strings.ToLower(kids[i].Name) < strings.ToLower(kids[j].Name)
-		})
+		kids = append(kids, Entry{Name: name, Path: filepath.Join(path, name), IsDir: true})
 	}
 	a.navTree.kids[path] = kids
 	return kids
@@ -133,9 +131,12 @@ func (a *App) navChildrenDrop(path string) {
 	if a.navTree.kids != nil {
 		delete(a.navTree.kids, path)
 	}
+	folderNames.forget(path)
 }
 
 // navChildrenClear forgets every read: 刷新 asks for the world as it is now.
+// The shared folder-name cache is left alone: 显示隐藏的项目 only needs the
+// reads filtered again, and doRefresh drops that cache separately.
 func (a *App) navChildrenClear() {
 	a.navTree.kids = nil
 }
@@ -163,7 +164,7 @@ func (a *App) navSync(path string) {
 	// so walking around never leaves a long trail of opened folders. Folders
 	// the user opened by hand are not in auto and are left as they are.
 	chain := map[string]bool{}
-	root := volumeRootOf(path)
+	root := volumeRootOf(path, a.thisPCPlaces())
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
 		chain[dir] = true
 		if dir == root || dir == filepath.Dir(dir) {
@@ -189,9 +190,9 @@ func (a *App) navSync(path string) {
 
 // volumeRootOf is the mounted volume path sits under, or "/" when none leads to
 // it: the tree climbs to it and no further.
-func volumeRootOf(path string) string {
+func volumeRootOf(path string, places []Place) string {
 	best := "/"
-	for _, v := range sysVolumes() {
+	for _, v := range places {
 		if v.Path == "" || v.Path == "/" {
 			continue
 		}

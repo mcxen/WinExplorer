@@ -217,6 +217,13 @@ func (ix *Index) load() {
 // Rebuild refreshes the snapshot in the background: unchanged folders reuse
 // their old rows. Only one build runs at a time.
 func (ix *Index) Rebuild(roots []string) {
+	ix.RebuildWith(func() []string { return roots })
+}
+
+// RebuildWith is Rebuild with the roots gathered on the build goroutine, for
+// callers on the UI thread: the build is marked running at once, and listing
+// the volumes (which stats disks) happens off the frame.
+func (ix *Index) RebuildWith(roots func() []string) {
 	ix.mu.Lock()
 	if ix.building || !ix.enabled {
 		ix.mu.Unlock()
@@ -238,7 +245,7 @@ func (ix *Index) Rebuild(roots []string) {
 	go func() {
 		defer close(done)
 		defer cancel()
-		ix.runBuild(ctx, roots, old)
+		ix.runBuild(ctx, roots(), old)
 	}()
 }
 

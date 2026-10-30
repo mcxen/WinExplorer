@@ -69,7 +69,7 @@ func setSearchIndexOn(on bool) {
 // searchIndexTouch refreshes a stale snapshot behind an answered query.
 func searchIndexTouch() {
 	if searchIndex.Enabled() && searchIndex.Stale() {
-		searchIndex.Rebuild(globalSearchRoots())
+		searchIndex.RebuildWith(globalSearchRoots)
 	}
 }
 
@@ -83,7 +83,7 @@ func searchIndexStale() bool { return searchIndex.Stale() }
 
 // searchIndexRebuild runs from click handlers: the volume list stats disks,
 // so it is gathered off the UI thread (viewguard.go).
-func searchIndexRebuild() { go searchIndex.Rebuild(globalSearchRoots()) }
+func searchIndexRebuild() { searchIndex.RebuildWith(globalSearchRoots) }
 
 // searchIndexNote folds the pane's latest listing into the persistent index.
 func searchIndexNote(dir string, entries []Entry) { searchIndex.Note(dir, entries) }

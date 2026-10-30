@@ -39,6 +39,7 @@ require (
 	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/eino-contrib/jsonschema v1.0.3 // indirect
 	github.com/evanphx/json-patch v0.5.2 // indirect
+	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/geoffgarside/ber v1.1.0 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect

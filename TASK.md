@@ -512,3 +512,10 @@
 - **验收**：20 万文件：加载 116 ms/31.6 MB 堆 → 0.17 ms/0 MB；10 字符查询 50 ms → 2 ms；1% 变动刷新 847 → 326 ms；磁盘 19.5 → 16.1 MB。
 - **未做**：Windows USN 日志、macOS FSEvents；真机 Windows/macOS 未运行。
 - **状态**：已完成，合入 `main`。
+
+### VOLSAVE — 图片快存（音量键 / 方向键）
+- **规格**：[24](docs/specs/24-web-volume-save.md)。分支 `feat/web-volume-save` → `main`。
+- **实现**：网页预览图片 ↑/音量+/「↑存」保存到快存目录，↓/音量−/「↓撤」取消；1 分钟同源去重「已保存过」；桌面快速预览 ↑/↓ 同规则；最小 PWA manifest。
+- **结论**：Android Chrome / Firefox / iOS Safari 及 PWA 均不向网页分发物理音量键，手机靠屏幕按钮。
+- **未做**：真机未测；原生音量键需要原生壳。
+- **状态**：已完成，合入 `main`。

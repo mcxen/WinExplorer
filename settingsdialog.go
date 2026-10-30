@@ -279,6 +279,15 @@ func (a *App) settingsViewGroups() []components.SettingsGroup {
 				}
 			}),
 		}},
+		{ID: "volsave", Title: "图片快存", Items: []components.SettingsItem{
+			settingsActionItem("dir", "快存目录", volSaveTargetLabel(), "设为当前文件夹", func() {
+				if err := setVolSaveTarget(a.cur().path); err != nil {
+					a.statusMsg = err.Error()
+					return
+				}
+				a.statusMsg = "快存目录：" + a.cur().path
+			}),
+		}},
 		{ID: "startup", Title: "启动", Items: []components.SettingsItem{
 			settingsSwitchItem("restore", "恢复上次打开的窗口与标签页", "下次启动时回到退出前的位置",
 				func() bool { return a.store.settings().restoreSession() },

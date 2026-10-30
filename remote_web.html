@@ -2,6 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>晴谷</title>
 <style>
@@ -100,7 +103,7 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
  </div>
 </div>
 <div id="app" class="hidden">
- <header><h1 id="siteTitle">晴谷</h1><button id="btnHidden" class="tbtn" title="显示隐藏的项目">隐藏</button><button id="btnTheme" class="tbtn" title="切换浅色/深色主题"></button><a href="/@manage">管理</a><button id="logoutBtn">退出</button></header>
+ <header><h1 id="siteTitle">晴谷</h1><button id="btnHidden" class="tbtn" title="显示隐藏的项目">隐藏</button><button id="btnVs" class="tbtn" title="快存目录：看图时 ↑/音量+ 保存，↓/音量− 取消">快存</button><button id="btnTheme" class="tbtn" title="切换浅色/深色主题"></button><a href="/@manage">管理</a><button id="logoutBtn">退出</button></header>
  <div class="toolbar">
   <nav id="breadcrumb"></nav>
   <form id="searchForm"><input id="searchInput" placeholder="搜索当前目录"><button>搜索</button></form>
@@ -125,6 +128,7 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
 <div id="preview" class="hidden">
  <div class="pv-bar">
   <span id="pvName"></span>
+  <button id="pvVsSave" class="hidden" title="快存（↑ / 音量+）">↑存</button><button id="pvVsUndo" class="hidden" title="取消快存（↓ / 音量−）">↓撤</button>
   <a id="pvDownload" target="_blank" rel="noopener">下载</a>
   <button id="pvClose">关闭</button>
  </div>
@@ -140,6 +144,7 @@ try{token=localStorage.getItem(TOKEN_KEY)||''}catch(e){}
 const KIND2ICON={dir:'folder',video:'video',audio:'audio',image:'image',text:'text',pdf:'file',other:'archive'};
 let siteTitle='';
 let currentPath='/';
+let pvPath='',pvImage=false,vsBusy=false;
 let sharePwd='',pwdKind='list',pwdPath='/',initPath='/',initPending=true;
 try{
  const p=decodeURIComponent(location.pathname||'/');
@@ -293,6 +298,7 @@ async function doSearch(){
  for(const it of items)$('list').appendChild(rowEl(it,()=>loadDir(it.parent||'/')));
 }
 function openOverlay(name){
+ pvImage=false;vsPaint();
  $('pvName').textContent=name;
  $('pvDownload').classList.add('hidden');
  const body=$('pvBody');body.innerHTML='';
@@ -306,6 +312,7 @@ function pvMsg(t){
  body.appendChild(s);
 }
 function closePreview(){
+ pvImage=false;
  $('preview').classList.add('hidden');
  $('pvBody').innerHTML='';
 }
@@ -340,6 +347,7 @@ async function openPreview(path){
  }else if(kind==='audio'){
   const a=document.createElement('audio');a.controls=true;a.src=raw;svMediaFallback(a,'浏览器无法播放此音频，可用「下载」保存');body.appendChild(a);
  }else if(kind==='image'){
+  pvPath=path;pvImage=true;vsPaint();
   const i=document.createElement('img');i.src=raw;i.alt=name;svMediaFallback(i,'浏览器无法显示此图片，可用「下载」保存');body.appendChild(i);
  }else if(kind==='pdf'){
   const f=document.createElement('iframe');f.src=raw;body.appendChild(f);
@@ -415,7 +423,48 @@ $('pwdForm').addEventListener('submit',e=>{
  if(pwdKind==='list')loadDir(pwdPath);else openPreview(pwdPath);
 });
 $('pwdCancel').onclick=closePwd;
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePwd();closePreview()}});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){closePwd();closePreview();return}
+ if(!pvImage||$('preview').classList.contains('hidden'))return;
+ const up=e.key==='AudioVolumeUp'||e.key==='VolumeUp'||e.key==='ArrowUp'||e.keyCode===175||e.keyCode===183;
+ const dn=e.key==='AudioVolumeDown'||e.key==='VolumeDown'||e.key==='ArrowDown'||e.keyCode===174||e.keyCode===182;
+ if(!up&&!dn)return;
+ e.preventDefault();
+ if(!e.repeat)up?vsSave():vsUndo();
+});
+// 图片快存：↑/音量+ 复制当前图片到快存目录，↓/音量− 取消上一次保存
+function vsToast(t,err){
+ const d=document.createElement('div');d.className='toast'+(err?' err':'');d.textContent=t;
+ $('toasts').appendChild(d);
+ setTimeout(()=>{d.classList.add('out');setTimeout(()=>d.remove(),260)},1400);
+}
+function vsPaint(){for(const id of['pvVsSave','pvVsUndo'])$(id).classList.toggle('hidden',!pvImage)}
+async function vsSave(){
+ if(vsBusy)return;vsBusy=true;
+ const j=await api('/api/sunvale/volsave','POST',{path:pvPath});vsBusy=false;
+ if(!j)return;
+ if(j.code!==200){vsToast(j.message||'快存失败',true);if(String(j.message).indexOf('未设置')>=0)vsPick();return}
+ vsToast(j.data.dup?'已保存过':'已保存')
+}
+async function vsUndo(){
+ if(vsBusy)return;vsBusy=true;
+ const j=await api('/api/sunvale/volsave/undo','POST',{});vsBusy=false;
+ if(!j)return;
+ if(j.code!==200){vsToast(j.message||'取消失败',true);return}
+ vsToast('已取消')
+}
+async function vsPick(){
+ const cur=await api('/api/sunvale/volsave/target','GET');
+ const v=prompt('快存目录',(cur&&cur.data&&cur.data.dir)||currentPath);
+ if(v===null)return;
+ const j=await api('/api/sunvale/volsave/target','POST',{dir:v.trim()});
+ if(!j)return;
+ if(j.code!==200){vsToast(j.message||'设置失败',true);return}
+ vsToast(j.data.dir?'快存目录：'+j.data.dir:'已清除快存目录')
+}
+$('btnVs').onclick=vsPick;
+$('pvVsSave').onclick=vsSave;
+$('pvVsUndo').onclick=vsUndo;
 boot();
 </script>
 </body>

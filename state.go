@@ -73,11 +73,10 @@ type tabState struct {
 	// default columns fit to (files.go fittedCols).
 	detailsPaneW float32
 
-	// networkDir says the folder lives on a network mount, measured once
-	// per icon view: the tiles read it to decide whether to decode their
-	// pictures now or wait until they are looked at. networkWarm is that
-	// and the 设置 switch together: the first tiles warm up only when both
-	// allow it.
+	// networkDir says the folder lives on a network mount, measured while
+	// reloading outside view construction: tiles only read the cached value
+	// to decide whether to decode pictures now. networkWarm is that and the
+	// 设置 switch together: the first tiles warm up only when both allow it.
 	networkDir  bool
 	networkWarm bool
 

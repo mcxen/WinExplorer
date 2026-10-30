@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"sunvale/internal/netfs"
 )
 
 func newStoreApp(t *testing.T, dir string) *App {
@@ -283,6 +285,22 @@ func TestRecursiveSearch(t *testing.T) {
 	if h := walkMatches(root, "alpha-config", true, time.Now().Add(2*time.Second)); len(h) != 1 {
 		t.Fatalf("showHidden search: %v", h)
 	}
+}
+
+func TestIconViewDoesNotProbeNetworkMount(t *testing.T) {
+	dir := t.TempDir()
+	a := newStoreApp(t, dir)
+	a.mode = ViewMediumIcons
+	a.cur().entries = []Entry{{Name: "photo.jpg", Path: filepath.Join(dir, "photo.jpg")}}
+
+	oldFail := viewGuardFail
+	viewGuardFail = func(msg string) { t.Error(msg) }
+	t.Cleanup(func() { viewGuardFail = oldFail })
+
+	tt := ui.NewTester(a.view, 900, 600)
+	tt.Frame()
+	netfs.ForgetNetworkPath(dir)
+	tt.Frame()
 }
 
 func TestGroupedRows(t *testing.T) {

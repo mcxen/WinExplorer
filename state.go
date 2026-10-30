@@ -378,6 +378,9 @@ type colWidths struct {
 // fields, so a new window starts the way the settings page left them.
 func (a *App) loadPersistedSettings() {
 	s := a.store.settings()
+	if a.showHidden != s.ShowHidden {
+		a.navChildrenClear()
+	}
 	a.showHidden = s.ShowHidden
 	a.showExt = s.ShowExt
 	a.compact = s.Compact

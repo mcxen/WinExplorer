@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -190,11 +189,8 @@ func (a *App) searchRoots(scope searchScope) []string {
 func globalSearchRoots() []string {
 	var roots []string
 	seen := map[string]bool{}
-	for _, v := range sysVolumes() {
+	for _, v := range volumePlaces() {
 		if v.Path == "" || seen[v.Path] {
-			continue
-		}
-		if st, err := os.Stat(v.Path); err != nil || !st.IsDir() {
 			continue
 		}
 		seen[v.Path] = true

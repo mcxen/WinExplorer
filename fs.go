@@ -261,10 +261,10 @@ func (a *App) quickPlaces() []Place {
 	return out
 }
 
-// thisPCPlaces is the volumes sysVolumes lists — the per-OS truth. The
-// /Volumes walk it used to duplicate was macOS-only and left Windows and
-// Linux with a bare root row.
-func (a *App) thisPCPlaces() []Place { return sysVolumes() }
+// thisPCPlaces is the volumes 此电脑 lists — the per-OS truth, cached off
+// the view path (volumes.go). The /Volumes walk it used to duplicate was
+// macOS-only and left Windows and Linux with a bare root row.
+func (a *App) thisPCPlaces() []Place { return volumePlaces() }
 
 func deviceID(path string) uint64 {
 	id, ok := statDevice(path)

@@ -260,6 +260,8 @@ func newApp() *App { return newAppWithStore(loadState()) }
 // persisted store: pins, recents and the trash log stay one collection
 // across every open window.
 func newAppWithStore(store *persistedState) *App {
+	// 此电脑's volumes are read before the first frame, not from it.
+	warmVolumes()
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		home = "/"

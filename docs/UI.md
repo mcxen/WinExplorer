@@ -93,6 +93,7 @@ mygo/Onevra 组件主题（`theme.go:appTheme`）：`SurfaceHover = tokAddress.M
 - **快速搜索 Ctrl+K**（`searchbox.go`、`searchpreview.go`）：有应用运行时为独立无边框磨砂面板（`ensureSearchPanel`，960×560），测试中为窗口内对话框（`searchBoxModal`）。查询行右侧是「相关度 / 按文件夹 / 按类型 / 名称」排序切换与「本文件夹 / 全部磁盘」范围切换；查询行下方是高 22、圆角 11、边框 `colorFieldBorder()` 的「类型 / 时间 / 大小 / 位置」筛选 chip，激活时背景 `colorSelected()`，右侧计数为「x / y 个结果」。按文件夹或按类型时，结果前插入高 24 的分组标题行，字号 11、粗细 600、文字 `colorMuted()`，显示组名与组内数量；标题不是命中，`↑`/`↓` 跳过它们。每行第一行显示完整文件名（扩展名用次要文字色）和 16 高、10 号字的命中原因标签（“文件名”为强调色，“路径”为次要色，背景 `colorHover()`），第二行显示相对搜索根的面包屑，悬停显示完整路径。路径分段是 16 高按钮：悬停背景 `colorHover()`、文字 `colorAccent()`，点击关闭面板并导航到该段；省略段不可点击，悬停提示被省略的文件夹。只有路径命中时，第二行路径中的命中片段用 `colorHit()` 标出。窗口宽 ≥900 时右侧为 270 宽预览列：顶部缩略图高 120（非媒体用 56px 文件图标），下方是高亮名称、类型/大小/修改/位置、11px 等宽完整路径，再放「打开 / 打开所在位置 / 复制路径」三个按钮与「排序依据（得分 n）」原因列表；窄于 900 时隐藏预览，结果列表独占面板。
 
   ![快速搜索现状](assets/ui/search-palette.png)
+- **设置 › 快速搜索 › 文件索引**（`settingsdialog.go:settingsTrayGroups`、`searchindex.go:searchIndexSettingsLine`）：开关行，描述为一行“索引大小 · 条目数 · MM-DD HH:MM 更新 · 耗时”（建立中为“正在更新 · 已扫描 n 项”，关闭时“已关闭，全局搜索逐次遍历磁盘”）；下一行「重建索引」次要按钮“重建”，只重读修改过的目录。无说明段落、无浮层。见 `docs/specs/23-search-index.md`。
 - **对话框**：统一走 `glass.go:floatDialog` / Onevra `components.Dialog`；底部按钮用 `uikit.go:uikitDialogButtons`（主按钮在右）。
 
 ## 3. 组件状态

@@ -504,3 +504,10 @@
 - **修复**：旧搜索遍历随新查询 / 关闭取消；索引的 `Note` 改为有界 LRU；索引条目更紧凑；流式批次不再复用切片。
 - **验收**：`internal/search/mem_test.go`：10 万文件下残留 goroutine 105→0、堆 58 MB→0.3 MB；索引 100000 条/24 MB→20000 条/3.7 MB。
 - **状态**：已完成，合入 `main`。
+
+### SEARCH-IDX — 全局搜索磁盘索引
+- **规格**：[23](docs/specs/23-search-index.md)。分支 `feat/search-index` → `main`。
+- **实现**：`files.idx`（定长条目表 + 名字区 + 三元组倒排，mmap 加载）；updatedb 式增量刷新（只重读 mtime 变化的目录）；最近 64 个文件夹 fsnotify 实时更新；排除 node_modules/.git/缓存/虚拟与网络挂载；设置页「文件索引」开关与「重建索引」。
+- **验收**：20 万文件：加载 116 ms/31.6 MB 堆 → 0.17 ms/0 MB；10 字符查询 50 ms → 2 ms；1% 变动刷新 847 → 326 ms；磁盘 19.5 → 16.1 MB。
+- **未做**：Windows USN 日志、macOS FSEvents；真机 Windows/macOS 未运行。
+- **状态**：已完成，合入 `main`。

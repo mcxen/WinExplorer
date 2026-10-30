@@ -358,7 +358,18 @@ func (a *App) settingsTrayGroups() []components.SettingsGroup {
 				ID: "hotkey", Title: "快捷键", Description: hotkeyDesc,
 				Build: func(c *ui.Context) { a.settingsHotkeyButton(c, acc) },
 			},
-			{ID: "scope", Title: "搜索范围", Description: "全部磁盘，索引即时应答、后台遍历补全"},
+			{ID: "scope", Title: "搜索范围", Description: "全部磁盘，索引即时应答、变动目录实时补全"},
+			settingsSwitchItem("index", "文件索引", searchIndexSettingsLine(),
+				func() bool { return !a.store.settings().NoSearchIndex },
+				func(v bool) {
+					a.applySettings(func(x *appSettings) { x.NoSearchIndex = !v })
+					setSearchIndexOn(v)
+				}),
+			settingsActionItem("index-rebuild", "重建索引", "只重读修改过的目录", "重建", func() {
+				if searchIndexOn() {
+					searchIndexRebuild()
+				}
+			}),
 			{ID: "sort", Title: "结果排序", Description: "Everything 式按名称排序，支持查询语法"},
 		}},
 	}

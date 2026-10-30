@@ -16,31 +16,74 @@ import (
 // they come from the host through globalSearchRoots.
 var searchIndex = newSearchIndex(defaultSearchIndexCacheFile())
 
+// The index file lives in the user cache dir: it is derived data, rebuilt
+// from the disks at will (docs/specs/23-search-index.md).
 func defaultSearchIndexCacheFile() string {
-	dir, err := os.UserConfigDir()
+	dir, err := os.UserCacheDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, stateDirName, "index.json")
+	return filepath.Join(dir, stateDirName, "index", "files.idx")
 }
+
+// searchIndexMaxEntries trades disk for time: a million rows is about 60 MB
+// on disk and stays out of the Go heap (the file is mapped).
+const searchIndexMaxEntries = 1_000_000
 
 func newSearchIndex(cacheFile string) *search.Index {
 	return search.NewIndex(search.IndexConfig{
-		CacheFile: cacheFile, PreferHome: true,
+		CacheFile: cacheFile, PreferHome: true, Watch: true,
+		MaxEntries: searchIndexMaxEntries,
+		Refresh:    30 * time.Minute, Throttle: 2 * time.Millisecond,
 	})
 }
 
-// startSearchIndex warms the palette from cache and replaces stale snapshots
-// in the background once the first window is ready.
-func startSearchIndex() {
+// startSearchIndex maps the last index and refreshes a stale one in the
+// background once the first window is ready. 设置 › 快速搜索 can switch it off.
+func startSearchIndex(off bool) {
+	removeLegacySearchIndex()
+	if off {
+		return
+	}
 	searchIndex.Start(globalSearchRoots())
 }
+
+// removeLegacySearchIndex deletes the JSON snapshot older builds kept in the
+// config dir; the binary index replaced it.
+func removeLegacySearchIndex() {
+	if dir, err := os.UserConfigDir(); err == nil {
+		_ = os.Remove(filepath.Join(dir, stateDirName, "index.json"))
+	}
+}
+
+// setSearchIndexOn is the settings switch: off unmaps the index and stops
+// its refresh, on maps it again and refreshes in the background.
+func setSearchIndexOn(on bool) {
+	if on {
+		go searchIndex.Start(globalSearchRoots())
+		return
+	}
+	go searchIndex.Disable()
+}
+
+// searchIndexTouch refreshes a stale snapshot behind an answered query.
+func searchIndexTouch() {
+	if searchIndex.Enabled() && searchIndex.Stale() {
+		searchIndex.Rebuild(globalSearchRoots())
+	}
+}
+
+func searchIndexDirty(roots []string) []string { return searchIndex.Dirty(roots) }
+
+func searchIndexComplete() bool { return searchIndex.Complete() }
 
 func searchIndexOn() bool { return searchIndex.Enabled() }
 
 func searchIndexStale() bool { return searchIndex.Stale() }
 
-func searchIndexRebuild() { searchIndex.Rebuild(globalSearchRoots()) }
+// searchIndexRebuild runs from click handlers: the volume list stats disks,
+// so it is gathered off the UI thread (viewguard.go).
+func searchIndexRebuild() { go searchIndex.Rebuild(globalSearchRoots()) }
 
 // searchIndexNote folds the pane's latest listing into the persistent index.
 func searchIndexNote(dir string, entries []Entry) { searchIndex.Note(dir, entries) }
@@ -62,6 +105,8 @@ type searchIndexStatus struct {
 	building bool
 	progress int
 	estimate int
+	bytes    int64
+	took     time.Duration
 }
 
 func searchIndexState() searchIndexStatus {
@@ -74,6 +119,8 @@ func searchIndexState() searchIndexStatus {
 		building: st.Building,
 		progress: st.Progress,
 		estimate: st.Estimate,
+		bytes:    st.Bytes,
+		took:     st.Took,
 	}
 }
 
@@ -136,4 +183,29 @@ func groupThousands(n int) string {
 		b.WriteRune(r)
 	}
 	return sign + b.String()
+}
+
+// searchIndexSettingsLine is 设置 › 快速搜索's one-line index state: size on
+// disk, rows, age and the last build's time, or the build's progress.
+func searchIndexSettingsLine() string {
+	st := searchIndexState()
+	switch {
+	case !st.on:
+		return "已关闭，全局搜索逐次遍历磁盘"
+	case st.building:
+		return "正在更新 · 已扫描 " + groupThousands(st.progress) + " 项"
+	case st.total == 0:
+		return "尚未建立"
+	}
+	parts := []string{formatBytes(st.bytes), groupThousands(st.total) + " 项"}
+	if !st.built.IsZero() {
+		parts = append(parts, st.built.Format("01-02 15:04")+" 更新")
+	}
+	if st.took > 0 {
+		parts = append(parts, "耗时 "+formatElapsed(st.took))
+	}
+	if !st.complete {
+		parts = append(parts, "未完整")
+	}
+	return strings.Join(parts, " · ")
 }

@@ -106,6 +106,7 @@ func (a *App) searchBoxFrame() {
 	}
 	go func() {
 		defer cancel()
+		walkRoots := roots
 		// The index answers on the keystroke when it covers the scope. It
 		// cannot when it is off or still empty, or when the scope is a folder
 		// no walk ever reached — then the disks are walked, as before.
@@ -113,7 +114,8 @@ func (a *App) searchBoxFrame() {
 			// A snapshot short of the whole machine — the cap, or a quit in
 			// the middle of a build — answers at once and leaves the walk to
 			// fill in the rest: instant hits, then completeness.
-			whole := searchIndexWhole()
+			dirty := searchIndexDirty(roots)
+			whole := searchIndexWhole() || (searchIndexComplete() && len(dirty) == 0)
 			land(func() {
 				if !live() {
 					return
@@ -127,10 +129,16 @@ func (a *App) searchBoxFrame() {
 				repaint()
 			})
 			if whole {
+				go searchIndexTouch()
 				return
 			}
+			// A complete snapshot with folders a refresh found changed walks
+			// only those folders, live, to top up the answer.
+			if searchIndexComplete() {
+				walkRoots = dirty
+			}
 		}
-		search.Stream(roots, query, search.Options{
+		search.Stream(walkRoots, query, search.Options{
 			Hidden: hidden, Deadline: deadline, Max: searchMaxResults, Ctx: ctx,
 		}, func(batch []Entry, more bool) {
 			land(func() {

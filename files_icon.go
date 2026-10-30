@@ -9,19 +9,14 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-
-	"sunvale/internal/netfs"
 )
 
 // iconView lays tiles in a grid. Extra large, large and medium put the
 // label under the icon; small icons put it beside, in a shorter tile.
 func (a *App) iconView(c *ui.Context, entries []Entry) {
-	// The folder's mount decides each tile's eagerness, once for the view:
-	// probing it per tile would be thousands of lookups a frame.
-	a.cur().networkDir = netfs.IsNetworkPath(a.cur().path)
-	// Whether the first tiles warm up is the folder's answer and the
-	// setting's, read once for the view rather than per tile.
-	a.cur().networkWarm = a.cur().networkDir && a.store.settings().networkWarmup()
+	// reload records the mount kind outside view construction. The view only
+	// reads that cached decision: probing statfs or mount tables here would
+	// block the UI whenever the cache expires.
 	box := a.iconBoxSize(a.mode)
 	minW, height := a.iconTileSize(a.mode, box)
 	if a.grouping != groupNone && !specialPath(a.cur().path) {

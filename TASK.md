@@ -40,6 +40,7 @@
 
 | ID | 标题 | 优先级 | 状态 | 规格 | 依赖 | 分支 |
 | --- | --- | --- | --- | --- | --- | --- |
+| BUGSCAN-1 | 文件列表四种视图与排序分组缺陷扫描：网络挂载探测移出逐帧图标视图，复用重载缓存 | 高 | 已完成 | [23](docs/specs/23-bug-rounds.md) | — | `pi/b1-10300759` |
 | REMOTE-MCP | 远程管理与 MCP 界面、回环端到端与真实助手测试 | 高 | 已完成 | [22](docs/specs/22-remote-mcp-e2e.md) | — | `pi/r3-10300605` |
 | ARCH-FOLDER | 压缩包按文件夹浏览：双击进入只读文件夹、面包屑/前进后退、预览、复制即解压、「解压到…」 | 高 | 已完成 | [20](docs/specs/20-archive-folder.md) | — | `feat/pi-r1-archive-folder` |
 | F8 | 关闭后再次启动不弹出窗口（单实例转发需确认、残留锁接管、macOS 重新激活） | 高 | 已完成 | [19](docs/specs/19-single-instance.md) | — | `fix/reopen-window` |

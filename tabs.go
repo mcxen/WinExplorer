@@ -192,6 +192,8 @@ func (a *App) reload() {
 func (a *App) decorateEntries(entries []Entry) {
 	t := a.cur()
 	network := netfs.IsNetworkPath(t.path)
+	t.networkDir = network
+	t.networkWarm = network && a.store.settings().networkWarmup()
 	for i := range entries {
 		e := &entries[i]
 		if !e.IsDir {

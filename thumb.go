@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/list"
 	"image"
 	"os"
 	"path/filepath"
@@ -25,11 +26,13 @@ const (
 	thumbWorkers = 4 // concurrent decodes
 
 	// thumbBudget is how many bytes of decoded pictures the cache holds
-	// before the oldest are dropped: a 512 px cover is 1 MB, and the tile
+	// before the oldest are dropped (128 MB: a folder of 300 photos at
+	// 128 px tiles, with their halved copies, needs ~80 MB; 64 MB made
+	// scrolling back re-decode a third of them): a 512 px cover is 1 MB, and the tile
 	// sizes reach it, so a count alone would let the cache grow without
 	// bound. The budget also covers the halved copies a bitmap keeps for
 	// drawing itself smaller, which add a third again.
-	thumbBudget = 64 << 20
+	thumbBudget = 128 << 20
 
 	// thumbMaxEntries bounds the entries themselves, so a tree of folders
 	// that turned out to hold no media cannot fill the map with misses.
@@ -85,17 +88,24 @@ type thumbCacheKey string
 
 // thumbEntry is what the cache holds for a key: the picture at the size it
 // was decoded for, or nothing when there was nothing to decode. bytes is
-// what bm costs, so the cache can hold to a budget.
+// what bm costs, so the cache can hold to a budget; mtime is the file's
+// modification time it was made from (0 when the caller did not say), so
+// a file changed on disk is decoded again.
 type thumbEntry struct {
 	bm    *ui.Bitmap
 	side  int
 	bytes int
+	mtime int64
 }
 
 var (
 	thumbMu    sync.Mutex
 	thumbCache = map[thumbCacheKey]thumbEntry{}
-	thumbOrder []thumbCacheKey
+	// thumbOrder is the eviction order, oldest at the front; thumbElem
+	// finds a key's place in it, so touching a key each frame costs O(1)
+	// rather than a walk of up to thumbMaxEntries keys on the UI thread.
+	thumbOrder = list.New()
+	thumbElem  = map[thumbCacheKey]*list.Element{}
 	thumbBytes int
 	thumbBusy  = map[thumbCacheKey]bool{}
 	thumbSem   = make(chan struct{}, thumbWorkers)
@@ -164,6 +174,24 @@ func mediaThumb(path string, box float32) *ui.Bitmap {
 	}
 }
 
+// mediaThumbFor is mediaThumb for a listed file: the listing's
+// modification time keys the entry, so a picture edited on disk shows
+// its new self without 刷新.
+func mediaThumbFor(e Entry, box float32) *ui.Bitmap {
+	if !isMediaExt(lowerExt(e.Path)) {
+		return mediaThumb(e.Path, box)
+	}
+	side := thumbSide(box)
+	path := e.Path
+	return cachedThumbAt("f:"+thumbCacheKey(path), side, e.ModTime.UnixNano(), func() image.Image {
+		img, err := decodeThumbImage(path, side)
+		if err != nil {
+			return nil
+		}
+		return img
+	})
+}
+
 // folderCoverThumb returns the pictures a media folder shows, tiled into
 // the shape of its front panel: up to four of its pictures and videos.
 // nil means there is no cover this frame — it is being made, or the folder
@@ -201,11 +229,19 @@ func folderCoverThumb(dir string, box float32) *ui.Bitmap {
 // A picture that is there but too small for the tile is still handed back
 // while a bigger one is decoded, rather than leaving the tile blank.
 func cachedThumb(key thumbCacheKey, side int, load func() image.Image) *ui.Bitmap {
+	return cachedThumbAt(key, side, 0, load)
+}
+
+// cachedThumbAt is cachedThumb for a file whose modification time the
+// caller knows (the listing's): an entry made from another mtime is shown
+// while it is made again.
+func cachedThumbAt(key thumbCacheKey, side int, mtime int64, load func() image.Image) *ui.Bitmap {
 	thumbMu.Lock()
 	e, cached := thumbCache[key]
 	if cached {
 		touchThumbKey(key)
-		if e.side >= side || thumbBusy[key] {
+		fresh := mtime == 0 || e.mtime == mtime
+		if (e.side >= side && fresh) || thumbBusy[key] {
 			// Big enough already, nothing to make, or a bigger one is on
 			// its way: what there is, is what shows.
 			thumbMu.Unlock()
@@ -233,20 +269,19 @@ func cachedThumb(key thumbCacheKey, side int, load func() image.Image) *ui.Bitma
 		<-thumbSem
 		thumbMu.Lock()
 		delete(thumbBusy, key)
+		if old, ok := thumbCache[key]; ok {
+			thumbBytes -= old.bytes
+		}
 		if img == nil {
-			thumbCache[key] = thumbEntry{side: side}
-			touchThumbKey(key)
+			thumbCache[key] = thumbEntry{side: side, mtime: mtime}
 		} else {
 			bm := ui.NewBitmap(img)
-			if old, ok := thumbCache[key]; ok {
-				thumbBytes -= old.bytes
-			}
-			entry := thumbEntry{bm: bm, side: side, bytes: bitmapBytes(bm)}
+			entry := thumbEntry{bm: bm, side: side, bytes: bitmapBytes(bm), mtime: mtime}
 			thumbCache[key] = entry
 			thumbBytes += entry.bytes
-			touchThumbKey(key)
-			trimThumbs()
 		}
+		touchThumbKey(key)
+		trimThumbs()
 		thumbMu.Unlock()
 		repaint()
 	}()
@@ -254,17 +289,23 @@ func cachedThumb(key thumbCacheKey, side int, load func() image.Image) *ui.Bitma
 	return e.bm
 }
 
+// peekThumb is the cached thumbnail of a media file at whatever size it
+// was made, without asking for one: the quick look shows it, blurred up,
+// while the sharp picture decodes.
+func peekThumb(path string) *ui.Bitmap {
+	thumbMu.Lock()
+	defer thumbMu.Unlock()
+	return thumbCache["f:"+thumbCacheKey(path)].bm
+}
+
 // touchThumbKey moves key to the young end of the eviction order, adding it
 // when it has none. The caller holds thumbMu.
 func touchThumbKey(key thumbCacheKey) {
-	for i, k := range thumbOrder {
-		if k == key {
-			thumbOrder = append(thumbOrder[:i], thumbOrder[i+1:]...)
-			thumbOrder = append(thumbOrder, key)
-			return
-		}
+	if el, ok := thumbElem[key]; ok {
+		thumbOrder.MoveToBack(el)
+		return
 	}
-	thumbOrder = append(thumbOrder, key)
+	thumbElem[key] = thumbOrder.PushBack(key)
 }
 
 // trimThumbs drops the oldest entries until the cache is back inside its
@@ -272,9 +313,11 @@ func touchThumbKey(key thumbCacheKey) {
 // against it, but is still dropped with the rest once the cache is full:
 // finding out again is one directory read.
 func trimThumbs() {
-	for (thumbBytes > thumbBudget || len(thumbCache) > thumbMaxEntries) && len(thumbOrder) > 1 {
-		oldest := thumbOrder[0]
-		thumbOrder = thumbOrder[1:]
+	for (thumbBytes > thumbBudget || len(thumbCache) > thumbMaxEntries) && thumbOrder.Len() > 1 {
+		el := thumbOrder.Front()
+		oldest := el.Value.(thumbCacheKey)
+		thumbOrder.Remove(el)
+		delete(thumbElem, oldest)
 		if e, ok := thumbCache[oldest]; ok {
 			thumbBytes -= e.bytes
 			delete(thumbCache, oldest)
@@ -283,13 +326,15 @@ func trimThumbs() {
 }
 
 // clearThumbs forgets every cached picture, so 刷新 re-reads folders and
-// files that changed.
+// files that changed. The decoded screen-size pictures go with them.
 func clearThumbs() {
 	thumbMu.Lock()
 	thumbCache = map[thumbCacheKey]thumbEntry{}
-	thumbOrder = nil
+	thumbOrder.Init()
+	thumbElem = map[thumbCacheKey]*list.Element{}
 	thumbBytes = 0
 	thumbMu.Unlock()
+	clearScreenCache()
 }
 
 // decodeThumbImage decodes one media file to a picture no bigger than side

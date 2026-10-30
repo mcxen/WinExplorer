@@ -230,6 +230,9 @@ type App struct {
 	fieldFocused bool
 	// quickLook is the 空格 quick preview modal (quicklook.go).
 	quickLook bool
+	// imgPF is where the last image prefetch was planned from, for the
+	// flip direction (imgcache.go).
+	imgPF prefetchState
 	// quickLookFile, when set, is what the open quick preview shows instead
 	// of the selection (an OpenUI MediaList card).
 	quickLookFile string

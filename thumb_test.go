@@ -280,12 +280,12 @@ func TestThumbCacheBudget(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		key := thumbCacheKey("big:" + strconv.Itoa(i))
 		thumbCache[key] = thumbEntry{bm: pixel, side: 512, bytes: 1 << 20}
-		thumbOrder = append(thumbOrder, key)
+		touchThumbKey(key)
 		thumbBytes += 1 << 20
 		trimThumbs()
 	}
 	overBudget, total := thumbBytes > thumbBudget, thumbBytes
-	held, entries := len(thumbCache), len(thumbOrder)
+	held, entries := len(thumbCache), thumbOrder.Len()
 	thumbMu.Unlock()
 	if overBudget {
 		t.Fatalf("cache holds %d bytes, over the %d budget", total, thumbBudget)
@@ -312,7 +312,7 @@ func TestThumbCacheBudget(t *testing.T) {
 	for i := 0; i < thumbMaxEntries+50; i++ {
 		key := thumbCacheKey("miss:" + strconv.Itoa(i))
 		thumbCache[key] = thumbEntry{side: 64}
-		thumbOrder = append(thumbOrder, key)
+		touchThumbKey(key)
 		trimThumbs()
 	}
 	misses := len(thumbCache)

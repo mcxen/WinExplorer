@@ -259,7 +259,7 @@ func (a *App) tileGlyph(c *ui.Context, e Entry, box float32, eager bool) {
 					return
 				}
 			}
-		} else if bm := mediaThumb(e.Path, box); bm != nil {
+		} else if bm := mediaThumbFor(e, box); bm != nil {
 			a.mediaTile(c, e, box, bm)
 			return
 		}

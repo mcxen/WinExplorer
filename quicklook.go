@@ -169,6 +169,9 @@ func (a *App) quickLookBody(c *ui.Context) {
 	ui.Column(c).Gap(10).AlignItems(ui.Center).Padding(4, 12, 16, 12).Children(func() {
 		if loading {
 			a.quickLookBar(c, nil)
+			if a.quickLookPlaceholder(c, e.Path) {
+				return
+			}
 			ui.Text(c, "正在加载预览…").FontSize(13).TextColor(colorMuted())
 			ui.Text(c, e.Name).FontSize(12).TextColor(colorMuted())
 			return

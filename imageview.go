@@ -88,9 +88,18 @@ func (a *App) paintImageBroken(c *ui.Context, msg string) {
 // (quicklook_bar.go); the gestures are in the buttons' tooltips.
 func (a *App) imageQuickContent(c *ui.Context, st *previewState, maxW, maxH float32) {
 	a.resetImgQV(st.path)
-	a.imageQuickViewport(c, st, maxW, maxH-20)
+	strip := a.quickLookStripImages()
+	stripH := float32(0)
+	if len(strip) > 1 {
+		stripH = imgStripTile + 10
+	}
+	a.imageQuickViewport(c, st, maxW, maxH-20-stripH)
 	pct := int(a.imgQV.zoom*100 + 0.5)
+	// 第几张 / 共几张已在标题栏（quicklook_bar.go），这里只留缩放。
 	ui.Text(c, fmt.Sprintf("%d%%", pct)).FontSize(11).TextColor(colorMuted())
+	if stripH > 0 {
+		a.imageStrip(c, strip, st.path, maxW)
+	}
 }
 
 // imageQuickViewport draws the picture (or a broken placeholder) inside a
@@ -112,8 +121,9 @@ func (a *App) imageQuickViewport(c *ui.Context, st *previewState, maxW, maxH flo
 	if a.imgQV.zoom > imgZoomMin {
 		cur = ui.CursorGrab
 	}
+	// 看图底色压暗（BandiView、qView 都是深底），照片的颜色不被浅色主题冲淡。
 	box := ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Clip().Cursor(cur).
-		Background(colorHover().Alpha(0.2)).Radius(innerRadius())
+		Background(imgViewBackdrop).Radius(innerRadius())
 	if dx, dy, ok := box.Dragged(); ok && a.imgQV.zoom > imgZoomMin {
 		a.imgQV.panX += dx
 		a.imgQV.panY += dy
@@ -215,4 +225,35 @@ func (a *App) quickLookStepImage(dir int) {
 		return
 	}
 	a.selectOnly(imgs[i].Path)
+}
+
+// quickLookPlaceholder shows the file's cached thumbnail, stretched to the
+// viewport, while the sharp picture decodes — the low-resolution first
+// frame Photos and Immich show — so a step never flashes 正在加载. false
+// when there is no thumbnail to show.
+func (a *App) quickLookPlaceholder(c *ui.Context, path string) bool {
+	if !isImageExt(lowerExt(path)) {
+		return false
+	}
+	bm := peekThumb(path)
+	if bm == nil {
+		return false
+	}
+	w, h := c.Size()
+	maxW := max(w-120, 240)
+	maxH := max(h-200-quickLookBarH, 200) - 20
+	if len(a.quickLookStripImages()) > 1 {
+		maxH -= imgStripTile + 10
+	}
+	ui.Box(c).Width(maxW).Height(maxH).Shrink(0).Clip().
+		Background(imgViewBackdrop).Radius(innerRadius()).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			iw, ih := bm.Size()
+			if iw <= 0 || ih <= 0 {
+				return
+			}
+			dw, dh := fitContainSize(r.W, r.H, float32(iw), float32(ih))
+			p.Image(bm, ui.Rect{X: r.X + (r.W-dw)/2, Y: r.Y + (r.H-dh)/2, W: dw, H: dh}, ui.FillBox)
+		})
+	return true
 }

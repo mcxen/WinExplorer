@@ -519,3 +519,10 @@
 - **结论**：Android Chrome / Firefox / iOS Safari 及 PWA 均不向网页分发物理音量键，手机靠屏幕按钮。
 - **未做**：真机未测；原生音量键需要原生壳。
 - **状态**：已完成，合入 `main`。
+
+### IMGCACHE — 看图缓存、预取与胶片条
+- **规格**：[25](docs/specs/25-image-cache.md)。分支 `perf/image-cache` → `main`。
+- **实现**：屏幕尺寸解码图 LRU + 方向感知预取（后 2 前 1）；磁盘缩略图缓存 `UserCacheDir/sunvale/thumbs`（1 GiB）；EXIF 方向；缩略图 LRU O(1)、mtime 失效；低清占位；网页 `/d/…?w=` 缩小版 + ETag/Cache-Control、预取、底部胶片条；桌面快速预览胶片条。
+- **验收**：原生翻页 p50 286 ms → 0.02 ms（缓存热）；网页手机翻页 0.4–2.3 s → 16–30 ms；24MP 传输 4.1 MB → 178 KB。
+- **未做**：JPEG DCT 缩放解码；真机 Windows/macOS/手机未测。
+- **状态**：已完成，合入 `main`。

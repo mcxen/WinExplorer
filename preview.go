@@ -120,6 +120,7 @@ func (a *App) requestPreview() {
 		return // unchanged
 	}
 	gen := atomic.AddUint64(&a.previewGen, 1)
+	a.prefetchAround(e)
 	if path == "" {
 		a.swapPreview(&previewState{kind: previewNone, gen: gen}, gen)
 		return
@@ -419,12 +420,17 @@ func hexDump(b []byte) string {
 const previewImageSide = 2048
 
 func decodeImage(path string) (*ui.Bitmap, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if img, err := decodeBytesScaled(data, previewImageSide); err == nil {
-		return ui.NewBitmap(img), nil
+	bm, _, err := screenBitmap(path, previewImageSide, decodeScreenBitmap)
+	return bm, err
+}
+
+// decodeScreenBitmap is one uncached decode at side px: the disk cache or
+// the stdlib for the formats it reads, Quick Look for the rest.
+func decodeScreenBitmap(path string, side int) (*ui.Bitmap, error) {
+	if isStdlibImage(path) {
+		if img, err := decodeFileCached(path, side); err == nil {
+			return ui.NewBitmap(img), nil
+		}
 	}
 	return quickLookThumb(path, 1024)
 }

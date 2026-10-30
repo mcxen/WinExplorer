@@ -253,7 +253,7 @@ func decodeScaled(path string, side int) (*ui.Bitmap, error) {
 // decodeImageScaled is decodeScaled as the decoded picture, for callers
 // that compose several into one cover. imgsize.go owns the reduction.
 func decodeImageScaled(path string, side int) (image.Image, error) {
-	return decodeFileScaled(path, side)
+	return decodeFileCached(path, side)
 }
 
 // galleryView renders the 画廊 page: month-sectioned grids of

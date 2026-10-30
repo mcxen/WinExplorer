@@ -15,7 +15,7 @@ package remote
 // "light"]) keeps an explicit light choice from being overridden).
 const WebUITokensCSS = `:root{--chrome:#F3F3F3;--side:#E9E9E9;--card:#FFFFFF;--border:#E5E5E5;--text:#1A1A1A;--muted:#6B6B6B;--accent:#0067C0;--weak:rgba(0,103,192,.10);--sel:#CCE4F7;--danger:#C42B1C;--ok:#0F7B0F;--hover:rgba(0,0,0,.05);--onaccent:#FFFFFF;--dot:#9A9A9A;--dotok:#13A10E;--shadow:rgba(0,0,0,.10)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--chrome:#202020;--side:#1B1B1B;--card:#272727;--border:#383838;--text:#F3F3F3;--muted:#A8A8A8;--accent:#4CC2FF;--weak:rgba(76,194,255,.13);--sel:#004C87;--danger:#FF8A80;--ok:#6CCB5F;--hover:rgba(255,255,255,.07);--onaccent:#161616;--dot:#9A9A9A;--dotok:#6CCB5F;--shadow:rgba(0,0,0,.5)}}
-[data-theme="dark"]{--chrome:#202020;--side:#1B1B1B;--card:#272727;--border:#383838;--text:#F3F3F3;--muted:#A8A8A8;--accent:#4CC2FF;--weak:rgba(76,194,255,.13);--sel:#004C87;--danger:#FF8A80;--ok:#6CCB5F;--hover:rgba(255,255,255,.07);--onaccent:#161616;--dot:#9A9A9A;--dotok:#6CCB5F;--shadow:rgba(0,0,0,.5)}`
+[data-theme="dark"]{--chrome:#202020;--side:#1B1B1B;--card:#272727;--border:#383838;--text:#F3F3F3;--muted:#A8A8A8;--accent:#4CC2FF;--weak:rgba(76,194,255,.13);--sel:#004C87;--danger:#FF8A80;--ok:#6CCB5F;--hover:rgba(255,255,255,.07);--onaccent:#161616;--dot:#9A9A9A;--dotok:#6CCB5F;--shadow:rgba(0,0,0,.5)}` + webStripCSS
 
 // WebUISharedJS is the shared script block for both pages: the manual theme
 // toggle (localStorage "sv-theme", following the system only until the user
@@ -179,4 +179,4 @@ function toast(msg,ok){
  t.textContent=msg;
  box.append(t);
  setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),260)},3000);
-}`
+}` + webStripJS

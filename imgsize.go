@@ -43,11 +43,16 @@ func decodeFileScaled(path string, side int) (image.Image, error) {
 
 // decodeBytesScaled is decodeFileScaled for data already in memory.
 func decodeBytesScaled(data []byte, side int) (image.Image, error) {
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
-	return scaleToFit(img, side), nil
+	img = scaleToFit(img, side)
+	if format == "jpeg" {
+		// 先缩后转：方向只在小图上做。
+		img = orientImage(img, jpegOrientation(data))
+	}
+	return img, nil
 }
 
 // scaleToFit shrinks img to fit side px on its longest edge, or returns it

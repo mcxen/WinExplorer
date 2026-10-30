@@ -85,7 +85,7 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
 .toast.err{border-left-color:var(--danger)}
 .toast.out{opacity:0;transform:translateX(24px);transition:all .25s}
 @keyframes tin{from{opacity:0;transform:translateX(40px)}}
-@media(max-width:600px){.tm{display:none}header{padding:calc(10px + env(safe-area-inset-top)) 12px}.toolbar{padding:12px 12px 0;gap:8px}main{padding:0 12px;margin:10px auto 32px;padding-bottom:calc(32px + env(safe-area-inset-bottom))}.row{padding:11px 8px}#searchForm{flex:1 1 100%;min-width:0}#searchInput{flex:1;width:auto;font-size:16px}#searchForm button{padding:8px 14px}.crumb{padding:6px 8px}header a,header button{padding:8px 10px}.pv-bar{padding:calc(10px + env(safe-area-inset-top)) 12px 10px;flex-wrap:wrap}#pvName{flex:1 1 100%;order:-1;font-size:13px}.pv-bar a,.pv-bar button{padding:8px 12px;font-size:13px}#pvBody{padding:0 8px calc(8px + env(safe-area-inset-bottom));touch-action:pan-y}#toasts{left:12px;right:12px;top:auto;bottom:calc(16px + env(safe-area-inset-bottom))}.toast{max-width:none}}
+@media(max-width:600px){.tm{display:none}header{padding:calc(10px + env(safe-area-inset-top)) 12px}.toolbar{padding:12px 12px 0;gap:8px}main{padding:0 12px;margin:10px auto 32px;padding-bottom:calc(32px + env(safe-area-inset-bottom))}.row{padding:11px 8px}#searchForm{flex:1 1 100%;min-width:0}#searchInput{flex:1;width:auto;font-size:16px}#searchForm button{padding:8px 14px}.crumb{padding:6px 8px}header a,header button{padding:8px 10px}.pv-bar{padding:calc(10px + env(safe-area-inset-top)) 12px 10px;flex-wrap:wrap}#pvName{flex:1 1 100%;order:-1;font-size:13px}.pv-bar a,.pv-bar button{padding:8px 12px;font-size:13px}#pvBody{padding:0 8px calc(8px + env(safe-area-inset-bottom));touch-action:pan-y}#toasts{left:12px;right:12px;top:auto;bottom:calc(16px + env(safe-area-inset-bottom))}#preview:not(.hidden)~#toasts{bottom:calc(72px + env(safe-area-inset-bottom))}.toast{max-width:none}}
 @media(hover:none) and (pointer:coarse){.row,.crumb,header a,header button,.pv-bar a,.pv-bar button{touch-action:manipulation}}
 </style>
 </head>
@@ -128,11 +128,13 @@ main{max-width:940px;margin:14px auto 44px;padding:0 18px;width:100%}
 <div id="preview" class="hidden">
  <div class="pv-bar">
   <span id="pvName"></span>
+  <span id="pvPos" class="svpos"></span>
   <button id="pvVsSave" class="hidden" title="快存（↑ / 音量+）">↑存</button><button id="pvVsUndo" class="hidden" title="取消快存（↓ / 音量−）">↓撤</button>
   <a id="pvDownload" target="_blank" rel="noopener">下载</a>
   <button id="pvClose">关闭</button>
  </div>
  <div id="pvBody"></div>
+ <div id="pvStrip" class="svstrip hidden"></div>
 </div>
 <div id="toasts"></div>
 <script>
@@ -145,6 +147,8 @@ const KIND2ICON={dir:'folder',video:'video',audio:'audio',image:'image',text:'te
 let siteTitle='';
 let currentPath='/';
 let pvPath='',pvImage=false,vsBusy=false;
+// dirImages：当前文件夹里的图片（列表顺序），给底部胶片条用。
+let dirImages=[],dirImagesPath='';
 let sharePwd='',pwdKind='list',pwdPath='/',initPath='/',initPending=true;
 try{
  const p=decodeURIComponent(location.pathname||'/');
@@ -274,6 +278,7 @@ async function loadDir(path){
  for(const it of items)(it.is_dir?dirs:files).push(it);
  const byName=(a,b)=>a.name.localeCompare(b.name,'zh');
  dirs.sort(byName);files.sort(byName);
+ dirImages=files.filter(it=>extKind(it.name)==='image');dirImagesPath=currentPath;
  for(const it of dirs.concat(files)){
   $('list').appendChild(rowEl(it,()=>{
    if(it.is_dir)loadDir(joinPath(currentPath,it.name));
@@ -306,13 +311,22 @@ function openOverlay(name){
  body.appendChild(s);
  $('preview').classList.remove('hidden');
 }
+// pvStripPaint：底部胶片条（只在当前文件夹的图片间）与「第几张 / 共几张」。
+function pvStripPaint(path){
+ const dir=path.slice(0,path.lastIndexOf('/'))||'/';
+ const list=dir===dirImagesPath?dirImages:[];
+ const i=list.findIndex(it=>joinPath(dir,it.name)===path);
+ $('pvPos').textContent=i>=0&&list.length>1?(i+1)+' / '+list.length:'';
+ const url=it=>it.sign?'/d'+joinPath(dir,it.name).split('/').map(encodeURIComponent).join('/')+'?sign='+encodeURIComponent(it.sign)+'&w=256':'';
+ svStrip($('pvStrip'),i>=0?list:[],i,url,n=>openPreview(joinPath(dir,n.name)));
+}
 function pvMsg(t){
  const body=$('pvBody');body.innerHTML='';
  const s=document.createElement('span');s.className='pv-msg';s.textContent=t;
  body.appendChild(s);
 }
 function closePreview(){
- pvImage=false;
+ pvImage=false;$('pvPos').textContent='';svStrip($('pvStrip'),[],-1);
  $('preview').classList.add('hidden');
  $('pvBody').innerHTML='';
 }
@@ -348,7 +362,11 @@ async function openPreview(path){
   const a=document.createElement('audio');a.controls=true;a.src=raw;svMediaFallback(a,'浏览器无法播放此音频，可用「下载」保存');body.appendChild(a);
  }else if(kind==='image'){
   pvPath=path;pvImage=true;vsPaint();
-  const i=document.createElement('img');i.src=raw;i.alt=name;svMediaFallback(i,'浏览器无法显示此图片，可用「下载」保存');body.appendChild(i);
+  pvStripPaint(path);
+  // 先放 256 px 缩略图（胶片条里已缓存），屏幕尺寸版到了再换上；下载仍是原图。
+  const sized=d.sign?raw+'&w='+Math.min(3072,Math.ceil(Math.max(screen.width,screen.height)*(window.devicePixelRatio||1))):raw;
+  const i=document.createElement('img');i.src=d.sign?raw+'&w=256':raw;
+  if(sized!==raw){const hi=new Image();hi.decoding='async';hi.onload=()=>{if(pvPath===path)i.src=hi.src};hi.src=sized}i.alt=name;svMediaFallback(i,'浏览器无法显示此图片，可用「下载」保存');body.appendChild(i);
  }else if(kind==='pdf'){
   const f=document.createElement('iframe');f.src=raw;body.appendChild(f);
  }else{

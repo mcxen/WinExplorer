@@ -631,12 +631,14 @@ ul.vlist li .capLoc{flex:none;max-width:45%;overflow:hidden;text-overflow:ellips
 <div id="preview" class="hidden">
  <div class="pvbar">
   <span id="pvName"></span>
+  <span id="pvPos" class="svpos"></span>
   <button id="pvPrev" title="上一张 (←)">上一张</button>
   <button id="pvNext" title="下一张 (→)">下一张</button>
   <a id="pvDl" target="_blank" rel="noopener" class="hidden">下载</a>
   <button id="pvClose">关闭</button>
  </div>
  <div id="pvBody"></div>
+ <div id="pvStrip" class="svstrip hidden"></div>
 </div>
 <script>
 'use strict';
@@ -1453,10 +1455,32 @@ function renderList(zone,vis,small){
  });
  zone.append(ul);
 }
-function thumbURL(it){
+// imgURL：图片的缩小版 /d/…?w=N（服务端按档缩放并缓存，见 remote_rendition.go），
+// 网格缩略图与手机看图都不下原图；w 为 0 时是原图。
+function imgURL(it,w){
  if(it.is_dir||!it.sign||extKind(it.name)!=='image')return '';
- const p=joinPath(curPath,it.name).split('/').map(encodeURIComponent).join('/');
- return '/d'+p+'?sign='+encodeURIComponent(it.sign);
+ const p=itemPath(it).split('/').map(encodeURIComponent).join('/');
+ return '/d'+p+'?sign='+encodeURIComponent(it.sign)+(w?'&w='+w:'');
+}
+function thumbURL(it){return imgURL(it,256)}
+// pvSide：浮层看图要的边长——屏幕长边 × 像素比，服务端再取整到档位。
+function pvSide(){return Math.min(3072,Math.ceil(Math.max(screen.width,screen.height)*(window.devicePixelRatio||1)))}
+// pvPrefetch：浮层翻页时预取翻页方向的后两张与反方向一张（缩小版），
+// 下一张通常已在浏览器缓存里。
+let pvWay=1;
+const pvWarm=new Map();
+function pvPrefetch(it){
+ const list=pvMediaList();
+ const i=list.findIndex(x=>x.name===it.name);
+ if(i<0)return;
+ const want=[i+pvWay,i+2*pvWay,i-pvWay].map(k=>list[(k+list.length)%list.length]);
+ for(const n of want){
+  const u=n&&imgURL(n,pvSide());
+  if(!u||pvWarm.has(u))continue;
+  const im=new Image();im.decoding='async';im.src=u;
+  pvWarm.set(u,im);
+  if(pvWarm.size>8)pvWarm.delete(pvWarm.keys().next().value);
+ }
 }
 function renderIcons(zone,vis,size){
  const g=el('div','vgrid '+size);
@@ -2392,6 +2416,24 @@ async function paintPreview(it,target,stale){
   box.append(el('span','pvempty','文件夹'));
   return;
  }
+ if(imgURL(it,0)){
+  // 图片：签名已在列表里，不再走一次 /api/fs/get。先放缩略图（网格里已缓存），
+  // 清晰版到了再换上；放大到 1.5× 以上才取原图。
+  const orig=imgURL(it,0);
+  if(target.dl){target.dl.href=orig;target.dl.classList.remove('hidden')}
+  const img=document.createElement('img');
+  img.alt=it.name;
+  img.src=thumbURL(it);
+  img.dataset.orig=orig;
+  const hi=new Image();
+  hi.decoding='async';
+  hi.onload=()=>{if(!(stale&&stale())&&img.dataset.orig===orig&&!img.dataset.full)img.src=hi.src};
+  hi.src=imgURL(it,target.full?pvSide():1024);
+  if(target.full)attachZoom(img);
+  svMediaFallback(img,'浏览器无法显示此图片，可用「下载」保存');
+  box.append(img);
+  return;
+ }
  box.append(el('span','pvempty','加载中…'));
  const j=await api('/api/fs/get','POST',{path:itemPath(it)});
  if(stale&&stale())return;
@@ -2475,6 +2517,7 @@ function pvMediaList(){
  return visibleItems().filter(i=>!i.is_dir&&(extKind(i.name)==='image'||extKind(i.name)==='video'));
 }
 function pvStep(dir){
+ pvWay=dir<0?-1:1;
  const list=pvMediaList();
  if(!list.length)return;
  let idx=pvCurrent?list.findIndex(i=>i.name===pvCurrent.name):-1;
@@ -2492,7 +2535,10 @@ function attachZoom(img){
   img.classList.toggle('zoomed',pvZoom!==1);
   img._pvZoom=pvZoom;
  };
- const setZoom=(z)=>{pvZoom=Math.min(5,Math.max(0.2,z));apply()};
+ const setZoom=(z)=>{
+  pvZoom=Math.min(5,Math.max(0.2,z));apply();
+  if(pvZoom>=1.5&&img.dataset.orig&&!img.dataset.full){img.dataset.full='1';img.src=img.dataset.orig}
+ };
  img.addEventListener('wheel',ev=>{
   ev.preventDefault();
   setZoom(pvZoom*(ev.deltaY<0?1.2:1/1.2));
@@ -2524,7 +2570,16 @@ async function previewFile(it){
  $('pvPrev').disabled=!has;
  $('pvNext').disabled=!has;
  $('preview').classList.remove('hidden');
+ pvStripPaint(it);
  await paintPreview(it,{box:$('pvBody'),dl:$('pvDl'),full:true});
+ if(pvCurrent===it&&extKind(it.name)==='image')pvPrefetch(it);
+}
+// pvStripPaint：底部胶片条与「第几张 / 共几张」（BandiView 的底部缩略图条）。
+function pvStripPaint(it){
+ const list=pvMediaList();
+ const i=list.findIndex(x=>x.name===it.name);
+ $('pvPos').textContent=i>=0&&list.length>1?(i+1)+' / '+list.length:'';
+ svStrip($('pvStrip'),list,i,n=>thumbURL(n),(n,k)=>{pvWay=k<i?-1:1;previewFile(n)});
 }
 // bindPreviewSwipe 让手机上的浮层预览左右滑动翻页：水平位移超过 60px
 // 且明显大于纵向位移才算，缩放中的图片与播放器不抢翻页。

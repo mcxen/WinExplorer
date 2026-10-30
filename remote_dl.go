@@ -77,6 +77,17 @@ func (a *App) remoteServeDownload(w http.ResponseWriter, r *http.Request, prefix
 	defer f.Close()
 
 	name := o.Name
+	// ?w= asks for a picture no wider/taller than w px instead of the
+	// original: thumbnails and the phone viewer use it (remote_rendition.go).
+	if side, ok := renditionSide(r.URL.Query().Get("w")); ok && isStdlibImage(name) {
+		if serveRendition(w, r, vpath, name, o.Size, o.ModTime, side, f) {
+			return
+		}
+		if _, err := f.Seek(0, 0); err != nil {
+			remote.HTMLFail(w, http.StatusInternalServerError, "file not found")
+			return
+		}
+	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf(
 		`attachment; filename="%s"; filename*=utf-8''%s`,
 		url.PathEscape(name), url.PathEscape(name)))

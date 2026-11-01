@@ -48,8 +48,8 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string, at time.Time) {
 			row.Background(colorHover())
 		}
 		row.Children(func() {
-			components.Icon(c, lucide.CircleAlert).Size(13, 13).TextColor(assistErrorColor).Shrink(0)
-			ui.Text(c, "出错了："+first).FontSize(12).TextColor(assistErrorColor).
+			components.Icon(c, lucide.CircleAlert).Size(13, 13).TextColor(tokDanger).Shrink(0)
+			ui.Text(c, "出错了："+first).FontSize(12).TextColor(tokDanger).
 				SingleLine().Ellipsis("…").Grow(1).MinWidth(0).Shrink(1)
 			if more || len([]rune(first)) > 60 {
 				label := "展开"
@@ -88,8 +88,6 @@ func (a *App) assistErrorLine(c *ui.Context, i int, text string, at time.Time) {
 		}
 	})
 }
-
-var assistErrorColor = ui.Hex("#D14343")
 
 // assistErrorReport is what 复制 puts on the clipboard: the full error plus
 // when it happened and where the log lives, ready to paste into feedback.

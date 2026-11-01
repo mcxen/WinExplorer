@@ -361,18 +361,7 @@ func (a *App) assistantComposer(c *ui.Context) {
 		comp.Root.FillWidth().Shrink(0)
 		a.wireComposerFocus(comp.Input)
 		if comp.Dragging {
-			// ZCode's drop overlay: hovering files over the card says what
-			// letting go does, over both the in-window drag and a native one.
-			hint := ui.Row(c).Key("assist-drop-hint").Absolute().Attach(ui.AnchorTop, ui.AnchorTop).
-				Top(6).FillWidth().Justify(ui.Center)
-			hint.Children(func() {
-				pill := ui.Row(c).Padding(5, 12).Radius(13).Gap(6).AlignItems(ui.Center).
-					Background(colorAccent())
-				pill.Children(func() {
-					components.Icon(c, lucide.Paperclip).Size(13, 13).TextColor(ui.Hex("#FFFFFF"))
-					ui.Text(c, "松开以附加到对话").FontSize(12).TextColor(ui.Hex("#FFFFFF")).SingleLine()
-				})
-			})
+			a.assistantDropHint(c)
 		}
 		if slashOpen {
 			a.assistantSlashKeys(comp.Input, slashItems)
@@ -395,6 +384,23 @@ func (a *App) assistantComposer(c *ui.Context) {
 			a.assist.queued = strings.TrimSpace(a.assist.draft)
 			a.assist.draft = ""
 		}
+	})
+}
+
+// assistantDropHint is ZCode's drop overlay: hovering files over the card
+// says what letting go does, over both the in-window drag and a native one.
+// The pill sits on the accent color, so its icon and text take the theme's
+// on-accent text token rather than white, which would wash out in dark mode.
+func (a *App) assistantDropHint(c *ui.Context) {
+	hint := ui.Row(c).Key("assist-drop-hint").Absolute().Attach(ui.AnchorTop, ui.AnchorTop).
+		Top(6).FillWidth().Justify(ui.Center)
+	hint.Children(func() {
+		pill := ui.Row(c).Padding(5, 12).Radius(13).Gap(6).AlignItems(ui.Center).
+			Background(colorAccent())
+		pill.Children(func() {
+			components.Icon(c, lucide.Paperclip).Size(13, 13).TextColor(colorBtnText())
+			ui.Text(c, "松开以附加到对话").FontSize(12).TextColor(colorBtnText()).SingleLine()
+		})
 	})
 }
 

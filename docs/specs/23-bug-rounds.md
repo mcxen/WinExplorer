@@ -23,3 +23,17 @@
 - **测试**：`TestSidebarVolumesAreCached` 统计视图内卷列表读取次数为 0；`TestDirExistsDoesNotWaitInView` 用阻塞的 stat 证明视图不等待；`TestNavTreeHiddenToggleRefilters` 验证切换隐藏项后树子项立即变化。既有树展开/键盘/最近位置测试改为等待后台目录读取后通过。
 - **门禁回归**：`TestSearchBoxRebuildButtonWalksAgain` 在索引构建完成后补一帧再读页脚，避免构建落在第一帧之后时误报“未完整”缺失。
 - **界面巡检**：在 `DISPLAY=:10`、独立 HOME 下检查侧栏展开/收起、悬停引导线、栏宽拖动、原生右键菜单，并回归搜索、设置与任务页；截图位于 `/workspace/sunvale-pi-shots/b2/`。
+
+## BUGSCAN-8 — 助手面板（发送/停止/历史/错误显示/斜杠菜单）
+
+- **范围**：`assistant.go`（输入区与拖放提示）、`assistant_run.go`/`assistant_run_stream.go`（发送/停止/流式）、`assistant_hist.go`（历史列）、`assistant_error.go`（出错行）、`assistant_slash.go`（斜杠菜单）。
+- **发现**：
+  - 出错行文字与图标写死 `ui.Hex("#D14343")`，不随主题变化：深色模式下红字对比度不足，且违反「颜色只用 theme.go 令牌」。
+  - 拖放提示胶囊底色是强调色，图标与文字却写死白色；深色模式下强调色为浅色（`#60CDFF`），白字发灰、几乎看不清。
+  - `go test -race` 下 `TestAssistantContinueKeepsHistoryAndComposerFocus` 报数据竞争：`postAssist` 在应用未就绪（无界面/测试）时直接在模型 goroutine 上改 `a.assist`，与测试线程逐帧构建视图并发读。生产环境走 `RunOnMain`，仅在无界面测试路径出现；已记录，未改（改动面与回归风险大于收益）。
+- **修复**：
+  - `assistant_error.go`：出错行图标与文字改用 `tokDanger`，删除写死的 `assistErrorColor`。
+  - `assistant.go`：把拖放提示抽成 `assistantDropHint`，图标与文字改用 `colorBtnText()`（强调底上的文字令牌：浅色为白、深色为近黑）。两者都随外观主题/对比度偏好重算。
+- **测试**：新增 `assistant_theme_test.go`：`TestAssistErrorLineFollowsTheme` 分别渲染浅/深色出错行，断言深色红色的主导像素更亮（写死红色则两态相同而失败）；`TestAssistDropHintKeepsContrast` 渲染提示胶囊，断言深色下文字最暗像素足够暗、浅色下足够亮（写死白字在深色下最暗像素只到强调底亮度而失败）。两用例在修复前均失败，修复后通过。
+- **门禁**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...`、`GOOS=windows`/`GOOS=darwin`/`GOOS=js GOARCH=wasm` 交叉编译通过；助手相关测试 `go test -count=1 -run 'TestAssistant|TestAssist|TestStop|TestLate|TestQueued|TestQueue|TestStarter|TestReadAny|TestHist|TestError|TestBudget' .` 通过。
+- **界面巡检**：在 `DISPLAY=:10`、独立 HOME（`/workspace/pi-sched/home-b8`）、独立 XDG 下用新构建启动，点击命令栏「助手」开关面板、顶栏「会话」切换历史列、「全屏」切换全宽，检查对齐与分隔线；截图位于 `/workspace/sunvale-pi-shots/b8/`（`01`–`08`）。该显示环境下 XTEST 合成键盘事件不被 mygo 接收（指针点击正常），斜杠菜单与出错行改由 `ui.NewTester` 离屏渲染验证。

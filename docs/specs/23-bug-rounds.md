@@ -37,3 +37,20 @@
 - **测试**：新增 `assistant_theme_test.go`：`TestAssistErrorLineFollowsTheme` 分别渲染浅/深色出错行，断言深色红色的主导像素更亮（写死红色则两态相同而失败）；`TestAssistDropHintKeepsContrast` 渲染提示胶囊，断言深色下文字最暗像素足够暗、浅色下足够亮（写死白字在深色下最暗像素只到强调底亮度而失败）。两用例在修复前均失败，修复后通过。
 - **门禁**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...`、`GOOS=windows`/`GOOS=darwin`/`GOOS=js GOARCH=wasm` 交叉编译通过；助手相关测试 `go test -count=1 -run 'TestAssistant|TestAssist|TestStop|TestLate|TestQueued|TestQueue|TestStarter|TestReadAny|TestHist|TestError|TestBudget' .` 通过。
 - **界面巡检**：在 `DISPLAY=:10`、独立 HOME（`/workspace/pi-sched/home-b8`）、独立 XDG 下用新构建启动，点击命令栏「助手」开关面板、顶栏「会话」切换历史列、「全屏」切换全宽，检查对齐与分隔线；截图位于 `/workspace/sunvale-pi-shots/b8/`（`01`–`08`）。该显示环境下 XTEST 合成键盘事件不被 mygo 接收（指针点击正常），斜杠菜单与出错行改由 `ui.NewTester` 离屏渲染验证。
+
+## BUGSCAN-10 — 深浅色×经典/v2 全局巡检、搜索面板（Ctrl+K）、远程/MCP
+
+- **范围**：`theme.go`/`visual.go` 令牌与两套外观、`searchbox*.go`/`searchpreview.go`、`remote*.go`/`assistant_mcp*.go`/`settings_assistant_more.go` 以及会读这些令牌的对话框（`sharedialog.go`、`settings_ext.go`、`batchrename.go`、`videoview.go`、`assistant_openui_more.go`）。
+- **发现**（深浅色 × 经典/v2 全局巡检）：
+  - 分享对话框、扩展编辑器、批量重命名对话框出错行与冲突行写死浅色红 `#C4361D`，深色模式下与浮层底 `tokSurface` 对比约 2.6:1，且违反「颜色只用令牌」。
+  - OpenUI `Steps` 步骤圆点用 `tokSuccess`/`colorAccent()`/`tokDanger` 填充后，勾/叉/编号仍写死白色；深色下这些填充是浅色（如强调 `#60CDFF`），白字对比约 1.8:1。
+  - 视频快速预览的强调底按钮「用系统播放器打开」文字写死白色，深色强调下同样发灰。
+- **观察但未改**：
+  - 磁盘健康页 `diskBadge`/`diskGlyph` 在强调/警告/危险底上画白色盘符，深色下偏灰；修复需连带调整盘形内部细节的对比（盘身与刻线同色系），改动面大于本轮收益，暂记于此。
+  - `remoteStart` 的「先查 nil 再 Listen」之间未持锁，UI 与 `/api/sunvale/enabled`、`/api/sunvale/port` 的 HTTP 线程并发调用时，理论上可能多起一个未回收的 listener（当前调用点都是 UI 线程 + 单个管理页，未观测到），未修。
+  - `probeRemoteMCP` 的错误原样显示在 MCP 行（`settings_assistant_more.go`）；属诊断信息，保留。
+- **修复**：`sharedialog.go`、`settings_ext.go`、`batchrename.go` 的错误行/冲突行改用 `tokDanger`；`assistant_openui_more.go` 步骤圆点前景与 `videoview.go` 按钮文字改用 `colorBtnText()`。搜索面板、远程管理页与 MCP 设置页本身已全量走令牌，无改动。
+- **测试**：新增 `theme_contrast_test.go`：`TestShareDialogErrorRedFollowsTheme`、`TestExtEditorErrorRedFollowsTheme`、`TestBatchRenameErrorRedFollowsTheme` 在浅/深两态渲染真实对话框，断言最红像素的红色通道在深色下更亮（写死红则两态相同而失败）；`TestOpenUIStepDotFollowsTheme`、`TestVideoOpenButtonFollowsTheme` 渲染圆点/按钮，断言深色下前景足够暗、浅色下足够亮。五个用例在修复前均失败、修复后通过。
+- **门禁**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...`、`GOOS=windows`/`GOOS=darwin`/`GOOS=js GOARCH=wasm` 交叉编译通过；`go test -count=1 -timeout 900s ./...` 通过。
+- **界面巡检**：`DISPLAY=:10`、独立 HOME（`/workspace/pi-sched/home-b10`）下启动新构建，xdotool 合成 Ctrl+K 打开快速搜索面板并输入查询（浅色 v2、深色 v2 各一张）；浅/深 × 经典/v2 的文件列表与设置页（插件=远程访问、助手=MCP）用 `ui.NewTester` 离屏渲染。截图位于 `/workspace/sunvale-pi-shots/b10/`（`02-search-hits`、`04-search-dark-v2`、`files-*` 四张、`settings-plugins-dark-v2`、`settings-assistant-dark-v2`，共 8 张）。该显示器上 Ctrl+K 的进程级全局绑定常被其他实例占用（窗口内快捷键与控制器点击仍可用）。
+

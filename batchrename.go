@@ -313,10 +313,10 @@ func (a *App) batchRenameBody(c *ui.Context) {
 
 		if a.batchHasClash() {
 			ui.Text(c, "存在名称冲突或无效名称：标红的行不会重命名，其余照常应用").
-				FontSize(12).TextColor(ui.Hex("#C4361D"))
+				FontSize(12).TextColor(tokDanger)
 		}
 		if b.message != "" {
-			ui.Text(c, b.message).FontSize(12).TextColor(ui.Hex("#C4361D"))
+			ui.Text(c, b.message).FontSize(12).TextColor(tokDanger)
 		}
 
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End)
@@ -431,7 +431,7 @@ func (a *App) batchRow(c *ui.Context, i int) {
 			}
 			ink := colorText()
 			if r.Err != "" {
-				ink = ui.Hex("#C4361D")
+				ink = tokDanger
 			}
 			ui.Text(c, r.To).FontSize(12).TextColor(ink).SingleLine().MinWidth(0)
 		})
@@ -447,7 +447,7 @@ func (a *App) batchRow(c *ui.Context, i int) {
 			}
 		}
 		if r.Err != "" {
-			ui.Text(c, r.Err).FontSize(11).TextColor(ui.Hex("#C4361D")).Shrink(0)
+			ui.Text(c, r.Err).FontSize(11).TextColor(tokDanger).Shrink(0)
 		}
 	})
 

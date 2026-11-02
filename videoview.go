@@ -276,7 +276,7 @@ func (a *App) videoQuickOpenButton(c *ui.Context, st *previewState) {
 		Background(colorAccent()).Label("用系统播放器打开").
 		Tooltip("用系统默认播放器打开")
 	btn.Children(func() {
-		ui.Text(c, "用系统播放器打开").FontSize(13).TextColor(ui.RGBA(255, 255, 255, 1))
+		ui.Text(c, "用系统播放器打开").FontSize(13).TextColor(colorBtnText())
 	})
 	if btn.Clicked() {
 		a.openVideoWithSystem(st.path)

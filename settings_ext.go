@@ -234,7 +234,7 @@ func (a *App) extEditBody(c *ui.Context) {
 
 		if !e.extEditValid() {
 			ui.Text(c, "名称、匹配规则和命令都填写后才能确定").
-				FontSize(12).TextColor(ui.Hex("#C4361D"))
+				FontSize(12).TextColor(tokDanger)
 		}
 
 		btns := ui.Row(c).FillWidth().Gap(8).Justify(ui.End)

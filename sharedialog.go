@@ -225,7 +225,7 @@ func (a *App) shareBody(c *ui.Context) {
 
 		switch {
 		case d.err != "":
-			ui.Text(c, d.err).FontSize(12).TextColor(ui.Hex("#C4361D"))
+			ui.Text(c, d.err).FontSize(12).TextColor(tokDanger)
 		case d.result != nil:
 			ui.Text(c, "分享链接").FontSize(12).TextColor(colorMuted())
 			link := a.shareLink()

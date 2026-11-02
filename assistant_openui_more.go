@@ -228,11 +228,11 @@ func (a *App) paintOpenStep(c *ui.Context, it *ouiView, i int, last bool) {
 			dot.Children(func() {
 				switch it.Variant {
 				case "done":
-					components.Icon(c, lucide.Check()).Size(13, 13).TextColor(ui.Hex("#FFFFFF"))
+					components.Icon(c, lucide.Check()).Size(13, 13).TextColor(colorBtnText())
 				case "error":
-					components.Icon(c, lucide.X()).Size(13, 13).TextColor(ui.Hex("#FFFFFF"))
+					components.Icon(c, lucide.X()).Size(13, 13).TextColor(colorBtnText())
 				case "active":
-					ui.Text(c, itoa(i+1)).FontSize(11).FontWeight(700).TextColor(ui.Hex("#FFFFFF"))
+					ui.Text(c, itoa(i+1)).FontSize(11).FontWeight(700).TextColor(colorBtnText())
 				default:
 					ui.Text(c, itoa(i+1)).FontSize(11).FontWeight(600).TextColor(colorMuted())
 				}
